@@ -11,8 +11,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -50,7 +52,8 @@ sealed class ChatMessage {
 fun AiScreen(
     modifier: Modifier = Modifier,
     onBackClick: () -> Unit = {},
-    onOpenFile: (AiFileResult) -> Unit = {}
+    onOpenFile: (AiFileResult) -> Unit = {},
+    onViewSearchHistoryClick: () -> Unit = {}
 ) {
     var promptInput by remember { mutableStateOf("") }
 
@@ -95,7 +98,10 @@ fun AiScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             // Header with Back Button and Robot Avatar
-            AiHeader(onBackClick = onBackClick)
+            AiHeader(
+                onBackClick = onBackClick,
+                onViewSearchHistoryClick = onViewSearchHistoryClick
+            )
 
             // Chat Messages List
             LazyColumn(
@@ -146,6 +152,7 @@ fun AiScreen(
 @Composable
 fun AiHeader(
     onBackClick: () -> Unit,
+    onViewSearchHistoryClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -202,6 +209,58 @@ fun AiHeader(
             text = "Find your files with natural language",
             fontSize = 14.sp,
             color = Color(0xFF6B7280)
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // View AI Search History Button
+        ViewSearchHistoryButton(
+            onClick = onViewSearchHistoryClick,
+            modifier = Modifier.padding(horizontal = 20.dp)
+        )
+    }
+}
+
+@Composable
+fun ViewSearchHistoryButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFFEEF0FD))
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.AutoAwesome,
+                contentDescription = "AI Sparkle",
+                tint = Color(0xFF6C5CE7),
+                modifier = Modifier.size(20.dp)
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Text(
+                text = "View AI Search History",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF6C5CE7)
+            )
+        }
+
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = "View History",
+            tint = Color(0xFF6C5CE7),
+            modifier = Modifier.size(20.dp)
         )
     }
 }

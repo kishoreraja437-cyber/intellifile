@@ -39,6 +39,10 @@ class AppNavigationViewModel : ViewModel() {
     fun onBackFromPermission() {
         _currentScreen.value = AppScreen.ONBOARD
     }
+
+    fun onLogout() {
+        _currentScreen.value = AppScreen.ONBOARD
+    }
 }
 
 class MainActivity : ComponentActivity() {
@@ -63,7 +67,9 @@ class MainActivity : ComponentActivity() {
                         onMaybeLaterClick = { appNavViewModel.onPermissionProceed() },
                         onBackClick = { appNavViewModel.onBackFromPermission() }
                     )
-                    AppScreen.MAIN -> MainScreen()
+                    AppScreen.MAIN -> MainScreen(
+                        onLogout = { appNavViewModel.onLogout() }
+                    )
                 }
             }
         }

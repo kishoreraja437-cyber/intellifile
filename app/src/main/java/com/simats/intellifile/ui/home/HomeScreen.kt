@@ -11,9 +11,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -44,7 +44,7 @@ enum class PriorityLevel(
         backgroundColor = Color(0xFFFFEAEE),
         iconBackgroundColor = Color(0xFFEF4444),
         textColor = Color(0xFFEF4444),
-        icon = Icons.Default.Favorite
+        icon = Icons.Default.PriorityHigh
     ),
     NORMAL(
         title = "Normal",
@@ -52,7 +52,7 @@ enum class PriorityLevel(
         backgroundColor = Color(0xFFFFF6D8),
         iconBackgroundColor = Color(0xFFD97706),
         textColor = Color(0xFFD97706),
-        icon = Icons.Default.Pets
+        icon = Icons.Default.Remove
     ),
     LOW(
         title = "Low",

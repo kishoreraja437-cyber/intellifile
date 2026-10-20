@@ -10,8 +10,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -41,12 +41,12 @@ val priorityOptions = listOf(
     PriorityOptionInfo(
         priority = PriorityLevel.IMPORTANT,
         description = "High priority files",
-        icon = Icons.Default.Favorite
+        icon = Icons.Default.PriorityHigh
     ),
     PriorityOptionInfo(
         priority = PriorityLevel.NORMAL,
         description = "Regular files",
-        icon = Icons.Default.Pets
+        icon = Icons.Default.Remove
     ),
     PriorityOptionInfo(
         priority = PriorityLevel.LOW,
@@ -156,7 +156,15 @@ fun SetPriorityScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Priority Selection Options
+            // Horizontal Priority Buttons Row
+            HorizontalPrioritySelectorRow(
+                selectedPriority = selectedPriority,
+                onPrioritySelected = { selectedPriority = it }
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Priority Selection Options List
             Column(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
@@ -274,6 +282,79 @@ fun PriorityOptionCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun HorizontalPrioritySelectorRow(
+    selectedPriority: PriorityLevel,
+    onPrioritySelected: (PriorityLevel) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        PriorityLevel.entries.forEach { priority ->
+            val isSelected = priority == selectedPriority
+            PriorityButtonCard(
+                priority = priority,
+                isSelected = isSelected,
+                onClick = { onPrioritySelected(priority) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+fun PriorityButtonCard(
+    priority: PriorityLevel,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val borderModifier = if (isSelected) {
+        Modifier.border(
+            width = 1.5.dp,
+            color = priority.textColor,
+            shape = RoundedCornerShape(16.dp)
+        )
+    } else Modifier
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(priority.backgroundColor)
+            .then(borderModifier)
+            .clickable { onClick() }
+            .padding(vertical = 16.dp, horizontal = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(priority.iconBackgroundColor),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = priority.icon,
+                contentDescription = priority.title,
+                tint = Color.White,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Text(
+            text = priority.title,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = priority.textColor
+        )
     }
 }
 

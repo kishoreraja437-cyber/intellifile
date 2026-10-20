@@ -34,19 +34,37 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+import com.simats.intellifile.ui.dialog.SaveConfirmationDialog
+
 @Composable
 fun DocumentViewerScreen(
     fileName: String = "AML Assignment.pdf",
     totalPages: Int = 12,
+    showSaveConfirmation: Boolean = false,
     onBackClick: () -> Unit = {},
     onShareClick: () -> Unit = {},
     onThumbnailClick: () -> Unit = {},
-    onMoreClick: () -> Unit = {}
+    onMoreClick: () -> Unit = {},
+    onSetPriorityClick: () -> Unit = {},
+    onConfirmSave: () -> Unit = {},
+    onDismissSaveConfirmation: () -> Unit = {}
 ) {
     var currentPage by remember { mutableIntStateOf(1) }
     var zoomPercentage by remember { mutableIntStateOf(100) }
     var isBookmarked by remember { mutableStateOf(false) }
     var isSaved by remember { mutableStateOf(false) }
+
+    if (showSaveConfirmation) {
+        SaveConfirmationDialog(
+            fileName = fileName,
+            onDismissRequest = onDismissSaveConfirmation,
+            onConfirmSave = {
+                isSaved = true
+                onConfirmSave()
+            },
+            onCancel = onDismissSaveConfirmation
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -106,7 +124,10 @@ fun DocumentViewerScreen(
                         )
                     }
 
-                    IconButton(onClick = onMoreClick) {
+                    IconButton(onClick = {
+                        onMoreClick()
+                        onSetPriorityClick()
+                    }) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
                             contentDescription = "More Options",
@@ -256,10 +277,16 @@ fun DocumentViewerScreen(
             // Bottom Action Bar
             DocumentBottomActionBar(
                 isSaved = isSaved,
-                onSaveClick = { isSaved = !isSaved },
+                onSaveClick = {
+                    isSaved = true
+                    onSetPriorityClick()
+                },
                 onThumbnailClick = onThumbnailClick,
                 onShareClick = onShareClick,
-                onMoreClick = onMoreClick
+                onMoreClick = {
+                    onMoreClick()
+                    onSetPriorityClick()
+                }
             )
         }
     }

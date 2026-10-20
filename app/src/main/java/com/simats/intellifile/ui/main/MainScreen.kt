@@ -27,11 +27,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.simats.intellifile.ui.about.AboutScreen
+import com.simats.intellifile.ui.ai.AiChatHistoryScreen
 import com.simats.intellifile.ui.ai.AiScreen
 import com.simats.intellifile.ui.detail.FileDetailData
 import com.simats.intellifile.ui.detail.FileDetailScreen
+import com.simats.intellifile.ui.feedback.FeedbackScreen
+import com.simats.intellifile.ui.files.MyFilesScreen
 import com.simats.intellifile.ui.home.HomeScreen
+import com.simats.intellifile.ui.notifications.NotificationsScreen
+import com.simats.intellifile.ui.permission.FilePermissionsDetailScreen
 import com.simats.intellifile.ui.priority.SetPriorityScreen
+import com.simats.intellifile.ui.profile.ProfileScreen
+import com.simats.intellifile.ui.saved.SavedScreen
+import com.simats.intellifile.ui.support.ContactSupportScreen
+import com.simats.intellifile.ui.support.HelpSupportScreen
+import com.simats.intellifile.ui.theme.ThemeSettingsScreen
 import com.simats.intellifile.ui.viewer.DocumentViewerScreen
 
 enum class BottomNavItem(
@@ -47,16 +58,59 @@ enum class BottomNavItem(
 }
 
 @Composable
-fun MainScreen() {
+fun MainScreen(
+    onLogout: () -> Unit = {}
+) {
     var selectedTab by remember { mutableStateOf(BottomNavItem.HOME) }
     var selectedDetailFile by remember { mutableStateOf<FileDetailData?>(null) }
     var isSetPriorityOpen by remember { mutableStateOf(false) }
     var isViewerOpen by remember { mutableStateOf(false) }
+    var showSaveConfirmation by remember { mutableStateOf(false) }
+    var isFilePermissionsOpen by remember { mutableStateOf(false) }
+    var isNotificationsOpen by remember { mutableStateOf(false) }
+    var isThemeOpen by remember { mutableStateOf(false) }
+    var isAboutOpen by remember { mutableStateOf(false) }
+    var isHelpSupportOpen by remember { mutableStateOf(false) }
+    var isContactSupportOpen by remember { mutableStateOf(false) }
+    var isFeedbackOpen by remember { mutableStateOf(false) }
+    var isAiHistoryOpen by remember { mutableStateOf(false) }
 
-    if (isViewerOpen && selectedDetailFile != null) {
-        DocumentViewerScreen(
-            fileName = selectedDetailFile!!.fileName,
-            onBackClick = { isViewerOpen = false }
+    if (isAiHistoryOpen) {
+        AiChatHistoryScreen(
+            onBackClick = { isAiHistoryOpen = false }
+        )
+    } else if (isFeedbackOpen) {
+        FeedbackScreen(
+            onBackClick = { isFeedbackOpen = false },
+            onSubmitFeedbackClick = { _, _, _, _ -> isFeedbackOpen = false }
+        )
+    } else if (isContactSupportOpen) {
+        ContactSupportScreen(
+            onBackClick = { isContactSupportOpen = false }
+        )
+    } else if (isHelpSupportOpen) {
+        HelpSupportScreen(
+            onBackClick = { isHelpSupportOpen = false },
+            onContactSupportClick = { isContactSupportOpen = true },
+            onSendFeedbackClick = { isFeedbackOpen = true }
+        )
+    } else if (isAboutOpen) {
+        AboutScreen(
+            onBackClick = { isAboutOpen = false }
+        )
+    } else if (isThemeOpen) {
+        ThemeSettingsScreen(
+            onBackClick = { isThemeOpen = false },
+            onSaveTheme = { isThemeOpen = false }
+        )
+    } else if (isNotificationsOpen) {
+        NotificationsScreen(
+            onBackClick = { isNotificationsOpen = false },
+            onSaveSettingsClick = { isNotificationsOpen = false }
+        )
+    } else if (isFilePermissionsOpen) {
+        FilePermissionsDetailScreen(
+            onBackClick = { isFilePermissionsOpen = false }
         )
     } else if (isSetPriorityOpen && selectedDetailFile != null) {
         SetPriorityScreen(
@@ -68,15 +122,39 @@ fun MainScreen() {
             onSavePriority = { newPriority ->
                 selectedDetailFile = selectedDetailFile!!.copy(priority = newPriority)
                 isSetPriorityOpen = false
+                showSaveConfirmation = true
             }
+        )
+    } else if (isViewerOpen && selectedDetailFile != null) {
+        DocumentViewerScreen(
+            fileName = selectedDetailFile!!.fileName,
+            showSaveConfirmation = showSaveConfirmation,
+            onBackClick = {
+                isViewerOpen = false
+                showSaveConfirmation = false
+            },
+            onSetPriorityClick = { isSetPriorityOpen = true },
+            onConfirmSave = {
+                showSaveConfirmation = false
+                isViewerOpen = false
+                selectedDetailFile = null
+                selectedTab = BottomNavItem.SAVED
+            },
+            onDismissSaveConfirmation = { showSaveConfirmation = false }
         )
     } else if (selectedDetailFile != null) {
         FileDetailScreen(
             fileData = selectedDetailFile!!,
             onBackClick = { selectedDetailFile = null },
             onOpenFileClick = { isViewerOpen = true },
-            onSetPriorityClick = { isSetPriorityOpen = true },
-            onMoreOptionsClick = { isSetPriorityOpen = true }
+            onSetPriorityClick = {
+                isViewerOpen = true
+                isSetPriorityOpen = true
+            },
+            onMoreOptionsClick = {
+                isViewerOpen = true
+                isSetPriorityOpen = true
+            }
         )
     } else {
         Scaffold(
@@ -111,6 +189,7 @@ fun MainScreen() {
                     )
                     BottomNavItem.AI -> AiScreen(
                         onBackClick = { selectedTab = BottomNavItem.HOME },
+                        onViewSearchHistoryClick = { isAiHistoryOpen = true },
                         onOpenFile = { file ->
                             selectedDetailFile = FileDetailData(
                                 fileName = file.title,
@@ -124,9 +203,36 @@ fun MainScreen() {
                             )
                         }
                     )
-                    BottomNavItem.FILES -> PlaceholderTabContent(title = "All Files")
-                    BottomNavItem.SAVED -> PlaceholderTabContent(title = "Saved Items")
-                    BottomNavItem.PROFILE -> PlaceholderTabContent(title = "User Profile")
+                    BottomNavItem.FILES -> MyFilesScreen(
+                        onBackClick = { selectedTab = BottomNavItem.HOME },
+                        onQuickAccessClick = { _ ->
+                            selectedTab = BottomNavItem.SAVED
+                        }
+                    )
+                    BottomNavItem.SAVED -> SavedScreen(
+                        onBackClick = { selectedTab = BottomNavItem.HOME },
+                        onOpenFile = { file ->
+                            selectedDetailFile = FileDetailData(
+                                fileName = file.title,
+                                fileSize = file.size,
+                                fileType = "PDF Document",
+                                createdDate = file.dateText,
+                                modifiedDate = file.dateText,
+                                category = "Saved Document",
+                                location = "Internal Storage",
+                                priority = file.priority
+                            )
+                        }
+                    )
+                    BottomNavItem.PROFILE -> ProfileScreen(
+                        onBackClick = { selectedTab = BottomNavItem.HOME },
+                        onFilePermissionsClick = { isFilePermissionsOpen = true },
+                        onNotificationsClick = { isNotificationsOpen = true },
+                        onThemeClick = { isThemeOpen = true },
+                        onAboutClick = { isAboutOpen = true },
+                        onHelpSupportClick = { isHelpSupportOpen = true },
+                        onLogoutClick = onLogout
+                    )
                 }
             }
         }
