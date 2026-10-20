@@ -10,14 +10,13 @@ import kotlinx.coroutines.launch
 
 class SplashViewModel : ViewModel() {
 
-    private val _isLoading = MutableStateFlow(true)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    private val _isSplashFinished = MutableStateFlow(false)
+    val isSplashFinished: StateFlow<Boolean> = _isSplashFinished.asStateFlow()
 
     init {
         viewModelScope.launch {
-            // Simulate loading or splash duration
-            delay(2000L)
-            _isLoading.value = false
+            delay(1500L) // Show splash screen for 1.5 seconds
+            _isSplashFinished.value = true
         }
     }
 }

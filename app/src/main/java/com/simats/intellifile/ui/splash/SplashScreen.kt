@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -25,8 +27,13 @@ import com.simats.intellifile.ui.theme.IntellifileTheme
 
 @Composable
 fun SplashScreen(
-    onTimeout: () -> Unit = {}
+    onSplashFinished: () -> Unit = {}
 ) {
+    LaunchedEffect(Unit) {
+        delay(2000L)
+        onSplashFinished()
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -93,13 +100,13 @@ fun SplashScreen(
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
         ) {
-            BottomWaves()
+            SplashBottomWaves()
         }
     }
 }
 
 @Composable
-fun BottomWaves() {
+fun SplashBottomWaves() {
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
@@ -150,7 +157,7 @@ fun BottomWaves() {
 
 @Preview(showBackground = true, backgroundColor = 0xFF0A0C24)
 @Composable
-fun SplashPreview() {
+fun SplashScreenPreview() {
     IntellifileTheme {
         SplashScreen()
     }

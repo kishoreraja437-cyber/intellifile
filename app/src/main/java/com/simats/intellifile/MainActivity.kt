@@ -4,21 +4,42 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.simats.intellifile.ui.main.MainScreen
+import com.simats.intellifile.ui.onboard.OnboardScreen
+import com.simats.intellifile.ui.permission.PermissionScreen
 import com.simats.intellifile.ui.splash.SplashScreen
-import com.simats.intellifile.ui.splash.SplashViewModel
 import com.simats.intellifile.ui.theme.IntellifileTheme
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+enum class AppScreen {
+    SPLASH, ONBOARD, PERMISSION, MAIN
+}
+
+class AppNavigationViewModel : ViewModel() {
+    private val _currentScreen = MutableStateFlow(AppScreen.SPLASH)
+    val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
+
+    fun onSplashFinished() {
+        _currentScreen.value = AppScreen.ONBOARD
+    }
+
+    fun onGetStartedClicked() {
+        _currentScreen.value = AppScreen.PERMISSION
+    }
+
+    fun onPermissionProceed() {
+        _currentScreen.value = AppScreen.MAIN
+    }
+
+    fun onBackFromPermission() {
+        _currentScreen.value = AppScreen.ONBOARD
+    }
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,34 +47,25 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             IntellifileTheme {
-                val splashViewModel: SplashViewModel = viewModel()
-                val isLoading by splashViewModel.isLoading.collectAsState()
+                val appNavViewModel: AppNavigationViewModel = viewModel()
+                val currentScreen by appNavViewModel.currentScreen.collectAsState()
 
-                if (isLoading) {
-                    SplashScreen()
-                } else {
-                    MainScreen()
+                when (currentScreen) {
+                    AppScreen.SPLASH -> SplashScreen(
+                        onSplashFinished = { appNavViewModel.onSplashFinished() }
+                    )
+                    AppScreen.ONBOARD -> OnboardScreen(
+                        onGetStartedClick = { appNavViewModel.onGetStartedClicked() }
+                    )
+                    AppScreen.PERMISSION -> PermissionScreen(
+                        onSelectFilesClick = { appNavViewModel.onPermissionProceed() },
+                        onSelectFolderClick = { appNavViewModel.onPermissionProceed() },
+                        onMaybeLaterClick = { appNavViewModel.onPermissionProceed() },
+                        onBackClick = { appNavViewModel.onBackFromPermission() }
+                    )
+                    AppScreen.MAIN -> MainScreen()
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun MainScreen() {
-    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "Welcome to IntelliFile!",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
         }
     }
 }
