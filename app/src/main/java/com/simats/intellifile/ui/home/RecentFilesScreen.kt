@@ -142,7 +142,7 @@ fun RecentFilesScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = Color(0xFF111827)
+                            tint = MaterialTheme.colorScheme.onBackground
                         )
                     }
 
@@ -152,7 +152,7 @@ fun RecentFilesScreen(
                         text = "Recent Files",
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF111827)
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 }
 
@@ -160,7 +160,7 @@ fun RecentFilesScreen(
                     Icon(
                         imageVector = Icons.Default.Search,
                         contentDescription = "Search",
-                        tint = Color(0xFF111827)
+                        tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
             }
@@ -282,7 +282,7 @@ fun RecentFileItemCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(Color.White)
+            .background(MaterialTheme.colorScheme.surface)
             .clickable { onClick() }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -304,7 +304,7 @@ fun RecentFileItemCard(
                 text = file.title,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF111827)
+                color = MaterialTheme.colorScheme.onSurface
             )
 
             Spacer(modifier = Modifier.height(3.dp))
@@ -312,7 +312,7 @@ fun RecentFileItemCard(
             Text(
                 text = "${file.size} · ${file.dateText}",
                 fontSize = 12.sp,
-                color = Color(0xFF6B7280)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
         }
 

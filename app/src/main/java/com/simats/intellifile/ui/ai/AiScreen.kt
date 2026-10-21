@@ -172,7 +172,7 @@ fun AiHeader(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
-                    tint = Color(0xFF111827)
+                    tint = MaterialTheme.colorScheme.onBackground
                 )
             }
         }
@@ -201,7 +201,7 @@ fun AiHeader(
             text = "IntelliFile AI",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF111827)
+            color = MaterialTheme.colorScheme.onBackground
         )
 
         Spacer(modifier = Modifier.height(4.dp))

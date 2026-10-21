@@ -11,34 +11,34 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-// Dark Theme Scheme (Black & Blue Theme)
+// Dark Scheme
 private val DarkColorScheme = darkColorScheme(
-    primary = AppPrimaryDark,          // #3B82F6 Electric Royal Blue
-    secondary = AppSecondaryDark,      // #2563EB Royal Blue
-    tertiary = Color(0xFF60A5FA),       // Light Blue Accent
-    background = AppBackgroundDark,    // #000000 Pure Black Background
-    surface = AppSurfaceDark,          // #0F172A Dark Blue Card Surface
+    primary = AppPrimaryDark,          // #7E52FF
+    secondary = AppSecondaryDark,      // #6332E0
+    tertiary = Color(0xFF9382FE),       // Light Purple
+    background = AppBackgroundDark,    // #0C0E2D
+    surface = AppSurfaceDark,          // #161942
     onPrimary = Color.White,
     onSecondary = Color.White,
-    onBackground = AppTextLight,       // #F8FAFC White Text
-    onSurface = AppTextLight,
-    surfaceVariant = Color(0xFF0F172A), // Dark Blue Container
-    onSurfaceVariant = Color(0xFF60A5FA) // Light Blue Accent Text/Icon
+    onBackground = Color.White,        // Pure White Text
+    onSurface = Color.White,
+    surfaceVariant = Color(0xFF1F2253), // Container
+    onSurfaceVariant = Color(0xFF9382FE)
 )
 
-// Light Theme Scheme (Red & White Theme)
+// Main / Light Scheme (Midnight Blue & Indigo Purple Theme)
 private val LightColorScheme = lightColorScheme(
-    primary = AppPrimary,              // #EF4444 Vibrant Red
-    secondary = AppSecondary,          // #DC2626 Deep Red
-    tertiary = Color(0xFFF87171),       // Soft Red Accent
-    background = AppBackgroundLight,   // #FFFFFF Pure White Background
-    surface = AppSurfaceLight,         // #FFFFFF Pure White Card Surface
+    primary = AppPrimary,              // #6332E0 Vibrant Purple/Indigo
+    secondary = AppSecondary,          // #5B3CC4 Deep Indigo
+    tertiary = Color(0xFF7E52FF),       // Light Indigo Accent
+    background = AppBackgroundLight,   // #11133C Deep Midnight Navy Background
+    surface = AppSurfaceLight,         // #1C1F4E Midnight Blue Card Surface
     onPrimary = Color.White,
     onSecondary = Color.White,
-    onBackground = AppTextDark,        // #111827 Dark Text
-    onSurface = AppTextDark,
-    surfaceVariant = AppContainerLight, // #FFF0F2 Soft Light Red Container
-    onSurfaceVariant = AppPrimary      // #EF4444 Red Accent Text/Icon
+    onBackground = Color.White,        // Pure White Text
+    onSurface = Color.White,
+    surfaceVariant = AppContainerLight, // #252862 Soft Midnight Blue Container
+    onSurfaceVariant = Color(0xFF9382FE) // Light Purple Accent
 )
 
 @Composable

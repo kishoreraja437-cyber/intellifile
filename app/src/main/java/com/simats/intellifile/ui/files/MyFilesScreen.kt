@@ -52,7 +52,7 @@ fun MyFilesScreen(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = Color(0xFF111827)
+                        tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
             }
@@ -70,7 +70,7 @@ fun MyFilesScreen(
                         text = "My Files",
                         fontSize = 26.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF111827)
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 }
 

@@ -82,7 +82,7 @@ fun FileDetailScreen(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = Color(0xFF111827)
+                        tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
 
@@ -90,14 +90,14 @@ fun FileDetailScreen(
                     text = "File Details",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111827)
+                    color = MaterialTheme.colorScheme.onBackground
                 )
 
                 IconButton(onClick = onMoreOptionsClick) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = "More Options",
-                        tint = Color(0xFF111827)
+                        tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
             }

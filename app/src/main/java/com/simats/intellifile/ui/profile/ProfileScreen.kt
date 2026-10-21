@@ -1,5 +1,11 @@
 package com.simats.intellifile.ui.profile
 
+import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -16,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Edit
@@ -25,6 +32,7 @@ import androidx.compose.material.icons.outlined.Mail
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -38,7 +46,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -71,6 +82,18 @@ fun ProfileScreen(
     var currentName by remember { mutableStateOf(userName) }
     var currentEmail by remember { mutableStateOf(userEmail) }
 
+    val context = LocalContext.current
+    var selectedAvatarUri by remember { mutableStateOf<Uri?>(null) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            selectedAvatarUri = uri
+            showCameraPhotoPicker = false
+        }
+    }
+
     if (showLogoutDialog) {
         LogoutConfirmationDialog(
             onDismissRequest = { showLogoutDialog = false },
@@ -95,10 +118,29 @@ fun ProfileScreen(
         )
     }
 
+    var showViewPhotoDialog by remember { mutableStateOf(false) }
+
+    if (showViewPhotoDialog) {
+        ViewProfilePhotoDialog(
+            selectedAvatarUri = selectedAvatarUri,
+            onDismissRequest = { showViewPhotoDialog = false }
+        )
+    }
+
     if (showCameraPhotoPicker) {
         ChangePhotoDialog(
             onDismissRequest = { showCameraPhotoPicker = false },
-            onPhotoSelected = { showCameraPhotoPicker = false }
+            onViewPhoto = {
+                showCameraPhotoPicker = false
+                showViewPhotoDialog = true
+            },
+            onChooseFromGallery = {
+                photoPickerLauncher.launch("image/*")
+            },
+            onRemovePhoto = {
+                selectedAvatarUri = null
+                showCameraPhotoPicker = false
+            }
         )
     }
 
@@ -124,7 +166,7 @@ fun ProfileScreen(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = Color(0xFF111827)
+                        tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
 
@@ -136,7 +178,7 @@ fun ProfileScreen(
                         text = "Profile",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF111827)
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 }
             }
@@ -159,13 +201,41 @@ fun ProfileScreen(
                             .background(Color(0xFFE0E7FF)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.human),
-                            contentDescription = "User Avatar",
-                            modifier = Modifier
-                                .size(80.dp)
-                                .clip(CircleShape)
-                        )
+                        val customBitmap = remember(selectedAvatarUri) {
+                            selectedAvatarUri?.let { uri ->
+                                try {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                        val source = ImageDecoder.createSource(context.contentResolver, uri)
+                                        ImageDecoder.decodeBitmap(source).asImageBitmap()
+                                    } else {
+                                        context.contentResolver.openInputStream(uri)?.use { stream ->
+                                            BitmapFactory.decodeStream(stream)?.asImageBitmap()
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    null
+                                }
+                            }
+                        }
+
+                        if (customBitmap != null) {
+                            Image(
+                                bitmap = customBitmap,
+                                contentDescription = "User Avatar",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(100.dp)
+                                    .clip(CircleShape)
+                            )
+                        } else {
+                            Image(
+                                painter = painterResource(id = R.drawable.human),
+                                contentDescription = "User Avatar",
+                                modifier = Modifier
+                                    .size(80.dp)
+                                    .clip(CircleShape)
+                            )
+                        }
                     }
 
                     // Camera Icon Overlay Badge
@@ -228,7 +298,7 @@ fun ProfileScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(22.dp))
-                    .background(Color.White)
+                    .background(MaterialTheme.colorScheme.surface)
                     .padding(vertical = 6.dp)
             ) {
                 ProfileOptionRow(
@@ -536,7 +606,9 @@ fun ProfileInputField(
 @Composable
 fun ChangePhotoDialog(
     onDismissRequest: () -> Unit,
-    onPhotoSelected: () -> Unit
+    onViewPhoto: () -> Unit,
+    onChooseFromGallery: () -> Unit,
+    onRemovePhoto: () -> Unit
 ) {
     Dialog(
         onDismissRequest = onDismissRequest,
@@ -592,9 +664,41 @@ fun ChangePhotoDialog(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
+                // View Photo Button
                 Button(
-                    onClick = onPhotoSelected,
+                    onClick = onViewPhoto,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Visibility,
+                            contentDescription = "View Photo",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "View Profile Picture",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Choose from Gallery Button
+                Button(
+                    onClick = onChooseFromGallery,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -603,16 +707,48 @@ fun ChangePhotoDialog(
                     Text(
                         text = "Choose from Gallery",
                         fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
+                // Remove Photo Button
+                Button(
+                    onClick = onRemovePhoto,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFEAEE)),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "Remove Photo",
+                            tint = Color(0xFFEF4444),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Remove Photo",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFEF4444)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Cancel Button
                 Button(
                     onClick = onDismissRequest,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF3F4F6)),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -622,8 +758,108 @@ fun ChangePhotoDialog(
                         text = "Cancel",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = Color(0xFF4B5563)
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ViewProfilePhotoDialog(
+    selectedAvatarUri: Uri?,
+    onDismissRequest: () -> Unit
+) {
+    val context = LocalContext.current
+
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.92f)),
+            color = Color.Transparent
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable { onDismissRequest() },
+                contentAlignment = Alignment.Center
+            ) {
+                // Header Back / Close Action
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.TopCenter)
+                        .padding(top = 40.dp, start = 16.dp, end = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onDismissRequest) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White
+                        )
+                    }
+
+                    Text(
+                        text = "Profile Picture",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+
+                    Spacer(modifier = Modifier.width(48.dp))
+                }
+
+                // Centered Image View
+                Box(
+                    modifier = Modifier
+                        .size(280.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1E293B)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val customBitmap = remember(selectedAvatarUri) {
+                        selectedAvatarUri?.let { uri ->
+                            try {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                    val source = ImageDecoder.createSource(context.contentResolver, uri)
+                                    ImageDecoder.decodeBitmap(source).asImageBitmap()
+                                } else {
+                                    context.contentResolver.openInputStream(uri)?.use { stream ->
+                                        BitmapFactory.decodeStream(stream)?.asImageBitmap()
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                null
+                            }
+                        }
+                    }
+
+                    if (customBitmap != null) {
+                        Image(
+                            bitmap = customBitmap,
+                            contentDescription = "Full Profile Picture",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                        )
+                    } else {
+                        Image(
+                            painter = painterResource(id = R.drawable.human),
+                            contentDescription = "Full Profile Picture",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(240.dp)
+                                .clip(CircleShape)
+                        )
+                    }
                 }
             }
         }
@@ -651,7 +887,7 @@ fun ProfileOptionRow(
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                tint = Color(0xFF374151),
+                tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(22.dp)
             )
 
@@ -661,14 +897,14 @@ fun ProfileOptionRow(
                 text = label,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF111827)
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
 
         Icon(
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = "Navigate",
-            tint = Color(0xFF374151),
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             modifier = Modifier.size(20.dp)
         )
     }

@@ -80,7 +80,7 @@ fun FeedbackScreen(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = Color(0xFF111827)
+                        tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
 
@@ -90,7 +90,7 @@ fun FeedbackScreen(
                     text = "Feedback",
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111827)
+                    color = MaterialTheme.colorScheme.onBackground
                 )
             }
 

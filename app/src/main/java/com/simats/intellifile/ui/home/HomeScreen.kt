@@ -299,7 +299,7 @@ fun PrioritySummaryCard(
             text = priority.count.toString(),
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF111827)
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
@@ -314,7 +314,7 @@ fun RecentFileCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(Color.White)
+            .background(MaterialTheme.colorScheme.surface)
             .clickable { onClick() }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -336,7 +336,7 @@ fun RecentFileCard(
                 text = file.title,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF111827)
+                color = MaterialTheme.colorScheme.onSurface
             )
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -344,7 +344,7 @@ fun RecentFileCard(
             Text(
                 text = "${file.format} · ${file.size} · ${file.dateText}",
                 fontSize = 12.sp,
-                color = Color(0xFF6B7280)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
         }
 

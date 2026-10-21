@@ -91,7 +91,7 @@ fun DocumentViewerScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = Color(0xFF111827)
+                            tint = MaterialTheme.colorScheme.onBackground
                         )
                     }
 
@@ -101,7 +101,7 @@ fun DocumentViewerScreen(
                         text = fileName,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF111827),
+                        color = MaterialTheme.colorScheme.onBackground,
                         maxLines = 1
                     )
                 }

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -351,10 +352,10 @@ fun BottomNavigationBar(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color.White)
+            .background(MaterialTheme.colorScheme.surface)
     ) {
         HorizontalDivider(
-            color = Color(0xFFF1F5F9),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
             thickness = 1.dp
         )
 
@@ -368,7 +369,7 @@ fun BottomNavigationBar(
         ) {
             BottomNavItem.entries.forEach { item ->
                 val isSelected = item == selectedTab
-                val contentColor = if (isSelected) Color(0xFF7C3AED) else Color(0xFF9CA3AF)
+                val contentColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
 
                 Column(
                     modifier = Modifier
