@@ -77,6 +77,7 @@ data class RecentFile(
 fun HomeScreen(
     modifier: Modifier = Modifier,
     onSeeAllClick: () -> Unit = {},
+    onMicClick: () -> Unit = {},
     onFileClick: (RecentFile) -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -131,7 +132,7 @@ fun HomeScreen(
                 SearchBar(
                     query = searchQuery,
                     onQueryChange = { searchQuery = it },
-                    onMicClick = { /* Handle voice search */ }
+                    onMicClick = onMicClick
                 )
             }
 

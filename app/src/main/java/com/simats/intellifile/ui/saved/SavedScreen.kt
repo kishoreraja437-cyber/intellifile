@@ -11,10 +11,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -52,6 +57,7 @@ fun SavedScreen(
     modifier: Modifier = Modifier,
     onBackClick: () -> Unit = {},
     onOpenFile: (SavedFileItem) -> Unit = {},
+    onShareFileClick: (SavedFileItem) -> Unit = {},
     onMoreOptionsClick: (SavedFileItem) -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -209,7 +215,7 @@ fun SavedScreen(
                     SavedFileCard(
                         file = file,
                         onOpenClick = { onOpenFile(file) },
-                        onMoreClick = { onMoreOptionsClick(file) }
+                        onShareClick = { onShareFileClick(file) }
                     )
                 }
             }
@@ -259,9 +265,11 @@ fun FilterChip(
 fun SavedFileCard(
     file: SavedFileItem,
     onOpenClick: () -> Unit,
-    onMoreClick: () -> Unit,
+    onShareClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var isMenuOpen by remember { mutableStateOf(false) }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -322,17 +330,77 @@ fun SavedFileCard(
 
         Spacer(modifier = Modifier.width(4.dp))
 
-        IconButton(
-            onClick = onMoreClick,
-            modifier = Modifier.size(28.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.MoreVert,
-                contentDescription = "More Options",
-                tint = Color(0xFF374151),
-                modifier = Modifier.size(18.dp)
+        Box {
+            IconButton(
+                onClick = { isMenuOpen = true },
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "More Options",
+                    tint = Color(0xFF374151),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            SavedFileOptionsDropdownMenu(
+                expanded = isMenuOpen,
+                onDismissRequest = { isMenuOpen = false },
+                onShareClick = onShareClick,
+                onDeleteClick = { /* Handle delete */ }
             )
         }
+    }
+}
+
+@Composable
+fun SavedFileOptionsDropdownMenu(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    onShareClick: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismissRequest
+    ) {
+        DropdownMenuItem(
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.Share,
+                        contentDescription = "Share",
+                        tint = Color(0xFF6C5CE7),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(text = "Share", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                }
+            },
+            onClick = {
+                onDismissRequest()
+                onShareClick()
+            }
+        )
+        HorizontalDivider(color = Color(0xFFF1F5F9), thickness = 1.dp)
+        DropdownMenuItem(
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.DeleteOutline,
+                        contentDescription = "Delete",
+                        tint = Color(0xFFEF4444),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(text = "Delete", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color(0xFFEF4444))
+                }
+            },
+            onClick = {
+                onDismissRequest()
+                onDeleteClick()
+            }
+        )
     }
 }
 

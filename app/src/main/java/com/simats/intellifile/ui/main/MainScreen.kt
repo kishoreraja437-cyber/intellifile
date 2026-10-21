@@ -33,14 +33,18 @@ import com.simats.intellifile.ui.ai.AiScreen
 import com.simats.intellifile.ui.detail.FileDetailData
 import com.simats.intellifile.ui.detail.FileDetailScreen
 import com.simats.intellifile.ui.feedback.FeedbackScreen
+import com.simats.intellifile.ui.feedback.FeedbackSuccessScreen
 import com.simats.intellifile.ui.files.MyFilesScreen
 import com.simats.intellifile.ui.home.HomeScreen
+import com.simats.intellifile.ui.home.RecentFilesScreen
 import com.simats.intellifile.ui.notifications.NotificationsScreen
 import com.simats.intellifile.ui.permission.FilePermissionsDetailScreen
 import com.simats.intellifile.ui.priority.SetPriorityScreen
 import com.simats.intellifile.ui.profile.ProfileScreen
 import com.simats.intellifile.ui.saved.SavedScreen
+import com.simats.intellifile.ui.share.ShareFileScreen
 import com.simats.intellifile.ui.support.ContactSupportScreen
+import com.simats.intellifile.ui.support.ContactUsSuccessScreen
 import com.simats.intellifile.ui.support.HelpSupportScreen
 import com.simats.intellifile.ui.theme.ThemeSettingsScreen
 import com.simats.intellifile.ui.viewer.DocumentViewerScreen
@@ -74,19 +78,77 @@ fun MainScreen(
     var isContactSupportOpen by remember { mutableStateOf(false) }
     var isFeedbackOpen by remember { mutableStateOf(false) }
     var isAiHistoryOpen by remember { mutableStateOf(false) }
+    var isShareOpen by remember { mutableStateOf(false) }
+    var isContactSuccessOpen by remember { mutableStateOf(false) }
+    var isFeedbackSuccessOpen by remember { mutableStateOf(false) }
+    var isRecentFilesOpen by remember { mutableStateOf(false) }
 
-    if (isAiHistoryOpen) {
+    if (isRecentFilesOpen) {
+        RecentFilesScreen(
+            onBackClick = { isRecentFilesOpen = false },
+            onFileClick = { file ->
+                selectedDetailFile = FileDetailData(
+                    fileName = file.title,
+                    fileSize = file.size,
+                    fileType = "${file.format} Document",
+                    createdDate = "Oct 5, 2024",
+                    modifiedDate = "Oct 5, 2024",
+                    category = "Assignment",
+                    location = "Internal Storage",
+                    priority = file.priority
+                )
+            },
+            onShareFileClick = { file ->
+                selectedDetailFile = FileDetailData(
+                    fileName = file.title,
+                    fileSize = file.size,
+                    fileType = "${file.format} Document",
+                    priority = file.priority
+                )
+                isShareOpen = true
+            }
+        )
+    } else if (isFeedbackSuccessOpen) {
+        FeedbackSuccessScreen(
+            onBackClick = { isFeedbackSuccessOpen = false },
+            onBackToFeedbackClick = { isFeedbackSuccessOpen = false },
+            onGoToHomeClick = {
+                isFeedbackSuccessOpen = false
+                isFeedbackOpen = false
+                isHelpSupportOpen = false
+                selectedTab = BottomNavItem.HOME
+            }
+        )
+    } else if (isContactSuccessOpen) {
+        ContactUsSuccessScreen(
+            onBackClick = { isContactSuccessOpen = false },
+            onBackToContactUsClick = { isContactSuccessOpen = false },
+            onGoToHomeClick = {
+                isContactSuccessOpen = false
+                isContactSupportOpen = false
+                isHelpSupportOpen = false
+                selectedTab = BottomNavItem.HOME
+            }
+        )
+    } else if (isShareOpen) {
+        ShareFileScreen(
+            fileName = selectedDetailFile?.fileName ?: "AML Assignment.pdf",
+            onBackClick = { isShareOpen = false },
+            onShareOptionClick = { _ -> isShareOpen = false }
+        )
+    } else if (isAiHistoryOpen) {
         AiChatHistoryScreen(
             onBackClick = { isAiHistoryOpen = false }
         )
     } else if (isFeedbackOpen) {
         FeedbackScreen(
             onBackClick = { isFeedbackOpen = false },
-            onSubmitFeedbackClick = { _, _, _, _ -> isFeedbackOpen = false }
+            onSubmitFeedbackClick = { _, _, _, _ -> isFeedbackSuccessOpen = true }
         )
     } else if (isContactSupportOpen) {
         ContactSupportScreen(
-            onBackClick = { isContactSupportOpen = false }
+            onBackClick = { isContactSupportOpen = false },
+            onSendMessageClick = { _, _, _, _ -> isContactSuccessOpen = true }
         )
     } else if (isHelpSupportOpen) {
         HelpSupportScreen(
@@ -133,6 +195,7 @@ fun MainScreen(
                 isViewerOpen = false
                 showSaveConfirmation = false
             },
+            onShareClick = { isShareOpen = true },
             onSetPriorityClick = { isSetPriorityOpen = true },
             onConfirmSave = {
                 showSaveConfirmation = false
@@ -147,6 +210,7 @@ fun MainScreen(
             fileData = selectedDetailFile!!,
             onBackClick = { selectedDetailFile = null },
             onOpenFileClick = { isViewerOpen = true },
+            onShareClick = { isShareOpen = true },
             onSetPriorityClick = {
                 isViewerOpen = true
                 isSetPriorityOpen = true
@@ -173,7 +237,8 @@ fun MainScreen(
             ) {
                 when (selectedTab) {
                     BottomNavItem.HOME -> HomeScreen(
-                        onSeeAllClick = { selectedTab = BottomNavItem.AI },
+                        onSeeAllClick = { isRecentFilesOpen = true },
+                        onMicClick = { selectedTab = BottomNavItem.AI },
                         onFileClick = { file ->
                             selectedDetailFile = FileDetailData(
                                 fileName = file.title,
@@ -222,6 +287,15 @@ fun MainScreen(
                                 location = "Internal Storage",
                                 priority = file.priority
                             )
+                        },
+                        onShareFileClick = { file ->
+                            selectedDetailFile = FileDetailData(
+                                fileName = file.title,
+                                fileSize = file.size,
+                                fileType = "PDF Document",
+                                priority = file.priority
+                            )
+                            isShareOpen = true
                         }
                     )
                     BottomNavItem.PROFILE -> ProfileScreen(

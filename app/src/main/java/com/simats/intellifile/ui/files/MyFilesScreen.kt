@@ -82,7 +82,9 @@ fun MyFilesScreen(
                         PriorityLevel.entries.forEach { level ->
                             PrioritySummaryCard(
                                 priority = level,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onQuickAccessClick(level) }
                             )
                         }
                     }
