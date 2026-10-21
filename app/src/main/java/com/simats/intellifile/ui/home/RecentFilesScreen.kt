@@ -21,6 +21,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -121,7 +122,7 @@ fun RecentFilesScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFFF8F9FE))
+            .background(MaterialTheme.colorScheme.background)
     ) {
         Column(
             modifier = Modifier.fillMaxSize()
@@ -178,7 +179,7 @@ fun RecentFilesScreen(
                             .fillMaxWidth()
                             .height(52.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFEEF0FD))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
                             .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -248,8 +249,8 @@ fun FormatFilterChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val backgroundColor = if (isSelected) Color(0xFF6C5CE7) else Color(0xFFEEF0FD)
-    val textColor = if (isSelected) Color.White else Color(0xFF6C5CE7)
+    val backgroundColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val textColor = if (isSelected) Color.White else MaterialTheme.colorScheme.primary
 
     Box(
         modifier = modifier

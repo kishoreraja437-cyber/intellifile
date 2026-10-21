@@ -1,5 +1,6 @@
 package com.simats.intellifile.ui.main
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -46,6 +47,7 @@ import com.simats.intellifile.ui.share.ShareFileScreen
 import com.simats.intellifile.ui.support.ContactSupportScreen
 import com.simats.intellifile.ui.support.ContactUsSuccessScreen
 import com.simats.intellifile.ui.support.HelpSupportScreen
+import com.simats.intellifile.ui.theme.AppThemeMode
 import com.simats.intellifile.ui.theme.ThemeSettingsScreen
 import com.simats.intellifile.ui.viewer.DocumentViewerScreen
 
@@ -63,7 +65,9 @@ enum class BottomNavItem(
 
 @Composable
 fun MainScreen(
-    onLogout: () -> Unit = {}
+    onLogout: () -> Unit = {},
+    currentThemeMode: AppThemeMode = AppThemeMode.LIGHT,
+    onThemeChanged: (AppThemeMode) -> Unit = {}
 ) {
     var selectedTab by remember { mutableStateOf(BottomNavItem.HOME) }
     var selectedDetailFile by remember { mutableStateOf<FileDetailData?>(null) }
@@ -84,6 +88,7 @@ fun MainScreen(
     var isRecentFilesOpen by remember { mutableStateOf(false) }
 
     if (isRecentFilesOpen) {
+        BackHandler { isRecentFilesOpen = false }
         RecentFilesScreen(
             onBackClick = { isRecentFilesOpen = false },
             onFileClick = { file ->
@@ -109,6 +114,7 @@ fun MainScreen(
             }
         )
     } else if (isFeedbackSuccessOpen) {
+        BackHandler { isFeedbackSuccessOpen = false }
         FeedbackSuccessScreen(
             onBackClick = { isFeedbackSuccessOpen = false },
             onBackToFeedbackClick = { isFeedbackSuccessOpen = false },
@@ -120,6 +126,7 @@ fun MainScreen(
             }
         )
     } else if (isContactSuccessOpen) {
+        BackHandler { isContactSuccessOpen = false }
         ContactUsSuccessScreen(
             onBackClick = { isContactSuccessOpen = false },
             onBackToContactUsClick = { isContactSuccessOpen = false },
@@ -131,50 +138,64 @@ fun MainScreen(
             }
         )
     } else if (isShareOpen) {
+        BackHandler { isShareOpen = false }
         ShareFileScreen(
             fileName = selectedDetailFile?.fileName ?: "AML Assignment.pdf",
             onBackClick = { isShareOpen = false },
             onShareOptionClick = { _ -> isShareOpen = false }
         )
     } else if (isAiHistoryOpen) {
+        BackHandler { isAiHistoryOpen = false }
         AiChatHistoryScreen(
             onBackClick = { isAiHistoryOpen = false }
         )
     } else if (isFeedbackOpen) {
+        BackHandler { isFeedbackOpen = false }
         FeedbackScreen(
             onBackClick = { isFeedbackOpen = false },
             onSubmitFeedbackClick = { _, _, _, _ -> isFeedbackSuccessOpen = true }
         )
     } else if (isContactSupportOpen) {
+        BackHandler { isContactSupportOpen = false }
         ContactSupportScreen(
             onBackClick = { isContactSupportOpen = false },
             onSendMessageClick = { _, _, _, _ -> isContactSuccessOpen = true }
         )
     } else if (isHelpSupportOpen) {
+        BackHandler { isHelpSupportOpen = false }
         HelpSupportScreen(
             onBackClick = { isHelpSupportOpen = false },
             onContactSupportClick = { isContactSupportOpen = true },
             onSendFeedbackClick = { isFeedbackOpen = true }
         )
     } else if (isAboutOpen) {
+        BackHandler { isAboutOpen = false }
         AboutScreen(
             onBackClick = { isAboutOpen = false }
         )
     } else if (isThemeOpen) {
+        BackHandler { isThemeOpen = false }
         ThemeSettingsScreen(
+            initialThemeMode = currentThemeMode,
             onBackClick = { isThemeOpen = false },
-            onSaveTheme = { isThemeOpen = false }
+            onSaveTheme = { newTheme ->
+                onThemeChanged(newTheme)
+                isThemeOpen = false
+            }
         )
     } else if (isNotificationsOpen) {
+        BackHandler { isNotificationsOpen = false }
         NotificationsScreen(
             onBackClick = { isNotificationsOpen = false },
             onSaveSettingsClick = { isNotificationsOpen = false }
         )
     } else if (isFilePermissionsOpen) {
+        BackHandler { isFilePermissionsOpen = false }
         FilePermissionsDetailScreen(
             onBackClick = { isFilePermissionsOpen = false }
         )
     } else if (isSetPriorityOpen && selectedDetailFile != null) {
+        BackHandler { isSetPriorityOpen = false }
         SetPriorityScreen(
             fileName = selectedDetailFile!!.fileName,
             fileSize = selectedDetailFile!!.fileSize,
@@ -188,6 +209,7 @@ fun MainScreen(
             }
         )
     } else if (isViewerOpen && selectedDetailFile != null) {
+        BackHandler { isViewerOpen = false }
         DocumentViewerScreen(
             fileName = selectedDetailFile!!.fileName,
             showSaveConfirmation = showSaveConfirmation,
@@ -206,6 +228,7 @@ fun MainScreen(
             onDismissSaveConfirmation = { showSaveConfirmation = false }
         )
     } else if (selectedDetailFile != null) {
+        BackHandler { selectedDetailFile = null }
         FileDetailScreen(
             fileData = selectedDetailFile!!,
             onBackClick = { selectedDetailFile = null },
@@ -221,6 +244,9 @@ fun MainScreen(
             }
         )
     } else {
+        if (selectedTab != BottomNavItem.HOME) {
+            BackHandler { selectedTab = BottomNavItem.HOME }
+        }
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             bottomBar = {
@@ -239,6 +265,9 @@ fun MainScreen(
                     BottomNavItem.HOME -> HomeScreen(
                         onSeeAllClick = { isRecentFilesOpen = true },
                         onMicClick = { selectedTab = BottomNavItem.AI },
+                        onPriorityCardClick = { _ ->
+                            selectedTab = BottomNavItem.FILES
+                        },
                         onFileClick = { file ->
                             selectedDetailFile = FileDetailData(
                                 fileName = file.title,

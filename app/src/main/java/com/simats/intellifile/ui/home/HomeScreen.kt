@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -78,6 +79,7 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     onSeeAllClick: () -> Unit = {},
     onMicClick: () -> Unit = {},
+    onPriorityCardClick: (PriorityLevel) -> Unit = {},
     onFileClick: (RecentFile) -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -118,7 +120,7 @@ fun HomeScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFFF8F9FE))
+            .background(MaterialTheme.colorScheme.background)
     ) {
         LazyColumn(
             modifier = Modifier
@@ -145,6 +147,7 @@ fun HomeScreen(
                     PriorityLevel.entries.forEach { level ->
                         PrioritySummaryCard(
                             priority = level,
+                            onClick = { onPriorityCardClick(level) },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -199,14 +202,14 @@ fun SearchBar(
             .fillMaxWidth()
             .height(56.dp)
             .clip(CircleShape)
-            .background(Color(0xFFEEF0FD))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             imageVector = Icons.Default.Search,
             contentDescription = "Search Icon",
-            tint = Color(0xFF1E1B4B),
+            tint = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.size(22.dp)
         )
 
@@ -220,7 +223,7 @@ fun SearchBar(
                 Text(
                     text = "Ask IntelliFile...",
                     fontSize = 15.sp,
-                    color = Color(0xFF6B7280)
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                 )
             }
             BasicTextField(
@@ -237,7 +240,7 @@ fun SearchBar(
             modifier = Modifier
                 .size(42.dp)
                 .clip(CircleShape)
-                .background(Color(0xFF7C3AED))
+                .background(MaterialTheme.colorScheme.primary)
                 .clickable { onMicClick() },
             contentAlignment = Alignment.Center
         ) {
@@ -254,12 +257,14 @@ fun SearchBar(
 @Composable
 fun PrioritySummaryCard(
     priority: PriorityLevel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit = {}
 ) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
             .background(priority.backgroundColor)
+            .clickable { onClick() }
             .padding(vertical = 16.dp, horizontal = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
