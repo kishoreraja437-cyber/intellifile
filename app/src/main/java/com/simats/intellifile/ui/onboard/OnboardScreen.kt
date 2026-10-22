@@ -39,7 +39,7 @@ fun OnboardScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFFAFAFE))
+            .background(Color(0xFFEFF8F8))
     ) {
         // Left background accent shape
         Box(
@@ -62,9 +62,9 @@ fun OnboardScreen(
                     path = path,
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFF9B88ED).copy(alpha = 0.5f),
-                            Color(0xFF7C66DC).copy(alpha = 0.4f),
-                            Color(0xFF5B41C5).copy(alpha = 0.2f)
+                            Color(0xFF88C7CB).copy(alpha = 0.5f),
+                            Color(0xFFD5ECEE).copy(alpha = 0.4f),
+                            Color(0xFFEFF8F8).copy(alpha = 0.2f)
                         )
                     )
                 )
@@ -86,17 +86,17 @@ fun OnboardScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.logo),
-                    contentDescription = "Logo",
-                    modifier = Modifier.size(36.dp)
+                    painter = painterResource(id = R.drawable.mainlogo),
+                    contentDescription = "Main Logo",
+                    modifier = Modifier.size(38.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = buildAnnotatedString {
-                        withStyle(style = SpanStyle(color = Color(0xFF1E1E2C))) {
+                        withStyle(style = SpanStyle(color = Color(0xFF183A3C))) {
                             append("Intelli")
                         }
-                        withStyle(style = SpanStyle(color = Color(0xFF7C3AED))) {
+                        withStyle(style = SpanStyle(color = Color(0xFF55A9AF))) {
                             append("File")
                         }
                     },
@@ -113,7 +113,7 @@ fun OnboardScreen(
                 textAlign = TextAlign.Center,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF1E1E2C),
+                color = Color(0xFF183A3C),
                 lineHeight = 24.sp
             )
 
@@ -131,7 +131,7 @@ fun OnboardScreen(
                     modifier = Modifier
                         .size(160.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFEEF0FA))
+                        .background(Color(0xFFD5ECEE))
                 )
 
                 // Human Illustration
@@ -221,7 +221,7 @@ fun OnboardScreen(
                     .height(52.dp),
                 shape = RoundedCornerShape(26.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF7C3AED)
+                    containerColor = Color(0xFF55A9AF)
                 )
             ) {
                 Text(
@@ -260,13 +260,13 @@ fun FeatureCard(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFF3E8FF)),
+                    .background(Color(0xFFD5ECEE)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = Color(0xFF7C3AED),
+                    tint = Color(0xFF55A9AF),
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -275,7 +275,7 @@ fun FeatureCard(
                 text = text,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF2D3748),
+                color = Color(0xFF183A3C),
                 lineHeight = 17.sp
             )
         }

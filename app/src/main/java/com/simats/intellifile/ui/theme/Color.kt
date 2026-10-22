@@ -10,17 +10,19 @@ val Purple40 = Color(0xFF6650a4)
 val PurpleGrey40 = Color(0xFF625b71)
 val Pink40 = Color(0xFF7D5260)
 
-// Midnight Blue & Indigo Theme Palette
-val AppPrimary = Color(0xFF6332E0)         // Vibrant Purple / Indigo Primary
-val AppSecondary = Color(0xFF5B3CC4)       // Deep Indigo Accent
-val AppBackgroundLight = Color(0xFF11133C) // Deep Midnight Navy Background
-val AppSurfaceLight = Color(0xFF1C1F4E)    // Midnight Blue Card Surface
-val AppContainerLight = Color(0xFF252862)  // Soft Midnight Blue Container
-val AppTextDark = Color(0xFFFFFFFF)        // Pure White Text
+// Dusty Aqua & Mint Green Theme Palette (From Image Reference)
+val AppPrimary = Color(0xFF55A9AF)         // Dusty Aqua Primary Accent
+val AppSecondary = Color(0xFF6FBEC3)       // Light Aqua Accent
+val AppBackgroundLight = Color(0xFFEFF8F8) // Soft Light Aqua Tinted Background
+val AppSurfaceLight = Color(0xFFFFFFFF)    // Pure White Card Surface
+val AppContainerLight = Color(0xFFD5ECEE)  // Soft Dusty Aqua Container
+val AppTextDark = Color(0xFF183A3C)        // Deep Ocean Teal Text
+val AppTextMuted = Color(0xFF537779)       // Muted Aqua Gray Subtitle
+val AppAccentMint = Color(0xFF26E07F)      // Vibrant Mint Green Accent
 
-// Dark Variant Theme
-val AppPrimaryDark = Color(0xFF7E52FF)     // Electric Indigo Accent
-val AppSecondaryDark = Color(0xFF6332E0)   // Vibrant Purple
-val AppBackgroundDark = Color(0xFF0C0E2D)  // Deepest Midnight Black Background
-val AppSurfaceDark = Color(0xFF161942)     // Dark Midnight Surface
-val AppTextLight = Color(0xFFFFFFFF)       // Crisp White Text
+// Dark Mode Theme
+val AppPrimaryDark = Color(0xFF88C7CB)     // Light Dusty Aqua
+val AppSecondaryDark = Color(0xFF6FBEC3)   // Dusty Aqua
+val AppBackgroundDark = Color(0xFF112A2C)  // Dark Ocean Teal Background
+val AppSurfaceDark = Color(0xFF1B3D40)     // Dark Aqua Surface
+val AppTextLight = Color(0xFFEFF8F8)       // Light Text

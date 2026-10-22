@@ -40,7 +40,7 @@ fun PermissionScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFFAFAFE))
+            .background(Color(0xFFEFF8F8))
     ) {
         Column(
             modifier = Modifier
@@ -61,7 +61,7 @@ fun PermissionScreen(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = Color(0xFF1E1E2C)
+                        tint = Color(0xFF183A3C)
                     )
                 }
             }
@@ -76,8 +76,8 @@ fun PermissionScreen(
             ) {
                 // Folder Logo
                 Image(
-                    painter = painterResource(id = R.drawable.logo),
-                    contentDescription = "Folder Logo",
+                    painter = painterResource(id = R.drawable.mainlogo),
+                    contentDescription = "Main Folder Logo",
                     modifier = Modifier.size(120.dp)
                 )
 
@@ -88,14 +88,14 @@ fun PermissionScreen(
                         .align(Alignment.BottomEnd)
                         .offset(x = (-10).dp, y = (-10).dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFE0F2FE))
-                        .border(2.dp, Color(0xFF38BDF8), CircleShape),
+                        .background(Color(0xFFD5ECEE))
+                        .border(2.dp, Color(0xFF26E07F), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Check,
                         contentDescription = "Permission Granted",
-                        tint = Color(0xFF0284C7),
+                        tint = Color(0xFF26E07F),
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -109,7 +109,7 @@ fun PermissionScreen(
                 textAlign = TextAlign.Center,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF1E1E2C),
+                color = Color(0xFF183A3C),
                 lineHeight = 28.sp
             )
 
@@ -151,7 +151,7 @@ fun PermissionScreen(
                     .height(52.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF6366F1)
+                    containerColor = Color(0xFF55A9AF)
                 )
             ) {
                 Row(
@@ -181,7 +181,7 @@ fun PermissionScreen(
                 text = "Maybe Later",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF9CA3AF),
+                color = Color(0xFF537779),
                 modifier = Modifier
                     .clickable(onClick = onMaybeLaterClick)
                     .padding(8.dp)
@@ -205,7 +205,7 @@ fun PermissionPointItem(
             modifier = Modifier
                 .size(38.dp)
                 .clip(CircleShape)
-                .background(Color(0xFF7C3AED)),
+                .background(Color(0xFF55A9AF)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -222,7 +222,7 @@ fun PermissionPointItem(
             text = text,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
-            color = Color(0xFF374151),
+            color = Color(0xFF183A3C),
             lineHeight = 18.sp
         )
     }

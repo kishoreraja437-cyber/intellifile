@@ -13,32 +13,32 @@ import androidx.compose.ui.platform.LocalContext
 
 // Dark Scheme
 private val DarkColorScheme = darkColorScheme(
-    primary = AppPrimaryDark,          // #7E52FF
-    secondary = AppSecondaryDark,      // #6332E0
-    tertiary = Color(0xFF9382FE),       // Light Purple
-    background = AppBackgroundDark,    // #0C0E2D
-    surface = AppSurfaceDark,          // #161942
+    primary = AppPrimaryDark,          // #88C7CB Light Dusty Aqua
+    secondary = AppSecondaryDark,      // #6FBEC3 Dusty Aqua
+    tertiary = Color(0xFF26E07F),       // #26E07F Mint Green Accent
+    background = AppBackgroundDark,    // #112A2C Dark Ocean Teal
+    surface = AppSurfaceDark,          // #1B3D40 Dark Aqua Surface
     onPrimary = Color.White,
     onSecondary = Color.White,
-    onBackground = Color.White,        // Pure White Text
-    onSurface = Color.White,
-    surfaceVariant = Color(0xFF1F2253), // Container
-    onSurfaceVariant = Color(0xFF9382FE)
+    onBackground = AppTextLight,       // Light Text
+    onSurface = AppTextLight,
+    surfaceVariant = Color(0xFF275256), // Dark Container
+    onSurfaceVariant = Color(0xFF88C7CB)
 )
 
-// Main / Light Scheme (Midnight Blue & Indigo Purple Theme)
+// Main / Light Scheme (Dusty Aqua & Mint Green Theme)
 private val LightColorScheme = lightColorScheme(
-    primary = AppPrimary,              // #6332E0 Vibrant Purple/Indigo
-    secondary = AppSecondary,          // #5B3CC4 Deep Indigo
-    tertiary = Color(0xFF7E52FF),       // Light Indigo Accent
-    background = AppBackgroundLight,   // #11133C Deep Midnight Navy Background
-    surface = AppSurfaceLight,         // #1C1F4E Midnight Blue Card Surface
+    primary = AppPrimary,              // #55A9AF Dusty Aqua
+    secondary = AppSecondary,          // #6FBEC3 Light Aqua
+    tertiary = Color(0xFF26E07F),       // #26E07F Vibrant Mint Green Accent
+    background = AppBackgroundLight,   // #EFF8F8 Soft Light Aqua Background
+    surface = AppSurfaceLight,         // #FFFFFF Pure White Surface
     onPrimary = Color.White,
     onSecondary = Color.White,
-    onBackground = Color.White,        // Pure White Text
-    onSurface = Color.White,
-    surfaceVariant = AppContainerLight, // #252862 Soft Midnight Blue Container
-    onSurfaceVariant = Color(0xFF9382FE) // Light Purple Accent
+    onBackground = AppTextDark,        // #183A3C Deep Ocean Teal Text
+    onSurface = AppTextDark,
+    surfaceVariant = AppContainerLight, // #D5ECEE Soft Dusty Aqua Container
+    onSurfaceVariant = AppPrimary      // #55A9AF Dusty Aqua Accent Text/Icon
 )
 
 @Composable

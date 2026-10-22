@@ -85,8 +85,8 @@ fun AboutScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.logo),
-                    contentDescription = "IntelliFile Logo",
+                    painter = painterResource(id = R.drawable.mainlogo),
+                    contentDescription = "IntelliFile Main Logo",
                     modifier = Modifier.size(90.dp)
                 )
 
@@ -95,13 +95,13 @@ fun AboutScreen(
                 Text(
                     text = buildAnnotatedString {
                         append("IntelliFile ")
-                        withStyle(style = SpanStyle(color = Color(0xFF6C5CE7))) {
+                        withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
                             append("AI")
                         }
                     },
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111827)
+                    color = MaterialTheme.colorScheme.onBackground
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))

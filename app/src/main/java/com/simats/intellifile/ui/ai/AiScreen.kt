@@ -184,13 +184,13 @@ fun AiHeader(
             modifier = Modifier
                 .size(90.dp)
                 .clip(CircleShape)
-                .background(Color(0xFFDCE2FF)),
+                .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.SmartToy,
                 contentDescription = "IntelliFile AI Robot",
-                tint = Color(0xFF6C5CE7),
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(54.dp)
             )
         }
@@ -209,7 +209,7 @@ fun AiHeader(
         Text(
             text = "Find your files with natural language",
             fontSize = 14.sp,
-            color = Color(0xFF6B7280)
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
         )
 
         Spacer(modifier = Modifier.height(14.dp))
@@ -231,7 +231,7 @@ fun ViewSearchHistoryButton(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFFEEF0FD))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable { onClick() }
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -243,7 +243,7 @@ fun ViewSearchHistoryButton(
             Icon(
                 imageVector = Icons.Outlined.AutoAwesome,
                 contentDescription = "AI Sparkle",
-                tint = Color(0xFF6C5CE7),
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp)
             )
 
@@ -253,14 +253,14 @@ fun ViewSearchHistoryButton(
                 text = "View AI Search History",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF6C5CE7)
+                color = MaterialTheme.colorScheme.primary
             )
         }
 
         Icon(
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = "View History",
-            tint = Color(0xFF6C5CE7),
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(20.dp)
         )
     }
@@ -285,7 +285,7 @@ fun UserMessageBubble(
                         bottomEnd = 4.dp
                     )
                 )
-                .background(Color(0xFF6C5CE7))
+                .background(MaterialTheme.colorScheme.primary)
                 .padding(horizontal = 18.dp, vertical = 12.dp)
         ) {
             Text(
@@ -319,13 +319,13 @@ fun AiMessageBubble(
                         bottomEnd = 20.dp
                     )
                 )
-                .background(Color(0xFFE0E7FF))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(horizontal = 18.dp, vertical = 12.dp)
         ) {
             Text(
                 text = text,
                 fontSize = 14.sp,
-                color = Color(0xFF1E1B4B),
+                color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -348,7 +348,7 @@ fun AiFileCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(Color.White)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -369,7 +369,7 @@ fun AiFileCard(
                 text = file.title,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF111827)
+                color = MaterialTheme.colorScheme.onSurface
             )
 
             Spacer(modifier = Modifier.height(3.dp))
@@ -377,7 +377,7 @@ fun AiFileCard(
             Text(
                 text = "${file.format} · ${file.size} · ${file.dateText}",
                 fontSize = 11.sp,
-                color = Color(0xFF6B7280)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -389,7 +389,7 @@ fun AiFileCard(
 
         Button(
             onClick = onOpenClick,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C5CE7)),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             shape = RoundedCornerShape(12.dp),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             modifier = Modifier.height(36.dp)
@@ -417,7 +417,7 @@ fun AiBottomInputBar(
             .padding(horizontal = 20.dp, vertical = 12.dp)
             .height(56.dp)
             .clip(CircleShape)
-            .background(Color(0xFFEEF0FD))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(horizontal = 18.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -429,7 +429,7 @@ fun AiBottomInputBar(
                 Text(
                     text = "Ask anything about your files...",
                     fontSize = 14.sp,
-                    color = Color(0xFF6B7280)
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                 )
             }
             BasicTextField(
@@ -446,7 +446,7 @@ fun AiBottomInputBar(
             modifier = Modifier
                 .size(42.dp)
                 .clip(CircleShape)
-                .background(Color(0xFF6C5CE7))
+                .background(MaterialTheme.colorScheme.primary)
                 .clickable { onSendClick() },
             contentAlignment = Alignment.Center
         ) {

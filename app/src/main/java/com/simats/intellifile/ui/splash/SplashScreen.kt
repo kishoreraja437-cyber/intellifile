@@ -40,9 +40,9 @@ fun SplashScreen(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF0A0C24),
-                        Color(0xFF0F1235),
-                        Color(0xFF141846)
+                        Color(0xFF88C7CB),
+                        Color(0xFFB5E2E5),
+                        Color(0xFFEFF8F8)
                     )
                 )
             )
@@ -57,19 +57,19 @@ fun SplashScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             Image(
-                painter = painterResource(id = R.drawable.logo),
-                contentDescription = "App Logo",
-                modifier = Modifier.size(130.dp)
+                painter = painterResource(id = R.drawable.mainlogo),
+                contentDescription = "App Main Logo",
+                modifier = Modifier.size(140.dp)
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
                 text = buildAnnotatedString {
-                    withStyle(style = SpanStyle(color = Color.White)) {
+                    withStyle(style = SpanStyle(color = Color(0xFF183A3C))) {
                         append("Intelli")
                     }
-                    withStyle(style = SpanStyle(color = Color(0xFF9B51E5))) {
+                    withStyle(style = SpanStyle(color = Color(0xFF55A9AF))) {
                         append("File")
                     }
                 },
@@ -81,15 +81,15 @@ fun SplashScreen(
 
             Text(
                 text = "Find. Prioritize. Access.",
-                color = Color(0xFFB0B3C7),
+                color = Color(0xFF537779),
                 fontSize = 16.sp,
-                fontWeight = FontWeight.Normal
+                fontWeight = FontWeight.Medium
             )
 
             Spacer(modifier = Modifier.height(48.dp))
 
             CircularProgressIndicator(
-                color = Color(0xFF9B51E5),
+                color = Color(0xFF26E07F),
                 modifier = Modifier.size(44.dp),
                 strokeWidth = 3.dp
             )
@@ -130,9 +130,9 @@ fun SplashBottomWaves() {
             path = path1,
             brush = Brush.verticalGradient(
                 colors = listOf(
-                    Color(0xFF7B2CBF).copy(alpha = 0.3f),
-                    Color(0xFF5A189A).copy(alpha = 0.6f),
-                    Color(0xFF3C096C).copy(alpha = 0.9f)
+                    Color(0xFF88C7CB).copy(alpha = 0.5f),
+                    Color(0xFF6FBEC3).copy(alpha = 0.6f),
+                    Color(0xFFD5ECEE)
                 )
             )
         )
@@ -150,12 +150,12 @@ fun SplashBottomWaves() {
         }
         drawPath(
             path = path2,
-            color = Color(0xFF1B1145)
+            color = Color(0xFFD5ECEE).copy(alpha = 0.6f)
         )
     }
 }
 
-@Preview(showBackground = true, backgroundColor = 0xFF0A0C24)
+@Preview(showBackground = true)
 @Composable
 fun SplashScreenPreview() {
     IntellifileTheme {
