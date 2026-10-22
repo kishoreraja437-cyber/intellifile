@@ -1,5 +1,8 @@
 package com.simats.intellifile.ui.splash
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -8,12 +11,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import kotlinx.coroutines.delay
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -29,8 +33,16 @@ import com.simats.intellifile.ui.theme.IntellifileTheme
 fun SplashScreen(
     onSplashFinished: () -> Unit = {}
 ) {
+    val rotationAngle = remember { Animatable(0f) }
+
     LaunchedEffect(Unit) {
-        delay(2000L)
+        rotationAngle.animateTo(
+            targetValue = 720f,
+            animationSpec = tween(
+                durationMillis = 2000,
+                easing = FastOutSlowInEasing
+            )
+        )
         onSplashFinished()
     }
 
@@ -59,7 +71,9 @@ fun SplashScreen(
             Image(
                 painter = painterResource(id = R.drawable.mainlogo),
                 contentDescription = "App Main Logo",
-                modifier = Modifier.size(140.dp)
+                modifier = Modifier
+                    .size(140.dp)
+                    .graphicsLayer(rotationZ = rotationAngle.value)
             )
 
             Spacer(modifier = Modifier.height(24.dp))
