@@ -190,14 +190,14 @@ fun FileDetailScreen(
                     text = "Priority",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111827)
+                    color = MaterialTheme.colorScheme.onBackground
                 )
 
                 Text(
                     text = "Change",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF6C5CE7)
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
 
@@ -224,7 +224,7 @@ fun FileDetailScreen(
             // Action Buttons
             Button(
                 onClick = onOpenFileClick,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C5CE7)),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -242,7 +242,7 @@ fun FileDetailScreen(
 
             Button(
                 onClick = onShareClick,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEEF0FD)),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -255,7 +255,7 @@ fun FileDetailScreen(
                     Icon(
                         imageVector = Icons.Default.Share,
                         contentDescription = "Share",
-                        tint = Color(0xFF1E1B4B),
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -263,7 +263,7 @@ fun FileDetailScreen(
                         text = "Share",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF1E1B4B)
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }

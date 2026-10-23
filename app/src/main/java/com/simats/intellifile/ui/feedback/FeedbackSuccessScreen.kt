@@ -86,13 +86,13 @@ fun FeedbackSuccessScreen(
                         modifier = Modifier
                             .size(110.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFDCE2FF)),
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.SmartToy,
                             contentDescription = "AI Robot",
-                            tint = Color(0xFF6C5CE7),
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(68.dp)
                         )
                     }
@@ -102,7 +102,7 @@ fun FeedbackSuccessScreen(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF22C55E)),
+                            .background(Color(0xFF26E07F)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -120,7 +120,7 @@ fun FeedbackSuccessScreen(
                     text = "Submitted Successfully!",
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111827),
+                    color = MaterialTheme.colorScheme.onBackground,
                     textAlign = TextAlign.Center
                 )
 
@@ -129,7 +129,7 @@ fun FeedbackSuccessScreen(
                 Text(
                     text = "Thank you for your valuable feedback!\nIt helps us improve and serve you better.",
                     fontSize = 14.sp,
-                    color = Color(0xFF4B5563),
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                     textAlign = TextAlign.Center,
                     lineHeight = 20.sp
                 )
@@ -142,7 +142,7 @@ fun FeedbackSuccessScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(18.dp))
-                    .background(Color(0xFFEEF0FD))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .padding(18.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -150,13 +150,13 @@ fun FeedbackSuccessScreen(
                     modifier = Modifier
                         .size(44.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFFDCE2FF)),
+                        .background(Color.White),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Star,
                         contentDescription = "Feedback Received",
-                        tint = Color(0xFF6C5CE7),
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -187,7 +187,7 @@ fun FeedbackSuccessScreen(
             // Primary Back to Feedback Button
             Button(
                 onClick = onBackToFeedbackClick,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C5CE7)),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -218,7 +218,7 @@ fun FeedbackSuccessScreen(
             // Secondary Go to Home Button
             Button(
                 onClick = onGoToHomeClick,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEEF0FD)),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -231,7 +231,7 @@ fun FeedbackSuccessScreen(
                     Icon(
                         imageVector = Icons.Outlined.Home,
                         contentDescription = "Go to Home",
-                        tint = Color(0xFF6C5CE7),
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
@@ -239,7 +239,7 @@ fun FeedbackSuccessScreen(
                         text = "Go to Home",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF6C5CE7)
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }

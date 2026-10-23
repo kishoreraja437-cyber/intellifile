@@ -150,13 +150,13 @@ fun NotificationsScreen(
                         modifier = Modifier
                             .size(46.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFEEF0FD)),
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.DarkMode,
                             contentDescription = "Quiet hours",
-                            tint = Color(0xFF6C5CE7),
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -170,7 +170,7 @@ fun NotificationsScreen(
                             text = "Quiet hours",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF111827)
+                            color = MaterialTheme.colorScheme.onSurface
                         )
 
                         Spacer(modifier = Modifier.height(4.dp))
@@ -189,7 +189,7 @@ fun NotificationsScreen(
                         onCheckedChange = { quietHoursEnabled = it },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,
-                            checkedTrackColor = Color(0xFF6C5CE7),
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
                             uncheckedThumbColor = Color.White,
                             uncheckedTrackColor = Color(0xFFD1D5DB)
                         )
@@ -203,7 +203,7 @@ fun NotificationsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFFEEF0FD))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
                         .clickable { /* Select quiet hours */ }
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -215,7 +215,7 @@ fun NotificationsScreen(
                         Icon(
                             imageVector = Icons.Outlined.AccessTime,
                             contentDescription = "Time",
-                            tint = Color(0xFF6C5CE7),
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp)
                         )
 
@@ -225,14 +225,14 @@ fun NotificationsScreen(
                             text = "From 10:00 PM   To   7:00 AM",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF6C5CE7)
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
 
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = "Select Time",
-                        tint = Color(0xFF6C5CE7),
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -243,7 +243,7 @@ fun NotificationsScreen(
             // Save Settings Button
             Button(
                 onClick = onSaveSettingsClick,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C5CE7)),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()

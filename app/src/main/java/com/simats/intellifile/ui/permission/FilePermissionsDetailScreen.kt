@@ -113,7 +113,7 @@ fun FilePermissionsDetailScreen(
             // Manage Access Button
             Button(
                 onClick = onManageAccessClick,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C5CE7)),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -144,7 +144,7 @@ fun FilePermissionsDetailScreen(
             // Select Files Button
             Button(
                 onClick = onSelectFilesClick,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEEF0FD)),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -157,7 +157,7 @@ fun FilePermissionsDetailScreen(
                     Icon(
                         imageVector = Icons.Outlined.Folder,
                         contentDescription = "Select Files",
-                        tint = Color(0xFF6C5CE7),
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
@@ -165,7 +165,7 @@ fun FilePermissionsDetailScreen(
                         text = "Select Files",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF6C5CE7)
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -177,7 +177,7 @@ fun FilePermissionsDetailScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFFEEF0FD))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .padding(18.dp),
                 verticalAlignment = Alignment.Top
             ) {
@@ -191,7 +191,7 @@ fun FilePermissionsDetailScreen(
                     Icon(
                         imageVector = Icons.Outlined.VerifiedUser,
                         contentDescription = "Privacy Shield",
-                        tint = Color(0xFF6C5CE7),
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -205,7 +205,7 @@ fun FilePermissionsDetailScreen(
                         text = "Your privacy is our priority.",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF6C5CE7)
+                        color = MaterialTheme.colorScheme.primary
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
@@ -247,13 +247,13 @@ fun PermissionItemCard(
             modifier = Modifier
                 .size(46.dp)
                 .clip(CircleShape)
-                .background(Color(0xFFEEF0FD)),
+                .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = title,
-                tint = Color(0xFF6C5CE7),
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(24.dp)
             )
         }
@@ -272,7 +272,7 @@ fun PermissionItemCard(
                     text = title,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111827)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 Box(

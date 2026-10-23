@@ -230,14 +230,14 @@ fun ShareFileScreen(
                     .fillMaxWidth()
                     .height(50.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFEEF0FD))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = "Search",
-                    tint = Color(0xFF6C5CE7),
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
                 )
 
@@ -324,7 +324,7 @@ fun QuickShareCard(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFFEEF0FD))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable { onClick() }
             .padding(vertical = 14.dp, horizontal = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -333,7 +333,7 @@ fun QuickShareCard(
         Icon(
             imageVector = icon,
             contentDescription = title,
-            tint = Color(0xFF6C5CE7),
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(24.dp)
         )
 
@@ -343,7 +343,7 @@ fun QuickShareCard(
             text = title,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF6C5CE7),
+            color = MaterialTheme.colorScheme.primary,
             textAlign = TextAlign.Center,
             lineHeight = 14.sp
         )
@@ -364,7 +364,7 @@ fun ContactShareRow(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(Color.White)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -395,7 +395,7 @@ fun ContactShareRow(
                     text = contact.name,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111827)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 Spacer(modifier = Modifier.height(2.dp))
@@ -403,7 +403,7 @@ fun ContactShareRow(
                 Text(
                     text = contact.email,
                     fontSize = 12.sp,
-                    color = Color(0xFF6B7280)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
             }
         }
@@ -415,7 +415,7 @@ fun ContactShareRow(
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFFEEF0FD))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable { isPermissionDropdownOpen = true }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -424,7 +424,7 @@ fun ContactShareRow(
                     text = currentPermission,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF6C5CE7)
+                    color = MaterialTheme.colorScheme.primary
                 )
 
                 Spacer(modifier = Modifier.width(4.dp))
@@ -432,7 +432,7 @@ fun ContactShareRow(
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowDown,
                     contentDescription = "Permission Options",
-                    tint = Color(0xFF6C5CE7),
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(14.dp)
                 )
             }
@@ -465,7 +465,7 @@ fun ContactShareRow(
             checked = isChecked,
             onCheckedChange = onCheckedChange,
             colors = CheckboxDefaults.colors(
-                checkedColor = Color(0xFF6C5CE7),
+                checkedColor = MaterialTheme.colorScheme.primary,
                 uncheckedColor = Color(0xFFD1D5DB)
             )
         )

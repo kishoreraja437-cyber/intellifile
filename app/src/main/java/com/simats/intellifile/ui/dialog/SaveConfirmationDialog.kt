@@ -11,6 +11,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -75,7 +76,7 @@ fun SaveConfirmationDialog(
                         modifier = Modifier
                             .size(60.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF22C55E)),
+                            .background(Color(0xFF26E07F)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -113,7 +114,7 @@ fun SaveConfirmationDialog(
                     // Primary Save Button
                     Button(
                         onClick = onConfirmSave,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C5CE7)),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -132,7 +133,7 @@ fun SaveConfirmationDialog(
                     // Secondary Cancel Button
                     Button(
                         onClick = onCancel,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEEF0FD)),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -142,7 +143,7 @@ fun SaveConfirmationDialog(
                             text = "Cancel",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF6C5CE7)
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }

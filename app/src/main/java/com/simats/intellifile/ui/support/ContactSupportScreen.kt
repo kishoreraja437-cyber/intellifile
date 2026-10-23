@@ -233,7 +233,7 @@ fun ContactSupportScreen(
                 onClick = {
                     onSendMessageClick(nameInput, emailInput, selectedSubject, messageInput)
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C5CE7)),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -352,7 +352,7 @@ fun FormInputField(
             .fillMaxWidth()
             .heightIn(min = minHeight)
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFFEEF0FD))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .then(clickableModifier)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.Top
@@ -375,7 +375,7 @@ fun FormInputField(
                 text = label,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF6C5CE7)
+                color = MaterialTheme.colorScheme.primary
             )
 
             Spacer(modifier = Modifier.height(2.dp))

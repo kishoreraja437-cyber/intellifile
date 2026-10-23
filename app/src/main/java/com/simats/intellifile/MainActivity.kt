@@ -4,8 +4,19 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.simats.intellifile.ui.main.MainScreen
@@ -71,24 +82,40 @@ class MainActivity : ComponentActivity() {
             }
 
             IntellifileTheme(darkTheme = isDarkTheme) {
-                when (currentScreen) {
-                    AppScreen.SPLASH -> SplashScreen(
-                        onSplashFinished = { appNavViewModel.onSplashFinished() }
-                    )
-                    AppScreen.ONBOARD -> OnboardScreen(
-                        onGetStartedClick = { appNavViewModel.onGetStartedClicked() }
-                    )
-                    AppScreen.PERMISSION -> PermissionScreen(
-                        onSelectFilesClick = { appNavViewModel.onPermissionProceed() },
-                        onSelectFolderClick = { appNavViewModel.onPermissionProceed() },
-                        onMaybeLaterClick = { appNavViewModel.onPermissionProceed() },
-                        onBackClick = { appNavViewModel.onBackFromPermission() }
-                    )
-                    AppScreen.MAIN -> MainScreen(
-                        onLogout = { appNavViewModel.onLogout() },
-                        currentThemeMode = themeMode,
-                        onThemeChanged = { mode -> appNavViewModel.onThemeSelected(mode) }
-                    )
+                Surface(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .statusBarsPadding(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    AnimatedContent(
+                        targetState = currentScreen,
+                        transitionSpec = {
+                            fadeIn(animationSpec = tween(350)) + scaleIn(initialScale = 0.95f, animationSpec = tween(350)) togetherWith
+                                    fadeOut(animationSpec = tween(250))
+                        },
+                        label = "rootScreenTransition"
+                    ) { targetScreen ->
+                        when (targetScreen) {
+                            AppScreen.SPLASH -> SplashScreen(
+                                onSplashFinished = { appNavViewModel.onSplashFinished() }
+                            )
+                            AppScreen.ONBOARD -> OnboardScreen(
+                                onGetStartedClick = { appNavViewModel.onGetStartedClicked() }
+                            )
+                            AppScreen.PERMISSION -> PermissionScreen(
+                                onSelectFilesClick = { appNavViewModel.onPermissionProceed() },
+                                onSelectFolderClick = { appNavViewModel.onPermissionProceed() },
+                                onMaybeLaterClick = { appNavViewModel.onPermissionProceed() },
+                                onBackClick = { appNavViewModel.onBackFromPermission() }
+                            )
+                            AppScreen.MAIN -> MainScreen(
+                                onLogout = { appNavViewModel.onLogout() },
+                                currentThemeMode = themeMode,
+                                onThemeChanged = { mode -> appNavViewModel.onThemeSelected(mode) }
+                            )
+                        }
+                    }
                 }
             }
         }

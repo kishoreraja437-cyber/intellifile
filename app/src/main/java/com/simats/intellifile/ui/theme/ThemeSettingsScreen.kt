@@ -131,7 +131,7 @@ fun ThemeSettingsScreen(
             // Save Button
             Button(
                 onClick = { onSaveTheme(selectedTheme) },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C5CE7)),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -174,7 +174,7 @@ fun ThemeCardItem(
     val borderModifier = if (isSelected) {
         Modifier.border(
             width = 1.5.dp,
-            color = Color(0xFF6C5CE7),
+            color = MaterialTheme.colorScheme.primary,
             shape = RoundedCornerShape(20.dp)
         )
     } else Modifier
@@ -198,13 +198,13 @@ fun ThemeCardItem(
                 modifier = Modifier
                     .size(46.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFEEF0FD)),
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = themeMode.title,
-                    tint = Color(0xFF6C5CE7),
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -218,7 +218,7 @@ fun ThemeCardItem(
                     text = themeMode.title,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111827)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -234,7 +234,7 @@ fun ThemeCardItem(
             RadioButton(
                 selected = isSelected,
                 onClick = onSelect,
-                colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF6C5CE7))
+                colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
             )
         }
 

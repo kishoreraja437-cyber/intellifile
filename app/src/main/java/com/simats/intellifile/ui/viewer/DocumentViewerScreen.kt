@@ -386,7 +386,7 @@ fun DocumentBottomActionBar(
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(16.dp))
-                    .background(if (isSaved) Color(0xFF10B981) else Color(0xFF6C5CE7))
+                    .background(if (isSaved) Color(0xFF26E07F) else MaterialTheme.colorScheme.primary)
                     .clickable { onSaveClick() }
                     .padding(horizontal = 24.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,

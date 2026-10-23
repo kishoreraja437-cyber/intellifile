@@ -112,14 +112,14 @@ fun HelpSupportScreen(
                     .fillMaxWidth()
                     .height(52.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFEEF0FD))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = "Search",
-                    tint = Color(0xFF6C5CE7),
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(22.dp)
                 )
 
@@ -133,7 +133,7 @@ fun HelpSupportScreen(
                         Text(
                             text = "Search help topics...",
                             fontSize = 15.sp,
-                            color = Color(0xFF9CA3AF)
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                         )
                     }
                     BasicTextField(
@@ -154,7 +154,7 @@ fun HelpSupportScreen(
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
                     contentDescription = "FAQ",
-                    tint = Color(0xFF6C5CE7),
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(22.dp)
                 )
 
@@ -164,7 +164,7 @@ fun HelpSupportScreen(
                     text = "Frequently Asked Questions",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111827)
+                    color = MaterialTheme.colorScheme.onBackground
                 )
             }
 
@@ -191,7 +191,7 @@ fun HelpSupportScreen(
             // Contact Support Button
             Button(
                 onClick = onContactSupportClick,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C5CE7)),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -222,7 +222,7 @@ fun HelpSupportScreen(
             // Send Feedback Button
             Button(
                 onClick = onSendFeedbackClick,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEEF0FD)),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -235,7 +235,7 @@ fun HelpSupportScreen(
                     Icon(
                         imageVector = Icons.AutoMirrored.Outlined.Send,
                         contentDescription = "Send Feedback",
-                        tint = Color(0xFF6C5CE7),
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
@@ -243,7 +243,7 @@ fun HelpSupportScreen(
                         text = "Send Feedback",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF6C5CE7)
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }

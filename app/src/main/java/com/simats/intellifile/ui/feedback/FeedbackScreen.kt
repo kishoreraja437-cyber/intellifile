@@ -160,7 +160,7 @@ fun FeedbackScreen(
                     Icon(
                         imageVector = if (isSelected) Icons.Default.Star else Icons.Outlined.StarBorder,
                         contentDescription = "$starIndex Star",
-                        tint = if (isSelected) Color(0xFF6C5CE7) else Color(0xFF9CA3AF),
+                        tint = if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFF9CA3AF),
                         modifier = Modifier
                             .size(36.dp)
                             .clickable { rating = starIndex }
@@ -175,7 +175,7 @@ fun FeedbackScreen(
                 text = "Feedback Category",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF111827)
+                color = MaterialTheme.colorScheme.onBackground
             )
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -208,7 +208,7 @@ fun FeedbackScreen(
                 },
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF111827)
+                color = MaterialTheme.colorScheme.onBackground
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -218,7 +218,7 @@ fun FeedbackScreen(
                     .fillMaxWidth()
                     .height(120.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFFEEF0FD))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .padding(14.dp)
             ) {
                 if (feedbackText.isEmpty()) {
@@ -257,7 +257,7 @@ fun FeedbackScreen(
                 },
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF111827)
+                color = MaterialTheme.colorScheme.onBackground
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -267,7 +267,7 @@ fun FeedbackScreen(
                     .fillMaxWidth()
                     .height(50.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFFEEF0FD))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -307,7 +307,7 @@ fun FeedbackScreen(
                 onClick = {
                     onSubmitFeedbackClick(rating, selectedCategory, feedbackText, emailInput)
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C5CE7)),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -345,8 +345,8 @@ fun CategoryChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val backgroundColor = if (isSelected) Color(0xFF6C5CE7) else Color(0xFFEEF0FD)
-    val contentColor = if (isSelected) Color.White else Color(0xFF374151)
+    val backgroundColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.primary
 
     Row(
         modifier = modifier

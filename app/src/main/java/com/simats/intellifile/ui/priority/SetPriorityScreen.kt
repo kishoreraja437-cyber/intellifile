@@ -184,7 +184,7 @@ fun SetPriorityScreen(
             // Save Priority Button
             Button(
                 onClick = { onSavePriority(selectedPriority) },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C5CE7)),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
