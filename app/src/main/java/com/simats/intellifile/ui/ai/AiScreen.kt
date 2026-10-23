@@ -1,5 +1,6 @@
 package com.simats.intellifile.ui.ai
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -13,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.Button
@@ -25,10 +27,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.intellifile.R
@@ -151,6 +155,54 @@ fun AiScreen(
 }
 
 @Composable
+fun AiFluidOrbAvatar(
+    modifier: Modifier = Modifier,
+    size: Dp = 90.dp,
+    iconSize: Dp = 48.dp
+) {
+    Box(
+        modifier = modifier.size(size),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFF26E07F).copy(alpha = 0.85f),
+                        Color(0xFF00C2A8).copy(alpha = 0.65f),
+                        Color(0xFF55A9AF).copy(alpha = 0.35f),
+                        Color.Transparent
+                    )
+                )
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize(0.78f)
+                .clip(CircleShape)
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF00C2A8),
+                            Color(0xFF55A9AF)
+                        )
+                    )
+                )
+        )
+
+        Icon(
+            imageVector = Icons.Default.AutoAwesome,
+            contentDescription = "AI Sparkle Logo",
+            tint = Color.White,
+            modifier = Modifier.size(iconSize)
+        )
+    }
+}
+
+@Composable
 fun AiHeader(
     onBackClick: () -> Unit,
     onViewSearchHistoryClick: () -> Unit,
@@ -179,21 +231,11 @@ fun AiHeader(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // Large Robot Avatar
-        Box(
-            modifier = Modifier
-                .size(90.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.SmartToy,
-                contentDescription = "IntelliFile AI Robot",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(54.dp)
-            )
-        }
+        // Glowing Cyan AI Fluid Orb Avatar
+        AiFluidOrbAvatar(
+            size = 90.dp,
+            iconSize = 48.dp
+        )
 
         Spacer(modifier = Modifier.height(14.dp))
 

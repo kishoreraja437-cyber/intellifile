@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.simats.intellifile.ui.ai.AiFluidOrbAvatar
 
 @Composable
 fun FeedbackSuccessScreen(
@@ -82,20 +83,10 @@ fun FeedbackSuccessScreen(
                 Box(
                     contentAlignment = Alignment.BottomEnd
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(110.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.SmartToy,
-                            contentDescription = "AI Robot",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(68.dp)
-                        )
-                    }
+                    AiFluidOrbAvatar(
+                        size = 110.dp,
+                        iconSize = 56.dp
+                    )
 
                     // Green Success Checkmark Badge
                     Box(

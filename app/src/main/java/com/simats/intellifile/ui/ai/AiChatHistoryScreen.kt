@@ -178,20 +178,10 @@ fun AiChatHistoryScreen(
                         )
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFDCE2FF)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.SmartToy,
-                            contentDescription = "AI Robot",
-                            tint = Color(0xFF6C5CE7),
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
+                    AiFluidOrbAvatar(
+                        size = 40.dp,
+                        iconSize = 20.dp
+                    )
                 }
             }
 
