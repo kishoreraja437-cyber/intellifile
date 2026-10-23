@@ -19,6 +19,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.simats.intellifile.ui.auth.LoginScreen
+import com.simats.intellifile.ui.auth.SignUpScreen
 import com.simats.intellifile.ui.main.MainScreen
 import com.simats.intellifile.ui.onboard.OnboardScreen
 import com.simats.intellifile.ui.permission.PermissionScreen
@@ -30,7 +32,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 enum class AppScreen {
-    SPLASH, ONBOARD, PERMISSION, MAIN
+    SPLASH, ONBOARD, LOGIN, SIGNUP, PERMISSION, MAIN
 }
 
 class AppNavigationViewModel : ViewModel() {
@@ -45,7 +47,27 @@ class AppNavigationViewModel : ViewModel() {
     }
 
     fun onGetStartedClicked() {
+        _currentScreen.value = AppScreen.LOGIN
+    }
+
+    fun onLoginSuccess() {
         _currentScreen.value = AppScreen.PERMISSION
+    }
+
+    fun onSignUpClicked() {
+        _currentScreen.value = AppScreen.SIGNUP
+    }
+
+    fun onSignInClicked() {
+        _currentScreen.value = AppScreen.LOGIN
+    }
+
+    fun onBackFromLogin() {
+        _currentScreen.value = AppScreen.ONBOARD
+    }
+
+    fun onBackFromSignUp() {
+        _currentScreen.value = AppScreen.LOGIN
     }
 
     fun onPermissionProceed() {
@@ -53,11 +75,11 @@ class AppNavigationViewModel : ViewModel() {
     }
 
     fun onBackFromPermission() {
-        _currentScreen.value = AppScreen.ONBOARD
+        _currentScreen.value = AppScreen.LOGIN
     }
 
     fun onLogout() {
-        _currentScreen.value = AppScreen.ONBOARD
+        _currentScreen.value = AppScreen.LOGIN
     }
 
     fun onThemeSelected(mode: AppThemeMode) {
@@ -102,6 +124,17 @@ class MainActivity : ComponentActivity() {
                             )
                             AppScreen.ONBOARD -> OnboardScreen(
                                 onGetStartedClick = { appNavViewModel.onGetStartedClicked() }
+                            )
+                            AppScreen.LOGIN -> LoginScreen(
+                                onLoginSuccess = { appNavViewModel.onLoginSuccess() },
+                                onSignUpClick = { appNavViewModel.onSignUpClicked() },
+                                onForgotPasswordClick = { /* Forgot password */ },
+                                onBackClick = { appNavViewModel.onBackFromLogin() }
+                            )
+                            AppScreen.SIGNUP -> SignUpScreen(
+                                onSignUpSuccess = { appNavViewModel.onLoginSuccess() },
+                                onSignInClick = { appNavViewModel.onSignInClicked() },
+                                onBackClick = { appNavViewModel.onBackFromSignUp() }
                             )
                             AppScreen.PERMISSION -> PermissionScreen(
                                 onSelectFilesClick = { appNavViewModel.onPermissionProceed() },

@@ -280,6 +280,7 @@ fun DocumentViewerScreen(
                 isSaved = isSaved,
                 onSaveClick = {
                     isSaved = true
+                    onConfirmSave()
                     onSetPriorityClick()
                 },
                 onThumbnailClick = onThumbnailClick,

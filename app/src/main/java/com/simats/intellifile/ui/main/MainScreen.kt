@@ -61,6 +61,7 @@ import com.simats.intellifile.ui.notifications.NotificationsScreen
 import com.simats.intellifile.ui.permission.FilePermissionsDetailScreen
 import com.simats.intellifile.ui.priority.SetPriorityScreen
 import com.simats.intellifile.ui.profile.ProfileScreen
+import com.simats.intellifile.ui.saved.FileSavedSuccessScreen
 import com.simats.intellifile.ui.saved.SavedScreen
 import com.simats.intellifile.ui.share.ShareFileScreen
 import com.simats.intellifile.ui.support.ContactSupportScreen
@@ -96,6 +97,7 @@ fun MainScreen(
     var selectedDetailFile by remember { mutableStateOf<FileDetailData?>(null) }
     var isDocumentViewerOpen by remember { mutableStateOf(false) }
     var isSetPriorityOpen by remember { mutableStateOf(false) }
+    var isFileSavedSuccessOpen by remember { mutableStateOf(false) }
     var isShareOpen by remember { mutableStateOf(false) }
     var isFilePermissionsOpen by remember { mutableStateOf(false) }
     var isNotificationsOpen by remember { mutableStateOf(false) }
@@ -110,12 +112,13 @@ fun MainScreen(
     // System Back Press Handler
     BackHandler(
         enabled = isRecentFilesOpen || isAiHistoryOpen || selectedDetailFile != null ||
-                isDocumentViewerOpen || isSetPriorityOpen || isShareOpen || isFilePermissionsOpen ||
+                isDocumentViewerOpen || isSetPriorityOpen || isFileSavedSuccessOpen || isShareOpen || isFilePermissionsOpen ||
                 isNotificationsOpen || isThemeOpen || isAboutOpen ||
                 isHelpSupportOpen || isContactSupportOpen || isContactSuccessOpen ||
                 isFeedbackOpen || isFeedbackSuccessOpen || selectedTab != BottomNavItem.HOME
     ) {
         when {
+            isFileSavedSuccessOpen -> isFileSavedSuccessOpen = false
             isDocumentViewerOpen -> isDocumentViewerOpen = false
             isFeedbackSuccessOpen -> isFeedbackSuccessOpen = false
             isFeedbackOpen -> isFeedbackOpen = false
@@ -146,6 +149,7 @@ fun MainScreen(
                     selectedDetailFile = null
                     isDocumentViewerOpen = false
                     isSetPriorityOpen = false
+                    isFileSavedSuccessOpen = false
                     isShareOpen = false
                     isFilePermissionsOpen = false
                     isNotificationsOpen = false
@@ -163,6 +167,7 @@ fun MainScreen(
         }
     ) { innerPadding ->
         val currentNavigationKey = when {
+            isFileSavedSuccessOpen -> "file_saved_success"
             isDocumentViewerOpen -> "document_viewer"
             isFeedbackSuccessOpen -> "feedback_success"
             isFeedbackOpen -> "feedback"
@@ -223,8 +228,37 @@ fun MainScreen(
                         totalPages = 12,
                         onBackClick = { isDocumentViewerOpen = false },
                         onShareClick = { isShareOpen = true },
-                        onMoreClick = { isSetPriorityOpen = true },
-                        onSetPriorityClick = { isSetPriorityOpen = true }
+                        onMoreClick = {
+                            isDocumentViewerOpen = false
+                            isSetPriorityOpen = true
+                        },
+                        onSetPriorityClick = {
+                            isDocumentViewerOpen = false
+                            isSetPriorityOpen = true
+                        },
+                        onConfirmSave = {
+                            isDocumentViewerOpen = false
+                            isSetPriorityOpen = true
+                        }
+                    )
+
+                    "file_saved_success" -> FileSavedSuccessScreen(
+                        fileName = selectedDetailFile?.fileName ?: "AML Assignment.pdf",
+                        fileSize = selectedDetailFile?.fileSize ?: "2.4 MB",
+                        priority = selectedDetailFile?.priority ?: PriorityLevel.IMPORTANT,
+                        onBackClick = { isFileSavedSuccessOpen = false },
+                        onViewSavedClick = {
+                            isFileSavedSuccessOpen = false
+                            selectedDetailFile = null
+                            isDocumentViewerOpen = false
+                            selectedTab = BottomNavItem.SAVED
+                        },
+                        onGoToHomeClick = {
+                            isFileSavedSuccessOpen = false
+                            selectedDetailFile = null
+                            isDocumentViewerOpen = false
+                            selectedTab = BottomNavItem.HOME
+                        }
                     )
 
                     "ai_history" -> AiChatHistoryScreen(
@@ -242,6 +276,7 @@ fun MainScreen(
                         onSavePriority = { newPriority ->
                             selectedDetailFile = selectedDetailFile?.copy(priority = newPriority)
                             isSetPriorityOpen = false
+                            isFileSavedSuccessOpen = true
                         }
                     )
 
