@@ -174,7 +174,7 @@ fun AiChatHistoryScreen(
                         Icon(
                             imageVector = Icons.Default.DeleteOutline,
                             contentDescription = "Clear History",
-                            tint = Color(0xFF111827)
+                            tint = MaterialTheme.colorScheme.onBackground
                         )
                     }
 
@@ -197,7 +197,7 @@ fun AiChatHistoryScreen(
                     Text(
                         text = "Access your previous AI conversations\nand document searches.",
                         fontSize = 13.sp,
-                        color = Color(0xFF6B7280),
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                         lineHeight = 18.sp
                     )
                 }
@@ -209,14 +209,14 @@ fun AiChatHistoryScreen(
                             .fillMaxWidth()
                             .height(50.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFEEF0FD))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
                             .padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.Search,
                             contentDescription = "Search",
-                            tint = Color(0xFF1E1B4B),
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
 
@@ -230,7 +230,7 @@ fun AiChatHistoryScreen(
                                 Text(
                                     text = "Search chat history...",
                                     fontSize = 14.sp,
-                                    color = Color(0xFF9CA3AF)
+                                    color = Color(0xFF537779)
                                 )
                             }
                             BasicTextField(
@@ -278,8 +278,8 @@ fun HistoryFilterChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val backgroundColor = if (isSelected) Color(0xFF6C5CE7) else Color(0xFFEEF0FD)
-    val contentColor = if (isSelected) Color.White else Color(0xFF374151)
+    val backgroundColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.primary
 
     Row(
         modifier = modifier
@@ -318,7 +318,7 @@ fun HistoryCardItem(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(Color.White)
+            .background(MaterialTheme.colorScheme.surface)
             .clickable { onClick() }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -327,13 +327,13 @@ fun HistoryCardItem(
             modifier = Modifier
                 .size(42.dp)
                 .clip(CircleShape)
-                .background(Color(0xFFEEF0FD)),
+                .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = item.icon,
                 contentDescription = item.title,
-                tint = Color(0xFF6C5CE7),
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(22.dp)
             )
         }
@@ -352,7 +352,7 @@ fun HistoryCardItem(
                     text = item.title,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111827),
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
 

@@ -395,7 +395,7 @@ fun ProfileScreen(
                     .fillMaxWidth()
                     .height(54.dp)
                     .clip(RoundedCornerShape(18.dp))
-                    .background(Color(0xFFFFEAEE))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable { showLogoutDialog = true },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
@@ -403,7 +403,7 @@ fun ProfileScreen(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Logout,
                     contentDescription = "Logout",
-                    tint = Color(0xFFEF4444),
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(22.dp)
                 )
 
@@ -413,7 +413,7 @@ fun ProfileScreen(
                     text = "Logout",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFEF4444)
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
 

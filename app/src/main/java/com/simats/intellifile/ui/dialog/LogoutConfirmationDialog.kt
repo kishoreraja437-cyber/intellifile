@@ -9,6 +9,7 @@ import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,18 +54,18 @@ fun LogoutConfirmationDialog(
                 ) {
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Light Purple Logout Icon Badge
+                    // Logout Icon Badge
                     Box(
                         modifier = Modifier
                             .size(60.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFEEF0FD)),
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Outlined.Logout,
                             contentDescription = "Logout",
-                            tint = Color(0xFF6C5CE7),
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(28.dp)
                         )
                     }
@@ -76,7 +77,7 @@ fun LogoutConfirmationDialog(
                         text = "Log out of IntelliFile?",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF111827),
+                        color = MaterialTheme.colorScheme.onBackground,
                         textAlign = TextAlign.Center
                     )
 
@@ -86,7 +87,7 @@ fun LogoutConfirmationDialog(
                     Text(
                         text = "You will need to log in again\nto access your documents and\nsettings.",
                         fontSize = 14.sp,
-                        color = Color(0xFF4B5563),
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                         textAlign = TextAlign.Center,
                         lineHeight = 20.sp
                     )
@@ -96,7 +97,7 @@ fun LogoutConfirmationDialog(
                     // Primary Log Out Button
                     Button(
                         onClick = onConfirmLogout,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C5CE7)),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -115,7 +116,7 @@ fun LogoutConfirmationDialog(
                     // Secondary Cancel Button
                     Button(
                         onClick = onCancel,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEEF0FD)),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -125,7 +126,7 @@ fun LogoutConfirmationDialog(
                             text = "Cancel",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF6C5CE7)
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }

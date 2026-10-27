@@ -1,5 +1,9 @@
 package com.simats.intellifile.ui.home
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,8 +26,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -197,6 +205,18 @@ fun SearchBar(
     onMicClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var isMicPressed by remember { mutableStateOf(false) }
+    val micScale by animateFloatAsState(
+        targetValue = if (isMicPressed) 1.25f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "micScale"
+    )
+
+    val coroutineScope = rememberCoroutineScope()
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -236,20 +256,51 @@ fun SearchBar(
 
         Spacer(modifier = Modifier.width(8.dp))
 
+        // Animated Mic / Speaker Button with Pulsing Wave Aura
         Box(
+            contentAlignment = Alignment.Center,
             modifier = Modifier
-                .size(42.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary)
-                .clickable { onMicClick() },
-            contentAlignment = Alignment.Center
+                .size(44.dp)
+                .clickable {
+                    coroutineScope.launch {
+                        isMicPressed = true
+                        delay(180L)
+                        isMicPressed = false
+                        onMicClick()
+                    }
+                }
         ) {
-            Icon(
-                imageVector = Icons.Default.Mic,
-                contentDescription = "Voice Search",
-                tint = Color.White,
-                modifier = Modifier.size(20.dp)
-            )
+            if (isMicPressed) {
+                Canvas(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color(0xFF26E07F).copy(alpha = 0.8f),
+                                Color(0xFF55A9AF).copy(alpha = 0.5f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .graphicsLayer(scaleX = micScale, scaleY = micScale)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = "Voice Search",
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }

@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.simats.intellifile.ui.auth.ForgotPasswordScreen
 import com.simats.intellifile.ui.auth.LoginScreen
 import com.simats.intellifile.ui.auth.SignUpScreen
 import com.simats.intellifile.ui.main.MainScreen
@@ -32,7 +33,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 enum class AppScreen {
-    SPLASH, ONBOARD, LOGIN, SIGNUP, PERMISSION, MAIN
+    SPLASH, ONBOARD, LOGIN, SIGNUP, FORGOT_PASSWORD, PERMISSION, MAIN
 }
 
 class AppNavigationViewModel : ViewModel() {
@@ -58,6 +59,10 @@ class AppNavigationViewModel : ViewModel() {
         _currentScreen.value = AppScreen.SIGNUP
     }
 
+    fun onForgotPasswordClicked() {
+        _currentScreen.value = AppScreen.FORGOT_PASSWORD
+    }
+
     fun onSignInClicked() {
         _currentScreen.value = AppScreen.LOGIN
     }
@@ -67,6 +72,10 @@ class AppNavigationViewModel : ViewModel() {
     }
 
     fun onBackFromSignUp() {
+        _currentScreen.value = AppScreen.LOGIN
+    }
+
+    fun onBackFromForgotPassword() {
         _currentScreen.value = AppScreen.LOGIN
     }
 
@@ -128,13 +137,18 @@ class MainActivity : ComponentActivity() {
                             AppScreen.LOGIN -> LoginScreen(
                                 onLoginSuccess = { appNavViewModel.onLoginSuccess() },
                                 onSignUpClick = { appNavViewModel.onSignUpClicked() },
-                                onForgotPasswordClick = { /* Forgot password */ },
+                                onForgotPasswordClick = { appNavViewModel.onForgotPasswordClicked() },
                                 onBackClick = { appNavViewModel.onBackFromLogin() }
                             )
                             AppScreen.SIGNUP -> SignUpScreen(
                                 onSignUpSuccess = { appNavViewModel.onLoginSuccess() },
                                 onSignInClick = { appNavViewModel.onSignInClicked() },
                                 onBackClick = { appNavViewModel.onBackFromSignUp() }
+                            )
+                            AppScreen.FORGOT_PASSWORD -> ForgotPasswordScreen(
+                                onResetSuccess = { appNavViewModel.onSignInClicked() },
+                                onBackToLoginClick = { appNavViewModel.onSignInClicked() },
+                                onBackClick = { appNavViewModel.onBackFromForgotPassword() }
                             )
                             AppScreen.PERMISSION -> PermissionScreen(
                                 onSelectFilesClick = { appNavViewModel.onPermissionProceed() },
