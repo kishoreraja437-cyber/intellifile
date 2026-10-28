@@ -1,5 +1,6 @@
 package com.simats.intellifile.ui.share
 
+import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,12 +25,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.intellifile.R
+import com.simats.intellifile.data.manager.LocalFileManager
+import com.simats.intellifile.data.model.LocalFileItem
 
 data class AppShareTarget(
     val name: String,
@@ -39,17 +43,29 @@ data class AppShareTarget(
 
 @Composable
 fun ShareFileScreen(
-    fileName: String = "AML Assignment.pdf",
-    fileSize: String = "2.4 MB",
-    fileFormat: String = "PDF Document",
+    fileName: String = "Document.pdf",
+    fileSize: String = "0 KB",
+    fileFormat: String = "Document",
     iconResId: Int = R.drawable.pdf,
+    filePath: String = "",
+    fileUriString: String = "",
     onBackClick: () -> Unit = {},
     onShareOptionClick: (String) -> Unit = {}
 ) {
+    val context = LocalContext.current
+
+    val localItem = remember(fileName, filePath, fileUriString) {
+        LocalFileItem(
+            title = fileName,
+            path = filePath,
+            uri = if (fileUriString.isNotBlank()) Uri.parse(fileUriString) else Uri.EMPTY,
+            mimeType = LocalFileManager.resolveMimeType(fileName)
+        )
+    }
+
     val appTargets = remember {
         listOf(
             AppShareTarget("WhatsApp", Color(0xFF25D366), Icons.Outlined.Share),
-            AppShareTarget("Instagram", Color(0xFFE1306C), Icons.Outlined.Share),
             AppShareTarget("Gmail", Color(0xFFEA4335), Icons.Outlined.Mail),
             AppShareTarget("Telegram", Color(0xFF229ED9), Icons.Outlined.Share),
             AppShareTarget("Bluetooth", Color(0xFF0082FC), Icons.Outlined.Bluetooth),
@@ -121,7 +137,8 @@ fun ShareFileScreen(
                         text = fileName,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
                     )
 
                     Spacer(modifier = Modifier.height(3.dp))
@@ -142,16 +159,23 @@ fun ShareFileScreen(
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 QuickShareCard(
-                    title = "Copy Link",
+                    title = "Copy Path",
                     icon = Icons.Outlined.ContentCopy,
-                    onClick = { onShareOptionClick("Copy Link") },
+                    onClick = {
+                        val pathOrUri = filePath.ifBlank { fileUriString.ifBlank { fileName } }
+                        LocalFileManager.copyPathToClipboard(context, pathOrUri)
+                        onShareOptionClick("Copy Link")
+                    },
                     modifier = Modifier.weight(1f)
                 )
 
                 QuickShareCard(
                     title = "Share via Apps",
                     icon = Icons.Outlined.Share,
-                    onClick = { onShareOptionClick("Share via Apps") },
+                    onClick = {
+                        LocalFileManager.shareFileWithSystem(context, localItem)
+                        onShareOptionClick("Share via Apps")
+                    },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -166,7 +190,7 @@ fun ShareFileScreen(
                 color = MaterialTheme.colorScheme.onBackground
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // App Icons Scroll Row
             LazyRow(
@@ -175,7 +199,10 @@ fun ShareFileScreen(
                 items(appTargets) { target ->
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.clickable { onShareOptionClick(target.name) }
+                        modifier = Modifier.clickable {
+                            LocalFileManager.shareFileToTarget(context, localItem, target.name)
+                            onShareOptionClick(target.name)
+                        }
                     ) {
                         Box(
                             modifier = Modifier
@@ -206,9 +233,12 @@ fun ShareFileScreen(
 
             Spacer(modifier = Modifier.height(36.dp))
 
-            // Copy Link Primary Button
+            // Primary Share Button
             Button(
-                onClick = { onShareOptionClick("Copy Link") },
+                onClick = {
+                    LocalFileManager.shareFileWithSystem(context, localItem)
+                    onShareOptionClick("Share via Apps")
+                },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
@@ -220,14 +250,14 @@ fun ShareFileScreen(
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.ContentCopy,
-                        contentDescription = "Copy Link",
+                        imageVector = Icons.Outlined.Share,
+                        contentDescription = "Share Document",
                         tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Copy Link",
+                        text = "Share Document",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -260,10 +290,10 @@ fun QuickShareCard(
             imageVector = icon,
             contentDescription = title,
             tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier.size(22.dp)
         )
 
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(10.dp))
 
         Text(
             text = title,

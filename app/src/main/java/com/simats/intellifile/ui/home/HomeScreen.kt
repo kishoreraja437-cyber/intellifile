@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -103,7 +104,8 @@ fun HomeScreen(
     onSeeAllClick: () -> Unit = {},
     onMicClick: () -> Unit = {},
     onPriorityCardClick: (PriorityLevel) -> Unit = {},
-    onFileClick: (RecentFile) -> Unit = {}
+    onFileClick: (RecentFile) -> Unit = {},
+    onShareFileClick: (RecentFile) -> Unit = {}
 ) {
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
@@ -317,7 +319,8 @@ fun HomeScreen(
             items(filteredFiles) { file ->
                 RecentFileCard(
                     file = file,
-                    onClick = { onFileClick(file) }
+                    onClick = { onFileClick(file) },
+                    onShareClick = { onShareFileClick(file) }
                 )
             }
         }
@@ -486,6 +489,7 @@ fun PrioritySummaryCard(
 fun RecentFileCard(
     file: RecentFile,
     onClick: () -> Unit,
+    onShareClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -533,6 +537,19 @@ fun RecentFileCard(
         // Display priority badge only if the user has explicitly assigned one
         if (file.priority != null) {
             PriorityTag(priority = file.priority)
+            Spacer(modifier = Modifier.width(6.dp))
+        }
+
+        IconButton(
+            onClick = onShareClick,
+            modifier = Modifier.size(28.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Share,
+                contentDescription = "Share File",
+                tint = Color(0xFF6B7280),
+                modifier = Modifier.size(16.dp)
+            )
         }
     }
 }

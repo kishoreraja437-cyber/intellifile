@@ -1,6 +1,9 @@
 package com.simats.intellifile.data.manager
 
 import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
@@ -8,6 +11,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.webkit.MimeTypeMap
 import android.widget.Toast
@@ -18,9 +22,11 @@ import com.simats.intellifile.data.local.LocalFileDatabaseHelper
 import com.simats.intellifile.data.model.LocalFileItem
 import com.simats.intellifile.ui.home.PriorityLevel
 import java.io.File
+import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.zip.ZipInputStream
 
 object LocalFileManager {
 
@@ -379,5 +385,238 @@ object LocalFileManager {
             e.printStackTrace()
             Toast.makeText(context, "Could not share file", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /**
+     * Copies a file's location or URI to the system clipboard.
+     */
+    fun copyPathToClipboard(context: Context, pathOrUri: String) {
+        try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("File Path", pathOrUri)
+            clipboard.setPrimaryClip(clip)
+            Toast.makeText(context, "File path copied to clipboard", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(context, "Could not copy path", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Shares a file directly to a specific target app (WhatsApp, Gmail, Telegram, Bluetooth)
+     * or falls back to system chooser if not installed.
+     */
+    fun shareFileToTarget(context: Context, fileItem: LocalFileItem, targetName: String) {
+        val packageName = when (targetName.lowercase()) {
+            "whatsapp" -> "com.whatsapp"
+            "gmail" -> "com.google.android.gm"
+            "telegram" -> "org.telegram.messenger"
+            "bluetooth" -> "com.android.bluetooth"
+            else -> null
+        }
+
+        if (packageName != null) {
+            try {
+                val contentUri: Uri = if (fileItem.uri != Uri.EMPTY && fileItem.uri.scheme == "content") {
+                    fileItem.uri
+                } else if (fileItem.path.isNotBlank()) {
+                    val file = File(fileItem.path)
+                    if (file.exists()) {
+                        FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            file
+                        )
+                    } else fileItem.uri
+                } else fileItem.uri
+
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = fileItem.mimeType
+                    putExtra(Intent.EXTRA_STREAM, contentUri)
+                    setPackage(packageName)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(shareIntent)
+                return
+            } catch (e: ActivityNotFoundException) {
+                Toast.makeText(context, "$targetName is not installed. Opening share options...", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        // Fallback to standard system chooser
+        shareFileWithSystem(context, fileItem)
+    }
+
+    /**
+     * Resolves a ParcelFileDescriptor for reading a file (e.g. for PdfRenderer).
+     */
+    fun getFileDescriptor(context: Context, uriString: String, path: String): ParcelFileDescriptor? {
+        if (uriString.isNotBlank()) {
+            try {
+                val uri = Uri.parse(uriString)
+                val pfd = context.contentResolver.openFileDescriptor(uri, "r")
+                if (pfd != null) return pfd
+            } catch (_: Exception) {}
+        }
+
+        if (path.isNotBlank()) {
+            try {
+                val file = File(path)
+                if (file.exists() && file.canRead()) {
+                    val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+                    if (pfd != null) return pfd
+                }
+            } catch (_: Exception) {}
+
+            try {
+                val file = File(path)
+                if (file.exists()) {
+                    val fpUri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file
+                    )
+                    val pfd = context.contentResolver.openFileDescriptor(fpUri, "r")
+                    if (pfd != null) return pfd
+                }
+            } catch (_: Exception) {}
+        }
+
+        return null
+    }
+
+    /**
+     * Opens an InputStream for a document by URI or file path.
+     */
+    fun openInputStream(context: Context, uriString: String, path: String): InputStream? {
+        if (uriString.isNotBlank()) {
+            try {
+                val uri = Uri.parse(uriString)
+                val stream = context.contentResolver.openInputStream(uri)
+                if (stream != null) return stream
+            } catch (_: Exception) {}
+        }
+
+        if (path.isNotBlank()) {
+            try {
+                val file = File(path)
+                if (file.exists() && file.canRead()) {
+                    return file.inputStream()
+                }
+            } catch (_: Exception) {}
+        }
+
+        return null
+    }
+
+    /**
+     * Reads text content from supported text-based documents (TXT, CSV, JSON, MD, DOCX, PPTX).
+     */
+    fun readTextContent(
+        context: Context,
+        uriString: String,
+        path: String,
+        format: String,
+        maxChars: Int = 50000
+    ): String {
+        val stream = openInputStream(context, uriString, path) ?: return ""
+        return try {
+            when (format.uppercase()) {
+                "TXT", "CSV", "JSON", "MD" -> {
+                    stream.bufferedReader().use { reader ->
+                        val buffer = CharArray(maxChars)
+                        val read = reader.read(buffer, 0, maxChars)
+                        if (read > 0) String(buffer, 0, read) else ""
+                    }
+                }
+                "DOCX" -> extractDocxText(stream, maxChars)
+                "PPTX" -> extractPptxText(stream, maxChars)
+                else -> {
+                    try {
+                        stream.bufferedReader().use { it.readText().take(maxChars) }
+                    } catch (_: Exception) {
+                        ""
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            "Error reading file content: ${e.localizedMessage}"
+        } finally {
+            try { stream.close() } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * Parses word/document.xml inside a DOCX file to extract text.
+     */
+    fun extractDocxText(inputStream: InputStream, maxChars: Int = 50000): String {
+        return try {
+            val zip = ZipInputStream(inputStream)
+            var entry = zip.nextEntry
+            val sb = StringBuilder()
+            val pRegex = Regex("<w:p[ >](.*?)</w:p>")
+            val tRegex = Regex("<w:t[^>]*>(.*?)</w:t>")
+
+            while (entry != null) {
+                if (entry.name == "word/document.xml") {
+                    val xml = zip.bufferedReader().readText()
+                    val paragraphs = pRegex.findAll(xml)
+                    for (p in paragraphs) {
+                        val pText = tRegex.findAll(p.value).map { it.groupValues[1] }.joinToString("")
+                        if (pText.isNotBlank()) {
+                            sb.append(unescapeXml(pText)).append("\n\n")
+                            if (sb.length >= maxChars) break
+                        }
+                    }
+                    break
+                }
+                entry = zip.nextEntry
+            }
+            if (sb.isNotEmpty()) sb.toString().take(maxChars) else "No readable text found in Word document."
+        } catch (e: Exception) {
+            "Unable to parse DOCX text: ${e.localizedMessage}"
+        }
+    }
+
+    /**
+     * Parses ppt/slides/slide*.xml inside a PPTX file to extract slide texts.
+     */
+    fun extractPptxText(inputStream: InputStream, maxChars: Int = 50000): String {
+        return try {
+            val zip = ZipInputStream(inputStream)
+            var entry = zip.nextEntry
+            val slides = mutableListOf<String>()
+            var slideIndex = 1
+            val tRegex = Regex("<a:t[^>]*>(.*?)</a:t>")
+
+            while (entry != null) {
+                if (entry.name.startsWith("ppt/slides/slide") && entry.name.endsWith(".xml")) {
+                    val xml = zip.bufferedReader().readText()
+                    val textParts = tRegex.findAll(xml)
+                        .map { unescapeXml(it.groupValues[1]) }
+                        .filter { it.isNotBlank() }
+                        .toList()
+                    if (textParts.isNotEmpty()) {
+                        slides.add("--- Slide $slideIndex ---\n" + textParts.joinToString("\n"))
+                        slideIndex++
+                    }
+                }
+                entry = zip.nextEntry
+            }
+            if (slides.isNotEmpty()) slides.joinToString("\n\n").take(maxChars) else "No readable text found in PowerPoint presentation."
+        } catch (e: Exception) {
+            "Unable to parse PPTX text: ${e.localizedMessage}"
+        }
+    }
+
+    private fun unescapeXml(text: String): String {
+        return text.replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&apos;", "'")
     }
 }

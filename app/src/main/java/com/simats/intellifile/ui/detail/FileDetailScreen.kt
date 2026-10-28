@@ -12,10 +12,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.outlined.Adjust
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.CloudUpload
@@ -75,6 +77,143 @@ fun FileDetailScreen(
     var selectedPriority by remember(fileData.priority) { mutableStateOf(fileData.priority) }
     var isVaultSynced by remember(fileData.isVaultSynced) { mutableStateOf(fileData.isVaultSynced) }
     var showVaultConfirmDialog by remember { mutableStateOf(false) }
+    var showOpenOptionsDialog by remember { mutableStateOf(false) }
+
+    // Dialog: Choose between In-App Document Viewer or External App
+    if (showOpenOptionsDialog) {
+        AlertDialog(
+            onDismissRequest = { showOpenOptionsDialog = false },
+            title = {
+                Text(
+                    text = "Open Document",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = fileData.fileName,
+                        fontSize = 13.sp,
+                        color = Color(0xFF6B7280),
+                        maxLines = 1
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Option 1: View in IntelliFile (In-App)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFFEFF6FF))
+                            .border(1.dp, Color(0xFFBFDBFE), RoundedCornerShape(14.dp))
+                            .clickable {
+                                showOpenOptionsDialog = false
+                                onOpenFileClick()
+                            }
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF2563EB)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Visibility,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "View in IntelliFile",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1E40AF)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Read & view inside this app",
+                                fontSize = 12.sp,
+                                color = Color(0xFF3B82F6)
+                            )
+                        }
+                    }
+
+                    // Option 2: Open with External System App
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFFF9FAFB))
+                            .border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(14.dp))
+                            .clickable {
+                                showOpenOptionsDialog = false
+                                val localItem = LocalFileItem(
+                                    title = fileData.fileName,
+                                    path = fileData.path,
+                                    uri = if (fileData.uriString.isNotBlank()) Uri.parse(fileData.uriString) else Uri.EMPTY,
+                                    mimeType = LocalFileManager.resolveMimeType(fileData.fileName)
+                                )
+                                LocalFileManager.openFileWithSystem(context, localItem)
+                            }
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF4B5563)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Open with Another App",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1F2937)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Google Drive, PDF Reader, etc.",
+                                fontSize = 12.sp,
+                                color = Color(0xFF6B7280)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showOpenOptionsDialog = false }) {
+                    Text("Cancel", color = Color(0xFF6B7280))
+                }
+            }
+        )
+    }
 
     // Privacy confirmation dialog for server upload
     if (showVaultConfirmDialog) {
@@ -363,20 +502,9 @@ fun FileDetailScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Action Buttons
+            // Open File Button (Presents In-App Viewer or External Chooser)
             Button(
-                onClick = {
-                    val localItem = LocalFileItem(
-                        title = fileData.fileName,
-                        path = fileData.path,
-                        uri = if (fileData.uriString.isNotBlank()) Uri.parse(fileData.uriString) else Uri.EMPTY,
-                        mimeType = LocalFileManager.resolveMimeType(fileData.fileName)
-                    )
-                    val opened = LocalFileManager.openFileWithSystem(context, localItem)
-                    if (!opened) {
-                        onOpenFileClick()
-                    }
-                },
+                onClick = { showOpenOptionsDialog = true },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
@@ -394,16 +522,7 @@ fun FileDetailScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             Button(
-                onClick = {
-                    val localItem = LocalFileItem(
-                        title = fileData.fileName,
-                        path = fileData.path,
-                        uri = if (fileData.uriString.isNotBlank()) Uri.parse(fileData.uriString) else Uri.EMPTY,
-                        mimeType = LocalFileManager.resolveMimeType(fileData.fileName)
-                    )
-                    LocalFileManager.shareFileWithSystem(context, localItem)
-                    onShareClick()
-                },
+                onClick = onShareClick,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier

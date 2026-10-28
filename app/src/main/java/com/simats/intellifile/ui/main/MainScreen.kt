@@ -47,8 +47,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.net.Uri
 import com.simats.intellifile.R
 import com.simats.intellifile.data.local.LocalFileDatabaseHelper
+import com.simats.intellifile.data.manager.LocalFileManager
+import com.simats.intellifile.data.model.LocalFileItem
 import com.simats.intellifile.ui.about.AboutScreen
 import com.simats.intellifile.ui.ai.AiChatHistoryScreen
 import com.simats.intellifile.ui.ai.AiScreen
@@ -65,6 +68,7 @@ import com.simats.intellifile.ui.permission.FilePermissionsDetailScreen
 import com.simats.intellifile.ui.priority.SetPriorityScreen
 import com.simats.intellifile.ui.profile.ProfileScreen
 import com.simats.intellifile.ui.saved.FileSavedSuccessScreen
+import com.simats.intellifile.ui.saved.PriorityFilter
 import com.simats.intellifile.ui.saved.SavedScreen
 import com.simats.intellifile.ui.share.ShareFileScreen
 import com.simats.intellifile.ui.support.ContactSupportScreen
@@ -94,6 +98,7 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     var selectedTab by remember { mutableStateOf(BottomNavItem.HOME) }
+    var savedPriorityFilter by remember { mutableStateOf(PriorityFilter.ALL) }
 
     // Secondary Screen States
     var isRecentFilesOpen by remember { mutableStateOf(false) }
@@ -122,6 +127,7 @@ fun MainScreen(
                 isFeedbackOpen || isFeedbackSuccessOpen || selectedTab != BottomNavItem.HOME
     ) {
         when {
+            isShareOpen -> isShareOpen = false
             isFileSavedSuccessOpen -> isFileSavedSuccessOpen = false
             isDocumentViewerOpen -> isDocumentViewerOpen = false
             isFeedbackSuccessOpen -> isFeedbackSuccessOpen = false
@@ -133,7 +139,6 @@ fun MainScreen(
             isThemeOpen -> isThemeOpen = false
             isNotificationsOpen -> isNotificationsOpen = false
             isFilePermissionsOpen -> isFilePermissionsOpen = false
-            isShareOpen -> isShareOpen = false
             isSetPriorityOpen -> isSetPriorityOpen = false
             selectedDetailFile != null -> selectedDetailFile = null
             isAiHistoryOpen -> isAiHistoryOpen = false
@@ -165,12 +170,16 @@ fun MainScreen(
                     isFeedbackOpen = false
                     isFeedbackSuccessOpen = false
 
+                    if (newTab == BottomNavItem.SAVED) {
+                        savedPriorityFilter = PriorityFilter.ALL
+                    }
                     selectedTab = newTab
                 }
             )
         }
     ) { innerPadding ->
         val currentNavigationKey = when {
+            isShareOpen -> "share"
             isFileSavedSuccessOpen -> "file_saved_success"
             isDocumentViewerOpen -> "document_viewer"
             isFeedbackSuccessOpen -> "feedback_success"
@@ -182,7 +191,6 @@ fun MainScreen(
             isThemeOpen -> "theme"
             isNotificationsOpen -> "notifications"
             isFilePermissionsOpen -> "file_permissions"
-            isShareOpen -> "share"
             isSetPriorityOpen -> "set_priority"
             selectedDetailFile != null -> "file_detail_${selectedDetailFile?.fileName}"
             isAiHistoryOpen -> "ai_history"
@@ -235,7 +243,10 @@ fun MainScreen(
 
                     "document_viewer" -> DocumentViewerScreen(
                         fileName = selectedDetailFile?.fileName ?: "Document.pdf",
-                        totalPages = 12,
+                        filePath = selectedDetailFile?.path ?: "",
+                        fileUriString = selectedDetailFile?.uriString ?: "",
+                        fileFormat = selectedDetailFile?.fileType?.substringBefore(" ") ?: "PDF",
+                        totalPages = 1,
                         onBackClick = { isDocumentViewerOpen = false },
                         onShareClick = { isShareOpen = true },
                         onMoreClick = {
@@ -300,8 +311,14 @@ fun MainScreen(
                     )
 
                     "share" -> ShareFileScreen(
+                        fileName = selectedDetailFile?.fileName ?: "Document.pdf",
+                        fileSize = selectedDetailFile?.fileSize ?: "0 KB",
+                        fileFormat = selectedDetailFile?.fileType ?: "Document",
+                        iconResId = selectedDetailFile?.iconResId ?: R.drawable.pdf,
+                        filePath = selectedDetailFile?.path ?: "",
+                        fileUriString = selectedDetailFile?.uriString ?: "",
                         onBackClick = { isShareOpen = false },
-                        onShareOptionClick = { /* Share option selected */ }
+                        onShareOptionClick = { /* Share option clicked */ }
                     )
 
                     "file_permissions" -> FilePermissionsDetailScreen(
@@ -418,7 +435,28 @@ fun MainScreen(
                                         path = file.path
                                     )
                                 },
-                                onPriorityCardClick = { _ -> isRecentFilesOpen = true },
+                                onShareFileClick = { file ->
+                                    selectedDetailFile = FileDetailData(
+                                        fileName = file.title,
+                                        fileSize = file.size,
+                                        fileType = "${file.format} Document",
+                                        createdDate = file.dateText,
+                                        modifiedDate = file.dateText,
+                                        priority = file.priority,
+                                        iconResId = file.iconResId,
+                                        uriString = file.uriString,
+                                        path = file.path
+                                    )
+                                    isShareOpen = true
+                                },
+                                onPriorityCardClick = { priorityLevel ->
+                                    savedPriorityFilter = when (priorityLevel) {
+                                        PriorityLevel.IMPORTANT -> PriorityFilter.IMPORTANT
+                                        PriorityLevel.NORMAL -> PriorityFilter.NORMAL
+                                        PriorityLevel.LOW -> PriorityFilter.LOW
+                                    }
+                                    selectedTab = BottomNavItem.SAVED
+                                },
                                 onMicClick = { selectedTab = BottomNavItem.AI }
                             )
                             BottomNavItem.AI -> AiScreen(
@@ -438,11 +476,17 @@ fun MainScreen(
                             )
                             BottomNavItem.FILES -> MyFilesScreen(
                                 onBackClick = { selectedTab = BottomNavItem.HOME },
-                                onQuickAccessClick = { _ ->
+                                onQuickAccessClick = { priorityLevel ->
+                                    savedPriorityFilter = when (priorityLevel) {
+                                        PriorityLevel.IMPORTANT -> PriorityFilter.IMPORTANT
+                                        PriorityLevel.NORMAL -> PriorityFilter.NORMAL
+                                        PriorityLevel.LOW -> PriorityFilter.LOW
+                                    }
                                     selectedTab = BottomNavItem.SAVED
                                 }
                             )
                             BottomNavItem.SAVED -> SavedScreen(
+                                initialFilter = savedPriorityFilter,
                                 onBackClick = { selectedTab = BottomNavItem.HOME },
                                 onOpenFile = { file ->
                                     selectedDetailFile = FileDetailData(

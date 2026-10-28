@@ -176,6 +176,41 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
     }
 
     /**
+     * Checks if a file is currently bookmarked.
+     */
+    fun isBookmarked(uriOrPath: String): Boolean {
+        return getMetadata(uriOrPath)?.isBookmarked == true
+    }
+
+    /**
+     * Explicitly sets bookmark status for a file.
+     */
+    fun setBookmarked(uriOrPath: String, fileName: String, isBookmarked: Boolean) {
+        val existing = getMetadata(uriOrPath)
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put(COL_URI_OR_PATH, uriOrPath)
+            put(COL_FILE_NAME, fileName)
+            put(COL_IS_BOOKMARKED, if (isBookmarked) 1 else 0)
+            if (existing != null) {
+                if (existing.priority != null) {
+                    put(COL_PRIORITY, existing.priority.name)
+                }
+                put(COL_CATEGORY, existing.category)
+                put(COL_IS_VAULT_SYNCED, if (existing.isVaultSynced) 1 else 0)
+                existing.vaultDocId?.let { put(COL_VAULT_DOC_ID, it) }
+            }
+            put(COL_LAST_ACCESSED, System.currentTimeMillis())
+        }
+        db.insertWithOnConflict(
+            TABLE_METADATA,
+            null,
+            values,
+            SQLiteDatabase.CONFLICT_REPLACE
+        )
+    }
+
+    /**
      * Updates or inserts a priority level explicitly set by the user.
      */
     fun setPriority(uriOrPath: String, fileName: String, priority: PriorityLevel?) {

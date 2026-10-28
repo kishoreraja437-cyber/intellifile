@@ -64,6 +64,7 @@ enum class PriorityFilter(val label: String, val level: PriorityLevel?) {
 @Composable
 fun SavedScreen(
     modifier: Modifier = Modifier,
+    initialFilter: PriorityFilter = PriorityFilter.ALL,
     onBackClick: () -> Unit = {},
     onOpenFile: (SavedFileItem) -> Unit = {},
     onShareFileClick: (SavedFileItem) -> Unit = {},
@@ -71,7 +72,7 @@ fun SavedScreen(
 ) {
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
-    var selectedFilter by remember { mutableStateOf(PriorityFilter.ALL) }
+    var selectedFilter by remember(initialFilter) { mutableStateOf(initialFilter) }
     var refreshTrigger by remember { mutableIntStateOf(0) }
     var realFiles by remember { mutableStateOf<List<LocalFileItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
