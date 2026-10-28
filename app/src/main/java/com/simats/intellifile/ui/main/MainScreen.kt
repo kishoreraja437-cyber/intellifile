@@ -42,10 +42,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.simats.intellifile.R
+import com.simats.intellifile.data.local.LocalFileDatabaseHelper
 import com.simats.intellifile.ui.about.AboutScreen
 import com.simats.intellifile.ui.ai.AiChatHistoryScreen
 import com.simats.intellifile.ui.ai.AiScreen
@@ -89,6 +92,7 @@ fun MainScreen(
     onThemeChanged: (AppThemeMode) -> Unit = {},
     onLogout: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     var selectedTab by remember { mutableStateOf(BottomNavItem.HOME) }
 
     // Secondary Screen States
@@ -206,25 +210,31 @@ fun MainScreen(
                             selectedDetailFile = FileDetailData(
                                 fileName = file.title,
                                 fileSize = file.size,
-                                fileType = "PDF Document",
+                                fileType = "${file.format} Document",
                                 createdDate = file.dateText,
                                 modifiedDate = file.dateText,
-                                priority = file.priority
+                                priority = file.priority,
+                                iconResId = file.iconResId,
+                                uriString = file.uriString,
+                                path = file.path
                             )
                         },
                         onShareFileClick = { file ->
                             selectedDetailFile = FileDetailData(
                                 fileName = file.title,
                                 fileSize = file.size,
-                                fileType = "PDF Document",
-                                priority = file.priority
+                                fileType = "${file.format} Document",
+                                priority = file.priority,
+                                iconResId = file.iconResId,
+                                uriString = file.uriString,
+                                path = file.path
                             )
                             isShareOpen = true
                         }
                     )
 
                     "document_viewer" -> DocumentViewerScreen(
-                        fileName = selectedDetailFile?.fileName ?: "AML Assignment.pdf",
+                        fileName = selectedDetailFile?.fileName ?: "Document.pdf",
                         totalPages = 12,
                         onBackClick = { isDocumentViewerOpen = false },
                         onShareClick = { isShareOpen = true },
@@ -243,9 +253,9 @@ fun MainScreen(
                     )
 
                     "file_saved_success" -> FileSavedSuccessScreen(
-                        fileName = selectedDetailFile?.fileName ?: "AML Assignment.pdf",
-                        fileSize = selectedDetailFile?.fileSize ?: "2.4 MB",
-                        priority = selectedDetailFile?.priority ?: PriorityLevel.IMPORTANT,
+                        fileName = selectedDetailFile?.fileName ?: "Document.pdf",
+                        fileSize = selectedDetailFile?.fileSize ?: "0 KB",
+                        priority = selectedDetailFile?.priority ?: PriorityLevel.NORMAL,
                         onBackClick = { isFileSavedSuccessOpen = false },
                         onViewSavedClick = {
                             isFileSavedSuccessOpen = false
@@ -268,13 +278,22 @@ fun MainScreen(
                     )
 
                     "set_priority" -> SetPriorityScreen(
-                        fileName = selectedDetailFile?.fileName ?: "AML Assignment.pdf",
-                        fileSize = selectedDetailFile?.fileSize ?: "2.4 MB",
-                        fileFormat = "PDF",
-                        initialPriority = selectedDetailFile?.priority ?: PriorityLevel.IMPORTANT,
+                        fileName = selectedDetailFile?.fileName ?: "Document.pdf",
+                        fileSize = selectedDetailFile?.fileSize ?: "0 KB",
+                        fileFormat = selectedDetailFile?.fileType?.substringBefore(" ") ?: "PDF",
+                        iconResId = selectedDetailFile?.iconResId ?: R.drawable.pdf,
+                        initialPriority = selectedDetailFile?.priority ?: PriorityLevel.NORMAL,
                         onBackClick = { isSetPriorityOpen = false },
                         onSavePriority = { newPriority ->
-                            selectedDetailFile = selectedDetailFile?.copy(priority = newPriority)
+                            selectedDetailFile?.let { detail ->
+                                val key = if (detail.path.isNotBlank()) detail.path else detail.uriString
+                                LocalFileDatabaseHelper.getInstance(context).setPriority(
+                                    uriOrPath = key,
+                                    fileName = detail.fileName,
+                                    priority = newPriority
+                                )
+                                selectedDetailFile = detail.copy(priority = newPriority)
+                            }
                             isSetPriorityOpen = false
                             isFileSavedSuccessOpen = true
                         }
@@ -287,8 +306,29 @@ fun MainScreen(
 
                     "file_permissions" -> FilePermissionsDetailScreen(
                         onBackClick = { isFilePermissionsOpen = false },
-                        onManageAccessClick = { /* Manage access */ },
-                        onSelectFilesClick = { /* Select files */ }
+                        onManageAccessClick = {
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                                try {
+                                    val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                        data = android.net.Uri.parse("package:${context.packageName}")
+                                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).apply {
+                                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    context.startActivity(intent)
+                                }
+                            } else {
+                                val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = android.net.Uri.parse("package:${context.packageName}")
+                                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(intent)
+                            }
+                        },
+                        onSelectFilesClick = { isRecentFilesOpen = true }
                     )
 
                     "notifications" -> NotificationsScreen(
@@ -356,7 +396,10 @@ fun MainScreen(
                             onOpenFileClick = { isDocumentViewerOpen = true },
                             onShareClick = { isShareOpen = true },
                             onMoreOptionsClick = { isSetPriorityOpen = true },
-                            onSetPriorityClick = { isSetPriorityOpen = true }
+                            onSetPriorityClick = { isSetPriorityOpen = true },
+                            onPriorityChanged = { newPriority ->
+                                selectedDetailFile = selectedDetailFile?.copy(priority = newPriority)
+                            }
                         )
 
                         else -> when (selectedTab) {
@@ -366,10 +409,13 @@ fun MainScreen(
                                     selectedDetailFile = FileDetailData(
                                         fileName = file.title,
                                         fileSize = file.size,
-                                        fileType = "PDF Document",
+                                        fileType = "${file.format} Document",
                                         createdDate = file.dateText,
                                         modifiedDate = file.dateText,
-                                        priority = file.priority
+                                        priority = file.priority,
+                                        iconResId = file.iconResId,
+                                        uriString = file.uriString,
+                                        path = file.path
                                     )
                                 },
                                 onPriorityCardClick = { _ -> isRecentFilesOpen = true },
@@ -384,7 +430,8 @@ fun MainScreen(
                                         fileType = aiFile.format,
                                         createdDate = aiFile.dateText,
                                         modifiedDate = aiFile.dateText,
-                                        priority = aiFile.priority
+                                        priority = aiFile.priority,
+                                        iconResId = aiFile.iconResId
                                     )
                                 },
                                 onViewSearchHistoryClick = { isAiHistoryOpen = true }
@@ -401,20 +448,26 @@ fun MainScreen(
                                     selectedDetailFile = FileDetailData(
                                         fileName = file.title,
                                         fileSize = file.size,
-                                        fileType = "PDF Document",
+                                        fileType = "Document",
                                         createdDate = file.dateText,
                                         modifiedDate = file.dateText,
                                         category = "Saved Document",
-                                        location = "Internal Storage",
-                                        priority = file.priority
+                                        location = if (file.path.isNotBlank()) file.path else "Internal Storage",
+                                        priority = file.priority,
+                                        iconResId = file.iconResId,
+                                        uriString = file.uriString,
+                                        path = file.path
                                     )
                                 },
                                 onShareFileClick = { file ->
                                     selectedDetailFile = FileDetailData(
                                         fileName = file.title,
                                         fileSize = file.size,
-                                        fileType = "PDF Document",
-                                        priority = file.priority
+                                        fileType = "Document",
+                                        priority = file.priority,
+                                        iconResId = file.iconResId,
+                                        uriString = file.uriString,
+                                        path = file.path
                                     )
                                     isShareOpen = true
                                 }
@@ -432,8 +485,8 @@ fun MainScreen(
                     }
                 }
             }
+        }
     }
-}
 }
 
 @Composable

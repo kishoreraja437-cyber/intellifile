@@ -1,5 +1,8 @@
 package com.simats.intellifile.ui.home
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -14,12 +17,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -30,14 +39,18 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.intellifile.R
+import com.simats.intellifile.data.manager.LocalFileManager
+import com.simats.intellifile.data.model.LocalFileItem
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 enum class PriorityLevel(
     val title: String,
@@ -49,7 +62,7 @@ enum class PriorityLevel(
 ) {
     IMPORTANT(
         title = "Important",
-        count = 8,
+        count = 0,
         backgroundColor = Color(0xFFFFEAEE),
         iconBackgroundColor = Color(0xFFEF4444),
         textColor = Color(0xFFEF4444),
@@ -57,7 +70,7 @@ enum class PriorityLevel(
     ),
     NORMAL(
         title = "Normal",
-        count = 15,
+        count = 0,
         backgroundColor = Color(0xFFFFF6D8),
         iconBackgroundColor = Color(0xFFD97706),
         textColor = Color(0xFFD97706),
@@ -65,7 +78,7 @@ enum class PriorityLevel(
     ),
     LOW(
         title = "Low",
-        count = 6,
+        count = 0,
         backgroundColor = Color(0xFFE2F7ED),
         iconBackgroundColor = Color(0xFF10B981),
         textColor = Color(0xFF10B981),
@@ -78,8 +91,10 @@ data class RecentFile(
     val format: String,
     val size: String,
     val dateText: String,
-    val priority: PriorityLevel,
-    val iconResId: Int = R.drawable.pdf
+    val priority: PriorityLevel? = null,
+    val iconResId: Int = R.drawable.pdf,
+    val uriString: String = "",
+    val path: String = ""
 )
 
 @Composable
@@ -90,39 +105,55 @@ fun HomeScreen(
     onPriorityCardClick: (PriorityLevel) -> Unit = {},
     onFileClick: (RecentFile) -> Unit = {}
 ) {
+    val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
+    var refreshTrigger by remember { mutableIntStateOf(0) }
+    var realFiles by remember { mutableStateOf<List<LocalFileItem>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
 
-    val recentFiles = remember {
-        listOf(
+    // Query real document files asynchronously from storage
+    LaunchedEffect(refreshTrigger) {
+        isLoading = true
+        val loaded = LocalFileManager.getDeviceFiles(context)
+        realFiles = loaded
+        isLoading = false
+    }
+
+    // SAF Document picker strictly for documents (no images/audio)
+    val openDocLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            refreshTrigger++
+        }
+    }
+
+    val allRecentFiles = remember(realFiles) {
+        realFiles.map { item ->
             RecentFile(
-                title = "AML Assignment.pdf",
-                format = "PDF",
-                size = "2.4 MB",
-                dateText = "Today",
-                priority = PriorityLevel.IMPORTANT
-            ),
-            RecentFile(
-                title = "DBMS Notes.pdf",
-                format = "PDF",
-                size = "1.8 MB",
-                dateText = "1 day ago",
-                priority = PriorityLevel.NORMAL
-            ),
-            RecentFile(
-                title = "Project Report.pdf",
-                format = "PDF",
-                size = "3.1 MB",
-                dateText = "2 days ago",
-                priority = PriorityLevel.LOW
-            ),
-            RecentFile(
-                title = "Resume.pdf",
-                format = "PDF",
-                size = "0.9 MB",
-                dateText = "3 days ago",
-                priority = PriorityLevel.NORMAL
+                title = item.title,
+                format = item.format,
+                size = item.sizeFormatted,
+                dateText = item.dateText,
+                priority = item.priority,
+                iconResId = item.iconResId,
+                uriString = item.uri.toString(),
+                path = item.path
             )
-        )
+        }
+    }
+
+    // Priority counts reflect strictly user-marked files
+    val importantCount = remember(realFiles) { realFiles.count { it.priority == PriorityLevel.IMPORTANT } }
+    val normalCount = remember(realFiles) { realFiles.count { it.priority == PriorityLevel.NORMAL } }
+    val lowCount = remember(realFiles) { realFiles.count { it.priority == PriorityLevel.LOW } }
+
+    val filteredFiles = remember(searchQuery, allRecentFiles) {
+        if (searchQuery.isBlank()) {
+            allRecentFiles.take(10)
+        } else {
+            allRecentFiles.filter { it.title.contains(searchQuery, ignoreCase = true) }
+        }
     }
 
     Box(
@@ -146,23 +177,34 @@ fun HomeScreen(
                 )
             }
 
-            // Summary Cards Row
+            // Summary Cards Row with Real Marked Counts
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    PriorityLevel.entries.forEach { level ->
-                        PrioritySummaryCard(
-                            priority = level,
-                            onClick = { onPriorityCardClick(level) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    PrioritySummaryCard(
+                        priority = PriorityLevel.IMPORTANT,
+                        count = importantCount,
+                        onClick = { onPriorityCardClick(PriorityLevel.IMPORTANT) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    PrioritySummaryCard(
+                        priority = PriorityLevel.NORMAL,
+                        count = normalCount,
+                        onClick = { onPriorityCardClick(PriorityLevel.NORMAL) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    PrioritySummaryCard(
+                        priority = PriorityLevel.LOW,
+                        count = lowCount,
+                        onClick = { onPriorityCardClick(PriorityLevel.LOW) },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
 
-            // Recent Files Header
+            // Recent Files Header with Refresh button
             item {
                 Row(
                     modifier = Modifier
@@ -171,14 +213,31 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Recent Files",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF111827)
+                        )
+                        IconButton(
+                            onClick = { refreshTrigger++ },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh Files",
+                                tint = Color(0xFF6B7280),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
                     Text(
-                        text = "Recent Files",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF111827)
-                    )
-                    Text(
-                        text = "See all",
+                        text = "See all (${allRecentFiles.size})",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF7C3AED),
@@ -187,8 +246,75 @@ fun HomeScreen(
                 }
             }
 
-            // Recent File Items
-            items(recentFiles) { file ->
+            // Empty state when phone has no scanned documents
+            if (!isLoading && filteredFiles.isEmpty()) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FolderOpen,
+                            contentDescription = "Empty",
+                            tint = Color(0xFF9CA3AF),
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = if (searchQuery.isNotBlank()) "No files match \"$searchQuery\"" else "No documents found on device",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1F2937),
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "IntelliFile reads document files (PDF, Word, PPT, Excel, Text) locally on your phone.",
+                            fontSize = 13.sp,
+                            color = Color(0xFF6B7280),
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = {
+                                openDocLauncher.launch(
+                                    arrayOf(
+                                        "application/pdf",
+                                        "application/msword",
+                                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                        "application/vnd.ms-powerpoint",
+                                        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                                        "application/vnd.ms-excel",
+                                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                        "text/plain",
+                                        "text/csv"
+                                    )
+                                )
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Pick Documents to View", fontSize = 14.sp)
+                        }
+                    }
+                }
+            }
+
+            // Recent Real File Items
+            items(filteredFiles) { file ->
                 RecentFileCard(
                     file = file,
                     onClick = { onFileClick(file) }
@@ -241,7 +367,7 @@ fun SearchBar(
         ) {
             if (query.isEmpty()) {
                 Text(
-                    text = "Ask IntelliFile...",
+                    text = "Search documents or ask IntelliFile...",
                     fontSize = 15.sp,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                 )
@@ -308,6 +434,7 @@ fun SearchBar(
 @Composable
 fun PrioritySummaryCard(
     priority: PriorityLevel,
+    count: Int? = null,
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {}
 ) {
@@ -347,7 +474,7 @@ fun PrioritySummaryCard(
         Spacer(modifier = Modifier.height(4.dp))
 
         Text(
-            text = priority.count.toString(),
+            text = (count ?: priority.count).toString(),
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
@@ -387,7 +514,8 @@ fun RecentFileCard(
                 text = file.title,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
             )
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -395,13 +523,17 @@ fun RecentFileCard(
             Text(
                 text = "${file.format} · ${file.size} · ${file.dateText}",
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                maxLines = 1
             )
         }
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        PriorityTag(priority = file.priority)
+        // Display priority badge only if the user has explicitly assigned one
+        if (file.priority != null) {
+            PriorityTag(priority = file.priority)
+        }
     }
 }
 

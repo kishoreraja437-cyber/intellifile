@@ -1,7 +1,7 @@
 package com.simats.intellifile.ui.share
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -9,40 +9,27 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.GroupAdd
 import androidx.compose.material.icons.outlined.Mail
-import androidx.compose.material.icons.outlined.QrCode
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.simats.intellifile.R
 
 data class AppShareTarget(
     val name: String,
@@ -50,24 +37,15 @@ data class AppShareTarget(
     val icon: ImageVector
 )
 
-data class ShareContactItem(
-    val id: String,
-    val name: String,
-    val email: String,
-    val avatarBgColor: Color,
-    val avatarInitial: String,
-    val permission: String = "View Only"
-)
-
 @Composable
 fun ShareFileScreen(
     fileName: String = "AML Assignment.pdf",
+    fileSize: String = "2.4 MB",
+    fileFormat: String = "PDF Document",
+    iconResId: Int = R.drawable.pdf,
     onBackClick: () -> Unit = {},
     onShareOptionClick: (String) -> Unit = {}
 ) {
-    var searchQuery by remember { mutableStateOf("") }
-    val selectedContactIds = remember { mutableStateListOf("1", "2", "3") }
-
     val appTargets = remember {
         listOf(
             AppShareTarget("WhatsApp", Color(0xFF25D366), Icons.Outlined.Share),
@@ -77,18 +55,6 @@ fun ShareFileScreen(
             AppShareTarget("Bluetooth", Color(0xFF0082FC), Icons.Outlined.Bluetooth),
             AppShareTarget("More", Color(0xFFEEF0FD), Icons.Default.MoreHoriz)
         )
-    }
-
-    val contacts = remember {
-        listOf(
-            ShareContactItem("1", "Arun Kumar", "arun@example.com", Color(0xFFC7D2FE), "A"),
-            ShareContactItem("2", "Sneha", "sneha@example.com", Color(0xFFBFDBFE), "S"),
-            ShareContactItem("3", "Vignesh", "vignesh@example.com", Color(0xFFBBF7D0), "V")
-        )
-    }
-
-    val filteredContacts = contacts.filter {
-        it.name.contains(searchQuery, ignoreCase = true) || it.email.contains(searchQuery, ignoreCase = true)
     }
 
     Box(
@@ -127,58 +93,84 @@ fun ShareFileScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Quick Share Cards 2x2 Grid / Row
+            // Selected File Preview Card
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Image(
+                    painter = painterResource(id = iconResId),
+                    contentDescription = "File Type Icon",
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                )
+
+                Spacer(modifier = Modifier.width(14.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = fileName,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Spacer(modifier = Modifier.height(3.dp))
+
+                    Text(
+                        text = "$fileFormat · $fileSize",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Quick Share Action Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                QuickShareCard(
-                    title = "Share with\nPeople",
-                    icon = Icons.Outlined.GroupAdd,
-                    onClick = { onShareOptionClick("Share with People") },
-                    modifier = Modifier.weight(1f)
-                )
                 QuickShareCard(
                     title = "Copy Link",
                     icon = Icons.Outlined.ContentCopy,
                     onClick = { onShareOptionClick("Copy Link") },
                     modifier = Modifier.weight(1f)
                 )
+
                 QuickShareCard(
-                    title = "QR Code",
-                    icon = Icons.Outlined.QrCode,
-                    onClick = { onShareOptionClick("QR Code") },
-                    modifier = Modifier.weight(1f)
-                )
-                QuickShareCard(
-                    title = "Share via\nApps",
+                    title = "Share via Apps",
                     icon = Icons.Outlined.Share,
                     onClick = { onShareOptionClick("Share via Apps") },
                     modifier = Modifier.weight(1f)
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
             // Share via Apps Sub-header
             Text(
                 text = "Share via Apps",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color(0xFF6B7280)
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
             )
 
-            HorizontalDivider(
-                color = Color(0xFFF1F5F9),
-                thickness = 1.dp,
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
+            Spacer(modifier = Modifier.height(12.dp))
 
             // App Icons Scroll Row
             LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(18.dp)
             ) {
                 items(appTargets) { target ->
                     Column(
@@ -187,7 +179,7 @@ fun ShareFileScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(48.dp)
+                                .size(52.dp)
                                 .clip(CircleShape)
                                 .background(target.iconBgColor),
                             contentAlignment = Alignment.Center
@@ -195,116 +187,50 @@ fun ShareFileScreen(
                             Icon(
                                 imageVector = target.icon,
                                 contentDescription = target.name,
-                                tint = if (target.name == "More") Color(0xFF6C5CE7) else Color.White,
-                                modifier = Modifier.size(22.dp)
+                                tint = if (target.name == "More") MaterialTheme.colorScheme.primary else Color.White,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
                             text = target.name,
-                            fontSize = 11.sp,
-                            color = Color(0xFF374151),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onBackground,
                             fontWeight = FontWeight.Medium
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(36.dp))
 
-            // Add People Header
-            Text(
-                text = "Add People",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF111827)
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Search Input
-            Row(
+            // Copy Link Primary Button
+            Button(
+                onClick = { onShareOptionClick("Copy Link") },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .height(54.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "Search",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Box(
-                    modifier = Modifier.weight(1f),
-                    contentAlignment = Alignment.CenterStart
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
                 ) {
-                    if (searchQuery.isEmpty()) {
-                        Text(
-                            text = "Search by name or email...",
-                            fontSize = 14.sp,
-                            color = Color(0xFF9CA3AF)
-                        )
-                    }
-                    BasicTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                    Icon(
+                        imageVector = Icons.Outlined.ContentCopy,
+                        contentDescription = "Copy Link",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
                     )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Recent Contacts Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Recent Contacts",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111827)
-                )
-
-                Text(
-                    text = "See All",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF6C5CE7),
-                    modifier = Modifier.clickable { }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Contacts List
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                filteredContacts.forEach { contact ->
-                    val isChecked = selectedContactIds.contains(contact.id)
-                    ContactShareRow(
-                        contact = contact,
-                        isChecked = isChecked,
-                        onCheckedChange = { checked ->
-                            if (checked) {
-                                if (!selectedContactIds.contains(contact.id)) selectedContactIds.add(contact.id)
-                            } else {
-                                selectedContactIds.remove(contact.id)
-                            }
-                        }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Copy Link",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
                 }
             }
@@ -321,14 +247,14 @@ fun QuickShareCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
+    Row(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable { onClick() }
-            .padding(vertical = 14.dp, horizontal = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .padding(vertical = 16.dp, horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
     ) {
         Icon(
             imageVector = icon,
@@ -337,137 +263,13 @@ fun QuickShareCard(
             modifier = Modifier.size(24.dp)
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.width(12.dp))
 
         Text(
             text = title,
-            fontSize = 11.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            textAlign = TextAlign.Center,
-            lineHeight = 14.sp
-        )
-    }
-}
-
-@Composable
-fun ContactShareRow(
-    contact: ShareContactItem,
-    isChecked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var currentPermission by remember { mutableStateOf(contact.permission) }
-    var isPermissionDropdownOpen by remember { mutableStateOf(false) }
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(contact.avatarBgColor),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = contact.avatarInitial,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1E1B4B)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column {
-                Text(
-                    text = contact.name,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Spacer(modifier = Modifier.height(2.dp))
-
-                Text(
-                    text = contact.email,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        // Permission Dropdown Pill
-        Box {
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { isPermissionDropdownOpen = true }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = currentPermission,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                Spacer(modifier = Modifier.width(4.dp))
-
-                Icon(
-                    imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = "Permission Options",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(14.dp)
-                )
-            }
-
-            DropdownMenu(
-                expanded = isPermissionDropdownOpen,
-                onDismissRequest = { isPermissionDropdownOpen = false }
-            ) {
-                DropdownMenuItem(
-                    text = { Text("View Only") },
-                    onClick = {
-                        currentPermission = "View Only"
-                        isPermissionDropdownOpen = false
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text("Can Edit") },
-                    onClick = {
-                        currentPermission = "Can Edit"
-                        isPermissionDropdownOpen = false
-                    }
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        // Checkbox
-        Checkbox(
-            checked = isChecked,
-            onCheckedChange = onCheckedChange,
-            colors = CheckboxDefaults.colors(
-                checkedColor = MaterialTheme.colorScheme.primary,
-                uncheckedColor = Color(0xFFD1D5DB)
-            )
+            color = MaterialTheme.colorScheme.primary
         )
     }
 }

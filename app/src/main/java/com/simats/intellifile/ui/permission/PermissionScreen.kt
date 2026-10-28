@@ -1,5 +1,12 @@
 package com.simats.intellifile.ui.permission
 
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -28,6 +36,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.intellifile.R
+import com.simats.intellifile.data.manager.LocalFileManager
 import com.simats.intellifile.ui.theme.IntellifileTheme
 
 @Composable
@@ -37,6 +46,22 @@ fun PermissionScreen(
     onMaybeLaterClick: () -> Unit = {},
     onBackClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+
+    // Launcher for Android 11+ (API 30+) Document / All Files Access Permission
+    val manageStorageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        onSelectFilesClick()
+    }
+
+    // Launcher for Android 10 and below standard runtime permission
+    val legacyPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) {
+        onSelectFilesClick()
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -70,8 +95,7 @@ fun PermissionScreen(
 
             // Center Folder Illustration with Shield Badge
             Box(
-                modifier = Modifier
-                    .size(160.dp),
+                modifier = Modifier.size(160.dp),
                 contentAlignment = Alignment.Center
             ) {
                 // Folder Logo
@@ -122,30 +146,46 @@ fun PermissionScreen(
             ) {
                 PermissionPointItem(
                     icon = Icons.Default.Person,
-                    text = "Access your files for searching\nand organizing"
+                    text = "Access documents (PDF, DOC, PPT, XLS, TXT)\nfor organizing"
                 )
 
                 PermissionPointItem(
                     icon = Icons.Default.Shield,
-                    text = "Your files remain private"
+                    text = "Your files remain private on phone"
                 )
 
                 PermissionPointItem(
                     icon = Icons.Default.Folder,
-                    text = "You can select specific folders"
+                    text = "No images, music, or media accessed"
                 )
 
                 PermissionPointItem(
                     icon = Icons.Default.PhoneAndroid,
-                    text = "Used only on your device"
+                    text = "Files are never uploaded without your consent"
                 )
             }
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Select Files Button
+            // Grant Document Access Button
             Button(
-                onClick = onSelectFilesClick,
+                onClick = {
+                    if (LocalFileManager.hasStoragePermission(context)) {
+                        onSelectFilesClick()
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        try {
+                            val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                            manageStorageLauncher.launch(intent)
+                        } catch (e: Exception) {
+                            val fallbackIntent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                            manageStorageLauncher.launch(fallbackIntent)
+                        }
+                    } else {
+                        legacyPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
@@ -166,7 +206,7 @@ fun PermissionScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Select Files",
+                        text = "Grant Document Access",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White

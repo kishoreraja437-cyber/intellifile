@@ -1,5 +1,6 @@
 package com.simats.intellifile.ui.detail
 
+import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -11,41 +12,53 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.outlined.Adjust
 import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.intellifile.R
+import com.simats.intellifile.data.local.LocalFileDatabaseHelper
+import com.simats.intellifile.data.manager.LocalFileManager
+import com.simats.intellifile.data.model.LocalFileItem
 import com.simats.intellifile.ui.home.PriorityLevel
 
 data class FileDetailData(
-    val fileName: String = "AML Assignment.pdf",
-    val fileSize: String = "2.4 MB",
+    val fileName: String = "Document.pdf",
+    val fileSize: String = "0 KB",
     val fileType: String = "PDF Document",
-    val createdDate: String = "Oct 5, 2024",
-    val modifiedDate: String = "Oct 5, 2024",
-    val category: String = "Assignment",
+    val createdDate: String = "Recent",
+    val modifiedDate: String = "Recent",
+    val category: String = "Document",
     val location: String = "Internal Storage",
-    val priority: PriorityLevel = PriorityLevel.IMPORTANT,
-    val iconResId: Int = R.drawable.pdf
+    val priority: PriorityLevel? = null,
+    val iconResId: Int = R.drawable.pdf,
+    val uriString: String = "",
+    val path: String = "",
+    val isVaultSynced: Boolean = false
 )
 
 @Composable
@@ -55,9 +68,63 @@ fun FileDetailScreen(
     onOpenFileClick: () -> Unit = {},
     onShareClick: () -> Unit = {},
     onMoreOptionsClick: () -> Unit = {},
-    onSetPriorityClick: () -> Unit = {}
+    onSetPriorityClick: () -> Unit = {},
+    onPriorityChanged: (PriorityLevel?) -> Unit = {}
 ) {
-    var selectedPriority by remember { mutableStateOf(fileData.priority) }
+    val context = LocalContext.current
+    var selectedPriority by remember(fileData.priority) { mutableStateOf(fileData.priority) }
+    var isVaultSynced by remember(fileData.isVaultSynced) { mutableStateOf(fileData.isVaultSynced) }
+    var showVaultConfirmDialog by remember { mutableStateOf(false) }
+
+    // Privacy confirmation dialog for server upload
+    if (showVaultConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showVaultConfirmDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Shield,
+                        contentDescription = null,
+                        tint = Color(0xFF10B981)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Add to AI Vault?", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Text(
+                    "IntelliFile keeps your files strictly local on your phone by default.\n\n" +
+                            "Uploading \"${fileData.fileName}\" to the AI Vault enables deep text extraction, " +
+                            "semantic question answering, and AI summarization. Do you want to proceed with uploading this specific file?",
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    color = Color(0xFF374151)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showVaultConfirmDialog = false
+                        isVaultSynced = true
+                        val key = if (fileData.path.isNotBlank()) fileData.path else fileData.uriString
+                        LocalFileDatabaseHelper.getInstance(context).setVaultStatus(
+                            uriOrPath = key,
+                            fileName = fileData.fileName,
+                            isSynced = true
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Upload to Vault")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showVaultConfirmDialog = false }) {
+                    Text("Cancel", color = Color(0xFF6B7280))
+                }
+            }
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -106,8 +173,7 @@ fun FileDetailScreen(
 
             // Large File Icon
             Box(
-                modifier = Modifier
-                    .fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
                 Box(
@@ -134,7 +200,7 @@ fun FileDetailScreen(
             ) {
                 Text(
                     text = fileData.fileName,
-                    fontSize = 22.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF111827)
                 )
@@ -148,7 +214,64 @@ fun FileDetailScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // AI Vault Status Card
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(if (isVaultSynced) Color(0xFFEFF6FF) else Color(0xFFF9FAFB))
+                    .border(1.dp, if (isVaultSynced) Color(0xFFBFDBFE) else Color(0xFFE5E7EB), RoundedCornerShape(16.dp))
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (isVaultSynced) Icons.Default.CloudDone else Icons.Outlined.CloudUpload,
+                            contentDescription = null,
+                            tint = if (isVaultSynced) Color(0xFF2563EB) else Color(0xFF6B7280),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = if (isVaultSynced) "In AI Vault (Server Synced)" else "Device File (Local Only)",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isVaultSynced) Color(0xFF1E40AF) else Color(0xFF374151)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (isVaultSynced) "AI semantic search & Q&A active" else "Kept private on phone",
+                                fontSize = 12.sp,
+                                color = Color(0xFF6B7280)
+                            )
+                        }
+                    }
+
+                    if (!isVaultSynced) {
+                        Button(
+                            onClick = { showVaultConfirmDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.height(34.dp)
+                        ) {
+                            Text("Add to Vault", fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Metadata Attributes List
             Column(
@@ -176,7 +299,7 @@ fun FileDetailScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Priority Section Title
             Row(
@@ -186,12 +309,21 @@ fun FileDetailScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Priority",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Priority",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (selectedPriority != null) "(${selectedPriority?.title})" else "(Not Set)",
+                        fontSize = 13.sp,
+                        color = if (selectedPriority != null) selectedPriority!!.textColor else Color(0xFF6B7280),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
 
                 Text(
                     text = "Change",
@@ -203,7 +335,7 @@ fun FileDetailScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Priority Cards Selection Row
+            // Priority Cards Selection Row (User explicitly assigns or toggles off)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -213,7 +345,17 @@ fun FileDetailScreen(
                     SelectablePriorityCard(
                         priority = priority,
                         isSelected = isSelected,
-                        onClick = { selectedPriority = priority },
+                        onClick = {
+                            val newPriority = if (selectedPriority == priority) null else priority
+                            selectedPriority = newPriority
+                            val key = if (fileData.path.isNotBlank()) fileData.path else fileData.uriString
+                            LocalFileDatabaseHelper.getInstance(context).setPriority(
+                                uriOrPath = key,
+                                fileName = fileData.fileName,
+                                priority = newPriority
+                            )
+                            onPriorityChanged(newPriority)
+                        },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -223,7 +365,18 @@ fun FileDetailScreen(
 
             // Action Buttons
             Button(
-                onClick = onOpenFileClick,
+                onClick = {
+                    val localItem = LocalFileItem(
+                        title = fileData.fileName,
+                        path = fileData.path,
+                        uri = if (fileData.uriString.isNotBlank()) Uri.parse(fileData.uriString) else Uri.EMPTY,
+                        mimeType = LocalFileManager.resolveMimeType(fileData.fileName)
+                    )
+                    val opened = LocalFileManager.openFileWithSystem(context, localItem)
+                    if (!opened) {
+                        onOpenFileClick()
+                    }
+                },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
@@ -241,7 +394,16 @@ fun FileDetailScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             Button(
-                onClick = onShareClick,
+                onClick = {
+                    val localItem = LocalFileItem(
+                        title = fileData.fileName,
+                        path = fileData.path,
+                        uri = if (fileData.uriString.isNotBlank()) Uri.parse(fileData.uriString) else Uri.EMPTY,
+                        mimeType = LocalFileManager.resolveMimeType(fileData.fileName)
+                    )
+                    LocalFileManager.shareFileWithSystem(context, localItem)
+                    onShareClick()
+                },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
@@ -306,9 +468,10 @@ fun MetadataRow(
 
         Text(
             text = value,
-            fontSize = 15.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
-            color = Color(0xFF4B5563)
+            color = Color(0xFF4B5563),
+            maxLines = 1
         )
     }
 }

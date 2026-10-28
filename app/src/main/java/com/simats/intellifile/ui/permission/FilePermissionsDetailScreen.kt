@@ -28,10 +28,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.simats.intellifile.data.manager.LocalFileManager
 
 @Composable
 fun FilePermissionsDetailScreen(
@@ -40,6 +42,9 @@ fun FilePermissionsDetailScreen(
     onManageAccessClick: () -> Unit = {},
     onSelectFilesClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val hasPermission = remember { LocalFileManager.hasStoragePermission(context) }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -80,7 +85,7 @@ fun FilePermissionsDetailScreen(
 
             // Sub-heading Description
             Text(
-                text = "Allow IntelliFile to access your files\nfor better organization and AI analysis.",
+                text = "Allow IntelliFile to access your documents\nfor offline search, organization, and AI analysis.",
                 fontSize = 14.sp,
                 color = Color(0xFF4B5563),
                 lineHeight = 20.sp
@@ -92,8 +97,8 @@ fun FilePermissionsDetailScreen(
             PermissionItemCard(
                 icon = Icons.Outlined.Description,
                 title = "Documents Access",
-                description = "Access to your documents (PDF, DOCX, PPT, XLS, etc.) for AI analysis and prioritization.",
-                isGranted = true,
+                description = "Access to your documents (PDF, DOCX, PPT, XLS, TXT) for searching and organizing.",
+                isGranted = hasPermission,
                 onClick = onManageAccessClick
             )
 
@@ -102,9 +107,9 @@ fun FilePermissionsDetailScreen(
             // Permission Card 2: Storage / File Access
             PermissionItemCard(
                 icon = Icons.Outlined.SdStorage,
-                title = "Storage / File Access",
-                description = "Access to selected folders and files on your device.",
-                isGranted = true,
+                title = "Document Storage Access",
+                description = "Direct read access to documents stored in Internal Storage and Downloads.",
+                isGranted = hasPermission,
                 onClick = onManageAccessClick
             )
 
@@ -131,7 +136,7 @@ fun FilePermissionsDetailScreen(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Manage Access",
+                        text = if (hasPermission) "Manage Permission" else "Grant Document Access",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -156,13 +161,13 @@ fun FilePermissionsDetailScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Folder,
-                        contentDescription = "Select Files",
+                        contentDescription = "View Documents",
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Select Files",
+                        text = "View Documents",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
@@ -211,7 +216,7 @@ fun FilePermissionsDetailScreen(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = "We only access the files you select.\nNothing is shared without your permission.",
+                        text = "Only documents are accessed. No photos, media, or personal data are ever read or uploaded without your explicit consent.",
                         fontSize = 12.sp,
                         color = Color(0xFF6B7280),
                         lineHeight = 17.sp
@@ -282,7 +287,7 @@ fun PermissionItemCard(
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = if (isGranted) "Granted" else "Denied",
+                        text = if (isGranted) "Granted" else "Required",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = if (isGranted) Color(0xFF16A34A) else Color(0xFFEF4444)

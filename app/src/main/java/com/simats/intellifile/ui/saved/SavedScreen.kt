@@ -12,7 +12,9 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.Button
@@ -29,12 +31,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.intellifile.R
+import com.simats.intellifile.data.manager.LocalFileManager
+import com.simats.intellifile.data.model.LocalFileItem
 import com.simats.intellifile.ui.home.PriorityLevel
 import com.simats.intellifile.ui.home.PriorityTag
 
@@ -42,8 +48,10 @@ data class SavedFileItem(
     val title: String,
     val size: String,
     val dateText: String,
-    val priority: PriorityLevel,
-    val iconResId: Int = R.drawable.pdf
+    val priority: PriorityLevel? = null,
+    val iconResId: Int = R.drawable.pdf,
+    val uriString: String = "",
+    val path: String = ""
 )
 
 enum class PriorityFilter(val label: String, val level: PriorityLevel?) {
@@ -61,53 +69,40 @@ fun SavedScreen(
     onShareFileClick: (SavedFileItem) -> Unit = {},
     onMoreOptionsClick: (SavedFileItem) -> Unit = {}
 ) {
+    val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf(PriorityFilter.ALL) }
+    var refreshTrigger by remember { mutableIntStateOf(0) }
+    var realFiles by remember { mutableStateOf<List<LocalFileItem>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
 
-    val savedFiles = remember {
-        listOf(
-            SavedFileItem(
-                title = "AML Assignment.pdf",
-                size = "2.4 MB",
-                dateText = "Oct 5, 2024",
-                priority = PriorityLevel.IMPORTANT,
-                iconResId = R.drawable.pdf
-            ),
-            SavedFileItem(
-                title = "Project Report.pdf",
-                size = "3.1 MB",
-                dateText = "Sep 28, 2024",
-                priority = PriorityLevel.IMPORTANT,
-                iconResId = R.drawable.pdf
-            ),
-            SavedFileItem(
-                title = "DBMS Notes.pdf",
-                size = "1.8 MB",
-                dateText = "Oct 1, 2024",
-                priority = PriorityLevel.NORMAL,
-                iconResId = R.drawable.doc
-            ),
-            SavedFileItem(
-                title = "Resume.pdf",
-                size = "0.9 MB",
-                dateText = "Sep 20, 2024",
-                priority = PriorityLevel.LOW,
-                iconResId = R.drawable.normal
-            ),
-            SavedFileItem(
-                title = "Lab Record.pdf",
-                size = "2.2 MB",
-                dateText = "Sep 15, 2024",
-                priority = PriorityLevel.NORMAL,
-                iconResId = R.drawable.doc
-            )
-        )
+    LaunchedEffect(refreshTrigger) {
+        isLoading = true
+        realFiles = LocalFileManager.getDeviceFiles(context)
+        isLoading = false
     }
 
-    val filteredFiles = savedFiles.filter { file ->
-        val matchesSearch = file.title.contains(searchQuery, ignoreCase = true)
-        val matchesPriority = selectedFilter.level == null || file.priority == selectedFilter.level
-        matchesSearch && matchesPriority
+    // Only show documents explicitly bookmarked or explicitly assigned a priority
+    val savedFiles = remember(realFiles) {
+        realFiles.filter { it.isBookmarked || it.priority != null }.map { item ->
+            SavedFileItem(
+                title = item.title,
+                size = item.sizeFormatted,
+                dateText = item.dateText,
+                priority = item.priority,
+                iconResId = item.iconResId,
+                uriString = item.uri.toString(),
+                path = item.path
+            )
+        }
+    }
+
+    val filteredFiles = remember(savedFiles, searchQuery, selectedFilter) {
+        savedFiles.filter { file ->
+            val matchesSearch = file.title.contains(searchQuery, ignoreCase = true)
+            val matchesPriority = selectedFilter.level == null || file.priority == selectedFilter.level
+            matchesSearch && matchesPriority
+        }
     }
 
     Box(
@@ -123,24 +118,37 @@ fun SavedScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                IconButton(onClick = onBackClick) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = MaterialTheme.colorScheme.onBackground
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Text(
+                        text = "Saved Documents",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 }
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                Text(
-                    text = "Saved Documents",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
+                IconButton(onClick = { refreshTrigger++ }) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
             }
 
             LazyColumn(
@@ -176,7 +184,7 @@ fun SavedScreen(
                         ) {
                             if (searchQuery.isEmpty()) {
                                 Text(
-                                    text = "Search saved files...",
+                                    text = "Search saved documents...",
                                     fontSize = 15.sp,
                                     color = Color(0xFF6B7280)
                                 )
@@ -206,6 +214,42 @@ fun SavedScreen(
                                 isSelected = isSelected,
                                 onClick = { selectedFilter = filter },
                                 modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+
+                // Empty state if no saved files match
+                if (!isLoading && filteredFiles.isEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .padding(28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FolderOpen,
+                                contentDescription = "Empty",
+                                tint = Color(0xFF9CA3AF),
+                                modifier = Modifier.size(44.dp)
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = if (searchQuery.isNotBlank()) "No files match \"$searchQuery\"" else "No saved documents yet",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1F2937),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Bookmark a document or set its priority to view it here.",
+                                fontSize = 13.sp,
+                                color = Color(0xFF6B7280),
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -296,7 +340,8 @@ fun SavedFileCard(
                 text = file.title,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
             )
 
             Spacer(modifier = Modifier.height(3.dp))
@@ -304,12 +349,14 @@ fun SavedFileCard(
             Text(
                 text = "${file.size} · ${file.dateText}",
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                maxLines = 1
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            PriorityTag(priority = file.priority)
+            if (file.priority != null) {
+                Spacer(modifier = Modifier.height(6.dp))
+                PriorityTag(priority = file.priority)
+            }
         }
 
         Spacer(modifier = Modifier.width(8.dp))

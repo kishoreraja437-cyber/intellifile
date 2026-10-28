@@ -13,7 +13,9 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.DropdownMenu
@@ -28,12 +30,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.simats.intellifile.R
+import com.simats.intellifile.data.manager.LocalFileManager
+import com.simats.intellifile.data.model.LocalFileItem
 
 enum class FileFormatFilter(val label: String) {
     ALL("All"),
@@ -51,72 +56,46 @@ fun RecentFilesScreen(
     onShareFileClick: (RecentFile) -> Unit = {},
     onMoreOptionsClick: (RecentFile) -> Unit = {}
 ) {
+    val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
     var selectedFormatFilter by remember { mutableStateOf(FileFormatFilter.ALL) }
+    var refreshTrigger by remember { mutableIntStateOf(0) }
+    var realFiles by remember { mutableStateOf<List<LocalFileItem>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
 
-    val recentFiles = remember {
-        listOf(
-            RecentFile(
-                title = "AML Assignment.pdf",
-                format = "PDF",
-                size = "2.4 MB",
-                dateText = "Today",
-                priority = PriorityLevel.IMPORTANT,
-                iconResId = R.drawable.pdf
-            ),
-            RecentFile(
-                title = "DBMS Notes.pdf",
-                format = "PDF",
-                size = "1.8 MB",
-                dateText = "1 day ago",
-                priority = PriorityLevel.NORMAL,
-                iconResId = R.drawable.pdf
-            ),
-            RecentFile(
-                title = "Project Report.pdf",
-                format = "PDF",
-                size = "3.1 MB",
-                dateText = "2 days ago",
-                priority = PriorityLevel.LOW,
-                iconResId = R.drawable.pdf
-            ),
-            RecentFile(
-                title = "Resume.pdf",
-                format = "PDF",
-                size = "0.9 MB",
-                dateText = "3 days ago",
-                priority = PriorityLevel.NORMAL,
-                iconResId = R.drawable.pdf
-            ),
-            RecentFile(
-                title = "Lab Record.pdf",
-                format = "DOC",
-                size = "2.2 MB",
-                dateText = "4 days ago",
-                priority = PriorityLevel.NORMAL,
-                iconResId = R.drawable.doc
-            ),
-            RecentFile(
-                title = "Research Paper.pdf",
-                format = "PDF",
-                size = "4.5 MB",
-                dateText = "5 days ago",
-                priority = PriorityLevel.IMPORTANT,
-                iconResId = R.drawable.pdf
-            )
-        )
+    LaunchedEffect(refreshTrigger) {
+        isLoading = true
+        realFiles = LocalFileManager.getDeviceFiles(context)
+        isLoading = false
     }
 
-    val filteredFiles = recentFiles.filter { file ->
-        val matchesSearch = file.title.contains(searchQuery, ignoreCase = true)
-        val matchesFormat = when (selectedFormatFilter) {
-            FileFormatFilter.ALL -> true
-            FileFormatFilter.PDF -> file.format.equals("PDF", ignoreCase = true)
-            FileFormatFilter.DOC -> file.format.equals("DOC", ignoreCase = true) || file.format.equals("DOCX", ignoreCase = true)
-            FileFormatFilter.PPT -> file.format.equals("PPT", ignoreCase = true) || file.format.equals("PPTX", ignoreCase = true)
-            FileFormatFilter.OTHER -> !listOf("PDF", "DOC", "DOCX", "PPT", "PPTX").contains(file.format.uppercase())
+    val recentFiles = remember(realFiles) {
+        realFiles.map { item ->
+            RecentFile(
+                title = item.title,
+                format = item.format,
+                size = item.sizeFormatted,
+                dateText = item.dateText,
+                priority = item.priority,
+                iconResId = item.iconResId,
+                uriString = item.uri.toString(),
+                path = item.path
+            )
         }
-        matchesSearch && matchesFormat
+    }
+
+    val filteredFiles = remember(recentFiles, searchQuery, selectedFormatFilter) {
+        recentFiles.filter { file ->
+            val matchesSearch = file.title.contains(searchQuery, ignoreCase = true)
+            val matchesFormat = when (selectedFormatFilter) {
+                FileFormatFilter.ALL -> true
+                FileFormatFilter.PDF -> file.format.equals("PDF", ignoreCase = true)
+                FileFormatFilter.DOC -> file.format.equals("DOC", ignoreCase = true) || file.format.equals("DOCX", ignoreCase = true)
+                FileFormatFilter.PPT -> file.format.equals("PPT", ignoreCase = true) || file.format.equals("PPTX", ignoreCase = true)
+                FileFormatFilter.OTHER -> !listOf("PDF", "DOC", "DOCX", "PPT", "PPTX").contains(file.format.uppercase())
+            }
+            matchesSearch && matchesFormat
+        }
     }
 
     Box(
@@ -156,10 +135,10 @@ fun RecentFilesScreen(
                     )
                 }
 
-                IconButton(onClick = { /* Search toggle */ }) {
+                IconButton(onClick = { refreshTrigger++ }) {
                     Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh Files",
                         tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
@@ -198,7 +177,7 @@ fun RecentFilesScreen(
                         ) {
                             if (searchQuery.isEmpty()) {
                                 Text(
-                                    text = "Search recent files...",
+                                    text = "Search recent documents...",
                                     fontSize = 15.sp,
                                     color = Color(0xFF6B7280)
                                 )
@@ -229,7 +208,43 @@ fun RecentFilesScreen(
                     }
                 }
 
-                // Recent Files List
+                // Empty state if no documents match
+                if (!isLoading && filteredFiles.isEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .padding(28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FolderOpen,
+                                contentDescription = "Empty",
+                                tint = Color(0xFF9CA3AF),
+                                modifier = Modifier.size(44.dp)
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = if (searchQuery.isNotBlank()) "No documents found matching \"$searchQuery\"" else "No ${selectedFormatFilter.label} documents found",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1F2937),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "IntelliFile displays documents from your phone's storage.",
+                                fontSize = 13.sp,
+                                color = Color(0xFF6B7280),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+
+                // Real Recent Files List
                 items(filteredFiles) { file ->
                     RecentFileItemCard(
                         file = file,
@@ -304,21 +319,26 @@ fun RecentFileItemCard(
                 text = file.title,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
             )
 
             Spacer(modifier = Modifier.height(3.dp))
 
             Text(
-                text = "${file.size} · ${file.dateText}",
+                text = "${file.format} · ${file.size} · ${file.dateText}",
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                maxLines = 1
             )
         }
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        PriorityTag(priority = file.priority)
+        // Display priority tag only if explicitly set by the user
+        if (file.priority != null) {
+            PriorityTag(priority = file.priority)
+        }
 
         Spacer(modifier = Modifier.width(4.dp))
 
@@ -362,11 +382,15 @@ fun FileOptionsDropdownMenu(
                     Icon(
                         imageVector = Icons.Outlined.Share,
                         contentDescription = "Share",
-                        tint = Color(0xFF6C5CE7),
+                        tint = Color(0xFF374151),
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text(text = "Share", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text(
+                        text = "Share",
+                        fontSize = 14.sp,
+                        color = Color(0xFF374151)
+                    )
                 }
             },
             onClick = {
@@ -374,7 +398,9 @@ fun FileOptionsDropdownMenu(
                 onShareClick()
             }
         )
-        HorizontalDivider(color = Color(0xFFF1F5F9), thickness = 1.dp)
+
+        HorizontalDivider(color = Color(0xFFF3F4F6))
+
         DropdownMenuItem(
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -385,7 +411,11 @@ fun FileOptionsDropdownMenu(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text(text = "Delete", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color(0xFFEF4444))
+                    Text(
+                        text = "Delete",
+                        fontSize = 14.sp,
+                        color = Color(0xFFEF4444)
+                    )
                 }
             },
             onClick = {
