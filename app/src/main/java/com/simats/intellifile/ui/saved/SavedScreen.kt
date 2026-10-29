@@ -51,14 +51,16 @@ data class SavedFileItem(
     val priority: PriorityLevel? = null,
     val iconResId: Int = R.drawable.pdf,
     val uriString: String = "",
-    val path: String = ""
+    val path: String = "",
+    val isBookmarked: Boolean = false
 )
 
 enum class PriorityFilter(val label: String, val level: PriorityLevel?) {
     ALL("All", null),
     IMPORTANT("Important", PriorityLevel.IMPORTANT),
     NORMAL("Normal", PriorityLevel.NORMAL),
-    LOW("Low", PriorityLevel.LOW)
+    LOW("Low", PriorityLevel.LOW),
+    BOOKMARKED("Bookmarked", null)
 }
 
 @Composable
@@ -73,6 +75,9 @@ fun SavedScreen(
     val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember(initialFilter) { mutableStateOf(initialFilter) }
+    LaunchedEffect(initialFilter) {
+        selectedFilter = initialFilter
+    }
     var refreshTrigger by remember { mutableIntStateOf(0) }
     var realFiles by remember { mutableStateOf<List<LocalFileItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -93,7 +98,8 @@ fun SavedScreen(
                 priority = item.priority,
                 iconResId = item.iconResId,
                 uriString = item.uri.toString(),
-                path = item.path
+                path = item.path,
+                isBookmarked = item.isBookmarked
             )
         }
     }
@@ -101,7 +107,11 @@ fun SavedScreen(
     val filteredFiles = remember(savedFiles, searchQuery, selectedFilter) {
         savedFiles.filter { file ->
             val matchesSearch = file.title.contains(searchQuery, ignoreCase = true)
-            val matchesPriority = selectedFilter.level == null || file.priority == selectedFilter.level
+            val matchesPriority = when (selectedFilter) {
+                PriorityFilter.ALL -> true
+                PriorityFilter.BOOKMARKED -> file.isBookmarked
+                else -> file.priority == selectedFilter.level
+            }
             matchesSearch && matchesPriority
         }
     }
@@ -277,14 +287,14 @@ fun FilterChip(
     modifier: Modifier = Modifier
 ) {
     val backgroundColor = when (filter) {
-        PriorityFilter.ALL -> if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+        PriorityFilter.ALL, PriorityFilter.BOOKMARKED -> if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
         PriorityFilter.IMPORTANT -> Color(0xFFFFEAEE)
         PriorityFilter.NORMAL -> Color(0xFFFFF6D8)
         PriorityFilter.LOW -> Color(0xFFE2F7ED)
     }
 
     val textColor = when (filter) {
-        PriorityFilter.ALL -> if (isSelected) Color.White else Color(0xFF4B5563)
+        PriorityFilter.ALL, PriorityFilter.BOOKMARKED -> if (isSelected) Color.White else Color(0xFF4B5563)
         PriorityFilter.IMPORTANT -> Color(0xFFEF4444)
         PriorityFilter.NORMAL -> Color(0xFFD97706)
         PriorityFilter.LOW -> Color(0xFF10B981)
@@ -342,7 +352,8 @@ fun SavedFileCard(
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
 
             Spacer(modifier = Modifier.height(3.dp))
@@ -351,7 +362,8 @@ fun SavedFileCard(
                 text = "${file.size} · ${file.dateText}",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                maxLines = 1
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
 
             if (file.priority != null) {

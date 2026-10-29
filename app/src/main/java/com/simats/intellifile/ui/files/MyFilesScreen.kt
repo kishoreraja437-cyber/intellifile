@@ -199,23 +199,20 @@ fun MyFilesScreen(
                             PrioritySummaryCard(
                                 priority = PriorityLevel.IMPORTANT,
                                 count = importantCount,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { onQuickAccessClick(PriorityLevel.IMPORTANT) }
+                                onClick = { onQuickAccessClick(PriorityLevel.IMPORTANT) },
+                                modifier = Modifier.weight(1f)
                             )
                             PrioritySummaryCard(
                                 priority = PriorityLevel.NORMAL,
                                 count = normalCount,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { onQuickAccessClick(PriorityLevel.NORMAL) }
+                                onClick = { onQuickAccessClick(PriorityLevel.NORMAL) },
+                                modifier = Modifier.weight(1f)
                             )
                             PrioritySummaryCard(
                                 priority = PriorityLevel.LOW,
                                 count = lowCount,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { onQuickAccessClick(PriorityLevel.LOW) }
+                                onClick = { onQuickAccessClick(PriorityLevel.LOW) },
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }

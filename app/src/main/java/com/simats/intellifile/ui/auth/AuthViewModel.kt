@@ -67,6 +67,13 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
+            val msg = "Please enter a valid email address."
+            _uiState.value = _uiState.value.copy(errorMessage = msg)
+            onError(msg)
+            return
+        }
+
         if (pass.length < 8) {
             val msg = "Password must be at least 8 characters."
             _uiState.value = _uiState.value.copy(errorMessage = msg)

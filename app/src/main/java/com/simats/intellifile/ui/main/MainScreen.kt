@@ -13,6 +13,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -36,6 +37,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -118,13 +120,15 @@ fun MainScreen(
     var isFeedbackOpen by remember { mutableStateOf(false) }
     var isFeedbackSuccessOpen by remember { mutableStateOf(false) }
 
+    val isOverlayScreenOpen = isRecentFilesOpen || isAiHistoryOpen || selectedDetailFile != null ||
+            isDocumentViewerOpen || isSetPriorityOpen || isFileSavedSuccessOpen || isShareOpen || isFilePermissionsOpen ||
+            isNotificationsOpen || isThemeOpen || isAboutOpen ||
+            isHelpSupportOpen || isContactSupportOpen || isContactSuccessOpen ||
+            isFeedbackOpen || isFeedbackSuccessOpen
+
     // System Back Press Handler
     BackHandler(
-        enabled = isRecentFilesOpen || isAiHistoryOpen || selectedDetailFile != null ||
-                isDocumentViewerOpen || isSetPriorityOpen || isFileSavedSuccessOpen || isShareOpen || isFilePermissionsOpen ||
-                isNotificationsOpen || isThemeOpen || isAboutOpen ||
-                isHelpSupportOpen || isContactSupportOpen || isContactSuccessOpen ||
-                isFeedbackOpen || isFeedbackSuccessOpen || selectedTab != BottomNavItem.HOME
+        enabled = isOverlayScreenOpen || selectedTab != BottomNavItem.HOME
     ) {
         when {
             isShareOpen -> isShareOpen = false
@@ -149,33 +153,35 @@ fun MainScreen(
 
     Scaffold(
         bottomBar = {
-            BottomNavigationBar(
-                selectedTab = selectedTab,
-                onTabSelected = { newTab ->
-                    // Reset all secondary overlay screen states when switching bottom tabs
-                    isRecentFilesOpen = false
-                    isAiHistoryOpen = false
-                    selectedDetailFile = null
-                    isDocumentViewerOpen = false
-                    isSetPriorityOpen = false
-                    isFileSavedSuccessOpen = false
-                    isShareOpen = false
-                    isFilePermissionsOpen = false
-                    isNotificationsOpen = false
-                    isThemeOpen = false
-                    isAboutOpen = false
-                    isHelpSupportOpen = false
-                    isContactSupportOpen = false
-                    isContactSuccessOpen = false
-                    isFeedbackOpen = false
-                    isFeedbackSuccessOpen = false
+            if (!isOverlayScreenOpen) {
+                BottomNavigationBar(
+                    selectedTab = selectedTab,
+                    onTabSelected = { newTab ->
+                        // Reset all secondary overlay screen states when switching bottom tabs
+                        isRecentFilesOpen = false
+                        isAiHistoryOpen = false
+                        selectedDetailFile = null
+                        isDocumentViewerOpen = false
+                        isSetPriorityOpen = false
+                        isFileSavedSuccessOpen = false
+                        isShareOpen = false
+                        isFilePermissionsOpen = false
+                        isNotificationsOpen = false
+                        isThemeOpen = false
+                        isAboutOpen = false
+                        isHelpSupportOpen = false
+                        isContactSupportOpen = false
+                        isContactSuccessOpen = false
+                        isFeedbackOpen = false
+                        isFeedbackSuccessOpen = false
 
-                    if (newTab == BottomNavItem.SAVED) {
-                        savedPriorityFilter = PriorityFilter.ALL
+                        if (newTab == BottomNavItem.SAVED) {
+                            savedPriorityFilter = PriorityFilter.ALL
+                        }
+                        selectedTab = newTab
                     }
-                    selectedTab = newTab
-                }
-            )
+                )
+            }
         }
     ) { innerPadding ->
         val currentNavigationKey = when {
@@ -206,8 +212,7 @@ fun MainScreen(
             AnimatedContent(
                 targetState = currentNavigationKey,
                 transitionSpec = {
-                    fadeIn(animationSpec = tween(300)) + scaleIn(initialScale = 0.96f, animationSpec = tween(300)) togetherWith
-                            fadeOut(animationSpec = tween(200))
+                    fadeIn(animationSpec = tween(220)) togetherWith fadeOut(animationSpec = tween(180))
                 },
                 label = "mainScreenTransition"
             ) { navKey ->
@@ -540,186 +545,91 @@ fun BottomNavigationBar(
     modifier: Modifier = Modifier
 ) {
     val items = BottomNavItem.entries
-    val selectedIndex = items.indexOf(selectedTab)
-
-    // Animated X index position for smooth fluid sliding transition across tabs
-    val animatedIndex by animateFloatAsState(
-        targetValue = selectedIndex.toFloat(),
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "fluidNavAnimation"
-    )
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 14.dp, end = 14.dp, bottom = 12.dp)
-            .height(84.dp),
-        contentAlignment = Alignment.BottomCenter
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
     ) {
-        // Fluid Wavy Glass Background Canvas
-        Canvas(
+        // Floating Rounded Glass Pill Container
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(72.dp)
+                .height(68.dp)
+                .shadow(8.dp, RoundedCornerShape(32.dp))
                 .clip(RoundedCornerShape(32.dp))
+                .background(Color.White)
+                .border(1.dp, Color(0xFFE2EEF8), RoundedCornerShape(32.dp))
         ) {
-            val width = size.width
-            val height = size.height
-            val itemWidth = width / items.size
-            val activeX = itemWidth * animatedIndex + itemWidth / 2f
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceAround
+            ) {
+                items.forEach { item ->
+                    val isSelected = item == selectedTab
 
-            // Organic Wavy Glass Path with Top Bulge at Active Tab Position
-            val path = Path().apply {
-                moveTo(0f, height)
-                lineTo(0f, 16f)
-
-                val bulgeWidth = 110.dp.toPx()
-                val bulgeLeft = (activeX - bulgeWidth / 2f).coerceAtLeast(0f)
-                val bulgeRight = (activeX + bulgeWidth / 2f).coerceAtMost(width)
-
-                lineTo(bulgeLeft, 16f)
-
-                // Smooth organic fluid curve going upwards
-                cubicTo(
-                    bulgeLeft + bulgeWidth * 0.25f, 16f,
-                    activeX - bulgeWidth * 0.2f, -12f,
-                    activeX, -12f
-                )
-                cubicTo(
-                    activeX + bulgeWidth * 0.2f, -12f,
-                    bulgeRight - bulgeWidth * 0.25f, 16f,
-                    bulgeRight, 16f
-                )
-
-                lineTo(width, 16f)
-                lineTo(width, height)
-                close()
-            }
-
-            // Draw Light Off-White Glass Background
-            drawPath(
-                path = path,
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFFFFFFFF),
-                        Color(0xFFEFF6FC)
+                    val iconScale by animateFloatAsState(
+                        targetValue = if (isSelected) 1.12f else 1.0f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        ),
+                        label = "iconScale"
                     )
-                )
-            )
 
-            // Draw Glowing Cyan/Aqua Accent Outline
-            drawPath(
-                path = path,
-                brush = Brush.horizontalGradient(
-                    colors = listOf(
-                        Color(0xFFE2EEF8),
-                        Color(0xFF55A9AF).copy(alpha = 0.5f),
-                        Color(0xFF26E07F).copy(alpha = 0.6f),
-                        Color(0xFF55A9AF).copy(alpha = 0.5f),
-                        Color(0xFFE2EEF8)
-                    )
-                ),
-                style = Stroke(width = 2.dp.toPx())
-            )
-        }
-
-        // Row of 5 Nav Items
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(72.dp),
-            verticalAlignment = Alignment.Bottom
-        ) {
-            items.forEachIndexed { _, item ->
-                val isSelected = item == selectedTab
-
-                val iconScale by animateFloatAsState(
-                    targetValue = if (isSelected) 1.15f else 1.0f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMedium
-                    ),
-                    label = "iconScale"
-                )
-
-                val iconOffsetY by animateDpAsState(
-                    targetValue = if (isSelected) (-16).dp else 0.dp,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMedium
-                    ),
-                    label = "iconOffsetY"
-                )
-
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clickable { onTabSelected(item) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                        modifier = Modifier.offset(y = iconOffsetY)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(24.dp))
+                            .clickable { onTabSelected(item) },
+                        contentAlignment = Alignment.Center
                     ) {
-                        // Glowing Cyan/Aqua Active Button Circle
-                        Box(
-                            contentAlignment = Alignment.Center
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
                         ) {
-                            if (isSelected) {
-                                // Outer Glow Aura
-                                Canvas(
-                                    modifier = Modifier.size(58.dp)
-                                ) {
-                                    drawCircle(
-                                        brush = Brush.radialGradient(
-                                            colors = listOf(
-                                                Color(0xFF55A9AF).copy(alpha = 0.5f),
-                                                Color(0xFF26E07F).copy(alpha = 0.3f),
-                                                Color.Transparent
-                                            )
-                                        )
-                                    )
-                                }
-
-                                // Solid Cyan/Aqua Circle Button
-                                Box(
-                                    modifier = Modifier
-                                        .size(46.dp)
-                                        .clip(CircleShape)
-                                        .background(
+                            Box(
+                                modifier = Modifier
+                                    .size(if (isSelected) 38.dp else 30.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (isSelected) {
                                             Brush.linearGradient(
                                                 colors = listOf(
                                                     Color(0xFF00C2A8),
                                                     Color(0xFF55A9AF)
                                                 )
                                             )
-                                        )
+                                        } else {
+                                            Brush.linearGradient(colors = listOf(Color.Transparent, Color.Transparent))
+                                        }
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (item == BottomNavItem.AI) Icons.Default.AutoAwesome else if (isSelected) item.selectedIcon else item.unselectedIcon,
+                                    contentDescription = item.title,
+                                    tint = if (isSelected) Color.White else Color(0xFF64748B),
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .graphicsLayer(scaleX = iconScale, scaleY = iconScale)
                                 )
                             }
 
-                            Icon(
-                                imageVector = if (item == BottomNavItem.AI) Icons.Default.AutoAwesome else if (isSelected) item.selectedIcon else item.unselectedIcon,
-                                contentDescription = item.title,
-                                tint = if (isSelected) Color.White else Color(0xFF4A6572),
-                                modifier = Modifier
-                                    .size(22.dp)
-                                    .graphicsLayer(scaleX = iconScale, scaleY = iconScale)
+                            Spacer(modifier = Modifier.height(2.dp))
+
+                            Text(
+                                text = item.title,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) Color(0xFF0D9488) else Color(0xFF64748B)
                             )
                         }
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Text(
-                            text = item.title,
-                            fontSize = 11.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSelected) Color(0xFF55A9AF) else Color(0xFF4A6572)
-                        )
                     }
                 }
             }

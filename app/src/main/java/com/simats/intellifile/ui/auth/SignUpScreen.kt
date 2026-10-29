@@ -1,7 +1,9 @@
 package com.simats.intellifile.ui.auth
 
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -12,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Mail
 import androidx.compose.material.icons.outlined.Person
@@ -23,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -35,16 +39,21 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.simats.intellifile.R
 import com.simats.intellifile.ui.theme.IntellifileTheme
 
 @Composable
 fun SignUpScreen(
+    authViewModel: AuthViewModel = viewModel(),
     onSignUpSuccess: () -> Unit = {},
     onSignInClick: () -> Unit = {},
     onBackClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val uiState by authViewModel.uiState.collectAsState()
+
     var nameInput by remember { mutableStateOf("") }
     var emailInput by remember { mutableStateOf("") }
     var passwordInput by remember { mutableStateOf("") }
@@ -115,7 +124,40 @@ fun SignUpScreen(
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Error Alert Banner
+            if (uiState.errorMessage != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFFEE2E2))
+                        .border(1.dp, Color(0xFFFCA5A5), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ErrorOutline,
+                            contentDescription = "Error",
+                            tint = Color(0xFFDC2626),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = uiState.errorMessage ?: "Signup failed",
+                            color = Color(0xFFB91C1C),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            lineHeight = 18.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
             // Name Input Field
             Column(
@@ -161,7 +203,10 @@ fun SignUpScreen(
                         }
                         BasicTextField(
                             value = nameInput,
-                            onValueChange = { nameInput = it },
+                            onValueChange = {
+                                nameInput = it
+                                if (uiState.errorMessage != null) authViewModel.clearError()
+                            },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -215,7 +260,10 @@ fun SignUpScreen(
                         }
                         BasicTextField(
                             value = emailInput,
-                            onValueChange = { emailInput = it },
+                            onValueChange = {
+                                emailInput = it
+                                if (uiState.errorMessage != null) authViewModel.clearError()
+                            },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                             modifier = Modifier.fillMaxWidth()
@@ -231,7 +279,7 @@ fun SignUpScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Password",
+                    text = "Password (min. 8 characters)",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -270,7 +318,10 @@ fun SignUpScreen(
                         }
                         BasicTextField(
                             value = passwordInput,
-                            onValueChange = { passwordInput = it },
+                            onValueChange = {
+                                passwordInput = it
+                                if (uiState.errorMessage != null) authViewModel.clearError()
+                            },
                             singleLine = true,
                             visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -296,30 +347,49 @@ fun SignUpScreen(
 
             // Create Account Button
             Button(
-                onClick = onSignUpSuccess,
+                onClick = {
+                    authViewModel.signup(
+                        fullName = nameInput.trim(),
+                        email = emailInput.trim(),
+                        pass = passwordInput,
+                        onSuccess = {
+                            Toast.makeText(context, "Account created successfully!", Toast.LENGTH_SHORT).show()
+                            onSignUpSuccess()
+                        }
+                    )
+                },
+                enabled = !uiState.isLoading,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(26.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "Create Account",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
+                if (uiState.isLoading) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(22.dp),
+                        strokeWidth = 2.5.dp
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "Create Account",
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp)
-                    )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "Create Account",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "Create Account",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
 

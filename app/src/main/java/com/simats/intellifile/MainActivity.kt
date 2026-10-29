@@ -1,5 +1,6 @@
 package com.simats.intellifile
 
+import android.app.Application
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -8,7 +9,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,8 +17,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.simats.intellifile.data.api.RetrofitClient
+import com.simats.intellifile.data.session.SessionManager
 import com.simats.intellifile.ui.auth.ForgotPasswordScreen
 import com.simats.intellifile.ui.auth.LoginScreen
 import com.simats.intellifile.ui.auth.SignUpScreen
@@ -36,7 +38,9 @@ enum class AppScreen {
     SPLASH, ONBOARD, LOGIN, SIGNUP, FORGOT_PASSWORD, PERMISSION, MAIN
 }
 
-class AppNavigationViewModel : ViewModel() {
+class AppNavigationViewModel(application: Application) : AndroidViewModel(application) {
+    private val sessionManager = SessionManager(application)
+
     private val _currentScreen = MutableStateFlow(AppScreen.SPLASH)
     val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
 
@@ -44,7 +48,11 @@ class AppNavigationViewModel : ViewModel() {
     val themeMode: StateFlow<AppThemeMode> = _themeMode.asStateFlow()
 
     fun onSplashFinished() {
-        _currentScreen.value = AppScreen.ONBOARD
+        if (sessionManager.isLoggedIn()) {
+            _currentScreen.value = AppScreen.MAIN
+        } else {
+            _currentScreen.value = AppScreen.ONBOARD
+        }
     }
 
     fun onGetStartedClicked() {
@@ -52,7 +60,11 @@ class AppNavigationViewModel : ViewModel() {
     }
 
     fun onLoginSuccess() {
-        _currentScreen.value = AppScreen.PERMISSION
+        _currentScreen.value = AppScreen.MAIN
+    }
+
+    fun onSignUpSuccess() {
+        _currentScreen.value = AppScreen.MAIN
     }
 
     fun onSignUpClicked() {
@@ -88,6 +100,8 @@ class AppNavigationViewModel : ViewModel() {
     }
 
     fun onLogout() {
+        sessionManager.clearSession()
+        RetrofitClient.resetClient()
         _currentScreen.value = AppScreen.LOGIN
     }
 
@@ -122,8 +136,7 @@ class MainActivity : ComponentActivity() {
                     AnimatedContent(
                         targetState = currentScreen,
                         transitionSpec = {
-                            fadeIn(animationSpec = tween(350)) + scaleIn(initialScale = 0.95f, animationSpec = tween(350)) togetherWith
-                                    fadeOut(animationSpec = tween(250))
+                            fadeIn(animationSpec = tween(250)) togetherWith fadeOut(animationSpec = tween(200))
                         },
                         label = "rootScreenTransition"
                     ) { targetScreen ->
@@ -141,7 +154,7 @@ class MainActivity : ComponentActivity() {
                                 onBackClick = { appNavViewModel.onBackFromLogin() }
                             )
                             AppScreen.SIGNUP -> SignUpScreen(
-                                onSignUpSuccess = { appNavViewModel.onLoginSuccess() },
+                                onSignUpSuccess = { appNavViewModel.onSignUpSuccess() },
                                 onSignInClick = { appNavViewModel.onSignInClicked() },
                                 onBackClick = { appNavViewModel.onBackFromSignUp() }
                             )

@@ -24,7 +24,7 @@ class AuthRepository(private val context: Context) {
                 RetrofitClient.resetClient()
                 Result.success(user)
             } else {
-                val errorMsg = response.body()?.message ?: response.errorBody()?.string() ?: "Login failed"
+                val errorMsg = extractErrorMessage(response.body()?.message, response.errorBody()?.string(), "Login failed")
                 Result.failure(Exception(errorMsg))
             }
         } catch (e: Exception) {
@@ -43,7 +43,7 @@ class AuthRepository(private val context: Context) {
                 RetrofitClient.resetClient()
                 Result.success(user)
             } else {
-                val errorMsg = response.body()?.message ?: response.errorBody()?.string() ?: "Sign up failed"
+                val errorMsg = extractErrorMessage(response.body()?.message, response.errorBody()?.string(), "Sign up failed")
                 Result.failure(Exception(errorMsg))
             }
         } catch (e: Exception) {
@@ -57,12 +57,26 @@ class AuthRepository(private val context: Context) {
             if (response.isSuccessful && response.body()?.success == true) {
                 Result.success(response.body()?.message ?: "Password reset successful")
             } else {
-                val errorMsg = response.body()?.message ?: response.errorBody()?.string() ?: "Password reset failed"
+                val errorMsg = extractErrorMessage(response.body()?.message, response.errorBody()?.string(), "Password reset failed")
                 Result.failure(Exception(errorMsg))
             }
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private fun extractErrorMessage(bodyMessage: String?, errorBodyStr: String?, fallback: String): String {
+        if (!bodyMessage.isNullOrBlank()) return bodyMessage
+        if (!errorBodyStr.isNullOrBlank()) {
+            try {
+                val json = org.json.JSONObject(errorBodyStr)
+                if (json.has("message") && !json.isNull("message")) {
+                    val m = json.getString("message")
+                    if (m.isNotBlank()) return m
+                }
+            } catch (_: Exception) {}
+        }
+        return fallback
     }
 
     suspend fun changePassword(currentPassword: String, newPassword: String): Result<String> {
