@@ -467,6 +467,10 @@ fun MainScreen(
                             BottomNavItem.AI -> AiScreen(
                                 onBackClick = { selectedTab = BottomNavItem.HOME },
                                 onOpenFile = { aiFile ->
+                                    val localMatch = LocalFileManager.getDeviceFiles(context).firstOrNull {
+                                        it.title.equals(aiFile.title, ignoreCase = true) ||
+                                        it.title.equals(aiFile.title.substringBeforeLast('.'), ignoreCase = true)
+                                    }
                                     selectedDetailFile = FileDetailData(
                                         fileName = aiFile.title,
                                         fileSize = aiFile.size,
@@ -474,7 +478,9 @@ fun MainScreen(
                                         createdDate = aiFile.dateText,
                                         modifiedDate = aiFile.dateText,
                                         priority = aiFile.priority,
-                                        iconResId = aiFile.iconResId
+                                        iconResId = aiFile.iconResId,
+                                        uriString = localMatch?.uri?.toString() ?: "",
+                                        path = localMatch?.path ?: ""
                                     )
                                 },
                                 onViewSearchHistoryClick = { isAiHistoryOpen = true }
@@ -494,10 +500,12 @@ fun MainScreen(
                                 initialFilter = savedPriorityFilter,
                                 onBackClick = { selectedTab = BottomNavItem.HOME },
                                 onOpenFile = { file ->
+                                    val ext = file.title.substringAfterLast('.', "").uppercase()
+                                    val detectedType = if (ext.isNotBlank()) "$ext Document" else "Document"
                                     selectedDetailFile = FileDetailData(
                                         fileName = file.title,
                                         fileSize = file.size,
-                                        fileType = "Document",
+                                        fileType = detectedType,
                                         createdDate = file.dateText,
                                         modifiedDate = file.dateText,
                                         category = "Saved Document",
@@ -509,10 +517,12 @@ fun MainScreen(
                                     )
                                 },
                                 onShareFileClick = { file ->
+                                    val ext = file.title.substringAfterLast('.', "").uppercase()
+                                    val detectedType = if (ext.isNotBlank()) "$ext Document" else "Document"
                                     selectedDetailFile = FileDetailData(
                                         fileName = file.title,
                                         fileSize = file.size,
-                                        fileType = "Document",
+                                        fileType = detectedType,
                                         priority = file.priority,
                                         iconResId = file.iconResId,
                                         uriString = file.uriString,

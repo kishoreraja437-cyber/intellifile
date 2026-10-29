@@ -2,6 +2,7 @@ package com.simats.intellifile.data.repository
 
 import android.content.Context
 import android.net.Uri
+import com.simats.intellifile.data.api.IntelliFileApiService
 import com.simats.intellifile.data.api.RetrofitClient
 import com.simats.intellifile.data.manager.LocalFileManager
 import com.simats.intellifile.data.model.*
@@ -13,7 +14,8 @@ import java.io.File
 import java.io.FileOutputStream
 
 class DocumentRepository(private val context: Context) {
-    private val api = RetrofitClient.getApiService(context)
+    private val api: IntelliFileApiService
+        get() = RetrofitClient.getApiService(context)
 
     /**
      * Uploads a local file to the server's AI Vault.

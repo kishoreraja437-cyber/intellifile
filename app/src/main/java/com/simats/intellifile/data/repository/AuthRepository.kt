@@ -1,6 +1,7 @@
 package com.simats.intellifile.data.repository
 
 import android.content.Context
+import com.simats.intellifile.data.api.IntelliFileApiService
 import com.simats.intellifile.data.api.RetrofitClient
 import com.simats.intellifile.data.model.*
 import com.simats.intellifile.data.session.SessionManager
@@ -10,7 +11,8 @@ import okhttp3.RequestBody.Companion.asRequestBody
 import java.io.File
 
 class AuthRepository(private val context: Context) {
-    private val api = RetrofitClient.getApiService(context)
+    private val api: IntelliFileApiService
+        get() = RetrofitClient.getApiService(context)
     val sessionManager = SessionManager(context)
 
     suspend fun login(email: String, password: String): Result<UserDto> {

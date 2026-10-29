@@ -1,6 +1,7 @@
 package com.simats.intellifile.ui.viewer
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
@@ -11,6 +12,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -52,6 +54,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -69,6 +73,10 @@ import com.simats.intellifile.data.model.LocalFileItem
 import com.simats.intellifile.ui.dialog.SaveConfirmationDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+enum class PresentationViewMode {
+    SLIDE_CARDS, ALL_CONTENT
+}
 
 @Composable
 fun DocumentViewerScreen(
@@ -124,6 +132,7 @@ fun DocumentViewerScreen(
     var parsedContent by remember { mutableStateOf<ParsedDocumentContent?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var presentationViewMode by remember { mutableStateOf(PresentationViewMode.SLIDE_CARDS) }
 
     // Load document content based on format
     LaunchedEffect(filePath, fileUriString, fileName, effectiveFormat) {
@@ -520,18 +529,33 @@ fun DocumentViewerScreen(
                     // PPT / PPTX Presentation View
                     parsedContent is ParsedDocumentContent.Presentation -> {
                         val presentation = parsedContent as ParsedDocumentContent.Presentation
-                        val slideIndex = (currentPageIndex - 1).coerceIn(0, presentation.slides.size - 1)
-                        val slide = presentation.slides.getOrNull(slideIndex) ?: SlideData(1, "Slide", emptyList())
+                        if (presentationViewMode == PresentationViewMode.ALL_CONTENT) {
+                            PresentationAllContentView(
+                                presentation = presentation,
+                                zoomPercentage = zoomPercentage,
+                                searchQuery = searchQuery,
+                                onSwitchToSlide = { slideNum ->
+                                    currentPageIndex = slideNum
+                                    presentationViewMode = PresentationViewMode.SLIDE_CARDS
+                                }
+                            )
+                        } else {
+                            val slideIndex = (currentPageIndex - 1).coerceIn(0, presentation.slides.size - 1)
+                            val slide = presentation.slides.getOrNull(slideIndex) ?: SlideData(1, "Slide", emptyList())
 
-                        PresentationSlideView(
-                            slide = slide,
-                            currentSlide = currentPageIndex,
-                            totalSlides = presentation.totalSlides,
-                            zoomPercentage = zoomPercentage,
-                            searchQuery = searchQuery,
-                            onPrevSlide = { if (currentPageIndex > 1) currentPageIndex-- },
-                            onNextSlide = { if (currentPageIndex < totalUnitsCount) currentPageIndex++ }
-                        )
+                            PresentationSlideView(
+                                slide = slide,
+                                currentSlide = currentPageIndex,
+                                totalSlides = presentation.totalSlides,
+                                zoomPercentage = zoomPercentage,
+                                searchQuery = searchQuery,
+                                viewMode = presentationViewMode,
+                                onViewModeChange = { presentationViewMode = it },
+                                onPrevSlide = { if (currentPageIndex > 1) currentPageIndex-- },
+                                onNextSlide = { if (currentPageIndex < totalUnitsCount) currentPageIndex++ },
+                                onJumpClick = { showJumpDialog = true }
+                            )
+                        }
                     }
 
                     // XLSX / XLS / CSV Spreadsheet View
@@ -731,12 +755,25 @@ private fun PresentationSlideView(
     totalSlides: Int,
     zoomPercentage: Int,
     searchQuery: String,
+    viewMode: PresentationViewMode,
+    onViewModeChange: (PresentationViewMode) -> Unit,
     onPrevSlide: () -> Unit,
-    onNextSlide: () -> Unit
+    onNextSlide: () -> Unit,
+    onJumpClick: () -> Unit = {}
 ) {
     val scaleFactor = zoomPercentage / 100f
     val titleSize = (20 * scaleFactor).sp
     val bodySize = (14 * scaleFactor).sp
+
+    var dragAccumulator by remember { mutableFloatStateOf(0f) }
+
+    val slideImageBitmap = remember(slide.imageBytes) {
+        slide.imageBytes?.let {
+            try {
+                BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap()
+            } catch (_: Exception) { null }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -744,7 +781,7 @@ private fun PresentationSlideView(
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Slide Card Container (16:9 Presentation look)
+        // Slide Card Container (16:9 Presentation look with swipe gesture)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -753,6 +790,22 @@ private fun PresentationSlideView(
                 .shadow(4.dp, RoundedCornerShape(16.dp))
                 .background(Color.White)
                 .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(16.dp))
+                .pointerInput(currentSlide) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            if (dragAccumulator < -60f && currentSlide < totalSlides) {
+                                onNextSlide()
+                            } else if (dragAccumulator > 60f && currentSlide > 1) {
+                                onPrevSlide()
+                            }
+                            dragAccumulator = 0f
+                        },
+                        onDragCancel = { dragAccumulator = 0f },
+                        onHorizontalDrag = { _, dragAmount ->
+                            dragAccumulator += dragAmount
+                        }
+                    )
+                }
                 .padding(20.dp)
         ) {
             Column(
@@ -760,7 +813,7 @@ private fun PresentationSlideView(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
             ) {
-                // Top Slide Badge
+                // Top Slide Badge & Mode Switcher
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -770,7 +823,8 @@ private fun PresentationSlideView(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color(0xFFFEF3C7))
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                            .clickable { onJumpClick() }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -788,22 +842,53 @@ private fun PresentationSlideView(
                         )
                     }
 
-                    Text(
-                        text = "IntelliFile Presentation View",
-                        fontSize = 11.sp,
-                        color = Color(0xFF94A3B8)
-                    )
+                    // View Mode Toggle (Slide View vs All Content)
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFF1F5F9))
+                            .padding(2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF2563EB))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "Slide",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { onViewModeChange(PresentationViewMode.ALL_CONTENT) }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "All Content",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Normal,
+                                color = Color(0xFF64748B)
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(18.dp))
 
                 // Slide Title
                 Text(
-                    text = slide.title,
+                    text = slide.title.ifBlank { "Slide $currentSlide" },
                     fontSize = titleSize,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF0F172A),
-                    lineHeight = (titleSize.value * 1.3f).sp
+                    lineHeight = (titleSize.value * 1.35f).sp
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -812,31 +897,87 @@ private fun PresentationSlideView(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Bullet Points
-                if (slide.points.isNotEmpty()) {
+                // Optional Slide Embedded Image
+                if (slideImageBitmap != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFF8FAFC))
+                            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            bitmap = slideImageBitmap,
+                            contentDescription = "Slide Image",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 240.dp)
+                                .padding(8.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(14.dp))
+                }
+
+                // Bullet Points / Content Paragraphs
+                val displayPoints = slide.points.filter { it.isNotBlank() }
+
+                if (displayPoints.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        slide.points.forEach { point ->
+                        displayPoints.forEach { point ->
                             val isHighlighted = searchQuery.isNotBlank() && point.contains(searchQuery, ignoreCase = true)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .then(if (isHighlighted) Modifier.background(Color(0xFFFEF08A).copy(alpha = 0.5f), RoundedCornerShape(4.dp)) else Modifier),
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                Box(
+
+                            if (point.contains("  |  ")) {
+                                // Table row rendering
+                                Row(
                                     modifier = Modifier
-                                        .padding(top = (bodySize.value * 0.35f).dp)
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF3B82F6))
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = point,
-                                    fontSize = bodySize,
-                                    color = Color(0xFF334155),
-                                    lineHeight = (bodySize.value * 1.5f).sp
-                                )
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isHighlighted) Color(0xFFFEF08A).copy(alpha = 0.5f) else Color(0xFFF8FAFC))
+                                        .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.TableChart,
+                                        contentDescription = null,
+                                        tint = Color(0xFF64748B),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = point,
+                                        fontSize = bodySize,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF1E293B),
+                                        lineHeight = (bodySize.value * 1.4f).sp
+                                    )
+                                }
+                            } else {
+                                // Normal bullet point row
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .then(if (isHighlighted) Modifier.background(Color(0xFFFEF08A).copy(alpha = 0.5f), RoundedCornerShape(4.dp)) else Modifier),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(top = (bodySize.value * 0.4f).dp)
+                                            .size(7.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF2563EB))
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = point,
+                                        fontSize = bodySize,
+                                        color = Color(0xFF1E293B),
+                                        lineHeight = (bodySize.value * 1.55f).sp
+                                    )
+                                }
                             }
                         }
                     }
@@ -844,15 +985,294 @@ private fun PresentationSlideView(
                     Text(
                         text = slide.rawContent,
                         fontSize = bodySize,
-                        color = Color(0xFF334155),
-                        lineHeight = (bodySize.value * 1.5f).sp
+                        color = Color(0xFF1E293B),
+                        lineHeight = (bodySize.value * 1.55f).sp
                     )
                 } else {
-                    Text(
-                        text = "No content on this slide.",
-                        fontSize = bodySize,
-                        color = Color(0xFF94A3B8)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFF8FAFC))
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Slideshow,
+                            contentDescription = null,
+                            tint = Color(0xFF94A3B8),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = if (currentSlide == 1) "Presentation Title Slide" else "Slide $currentSlide content",
+                            fontSize = bodySize,
+                            color = Color(0xFF64748B)
+                        )
+                    }
+                }
+
+                // Speaker Notes section if present
+                if (slide.notes.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFFFEF9C3))
+                            .border(1.dp, Color(0xFFFEF08A), RoundedCornerShape(10.dp))
+                            .padding(12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Description,
+                                contentDescription = null,
+                                tint = Color(0xFF854D0E),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Speaker Notes",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF854D0E)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = slide.notes,
+                            fontSize = (bodySize.value * 0.9f).sp,
+                            color = Color(0xFF713F12),
+                            lineHeight = (bodySize.value * 1.35f).sp
+                        )
+                    }
+                }
+            }
+        }
+
+        // On-card Slide Navigation Bar
+        if (totalSlides > 1) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = onPrevSlide,
+                    enabled = currentSlide > 1,
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        contentDescription = "Previous Slide",
+                        modifier = Modifier.size(16.dp)
                     )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Prev Slide", fontSize = 12.sp)
+                }
+
+                Text(
+                    text = "Slide $currentSlide of $totalSlides",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF6B7280)
+                )
+
+                Button(
+                    onClick = onNextSlide,
+                    enabled = currentSlide < totalSlides,
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text("Next Slide", fontSize = 12.sp)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "Next Slide",
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Continuous Reading View showing all presentation slides and their full textual content.
+ */
+@Composable
+private fun PresentationAllContentView(
+    presentation: ParsedDocumentContent.Presentation,
+    zoomPercentage: Int,
+    searchQuery: String,
+    onSwitchToSlide: (Int) -> Unit
+) {
+    val scaleFactor = zoomPercentage / 100f
+    val titleSize = (18 * scaleFactor).sp
+    val bodySize = (14 * scaleFactor).sp
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(vertical = 4.dp)
+    ) {
+        // Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFFEFF6FF))
+                .border(1.dp, Color(0xFFBFDBFE), RoundedCornerShape(12.dp))
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Full Presentation Content",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1D4ED8)
+                )
+                Text(
+                    text = "${presentation.totalSlides} Slides Extracted",
+                    fontSize = 11.sp,
+                    color = Color(0xFF60A5FA)
+                )
+            }
+
+            Button(
+                onClick = { onSwitchToSlide(1) },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Icon(Icons.Default.Slideshow, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Slide View", fontSize = 12.sp)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(bottom = 24.dp)
+        ) {
+            itemsIndexed(presentation.slides) { index, slide ->
+                val slideNum = index + 1
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSwitchToSlide(slideNum) },
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFFFEF3C7))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "SLIDE $slideNum OF ${presentation.totalSlides}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFB45309)
+                                )
+                            }
+
+                            Text(
+                                text = "View as Slide >",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF2563EB)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Title
+                        Text(
+                            text = slide.title.ifBlank { "Slide $slideNum" },
+                            fontSize = titleSize,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0F172A)
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 1.dp)
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Points
+                        val points = slide.points.filter { it.isNotBlank() }
+                        if (points.isNotEmpty()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                points.forEach { pt ->
+                                    val isHighlighted = searchQuery.isNotBlank() && pt.contains(searchQuery, ignoreCase = true)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .then(if (isHighlighted) Modifier.background(Color(0xFFFEF08A).copy(alpha = 0.5f), RoundedCornerShape(4.dp)) else Modifier),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .padding(top = (bodySize.value * 0.4f).dp)
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(0xFF2563EB))
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(
+                                            text = pt,
+                                            fontSize = bodySize,
+                                            color = Color(0xFF1E293B),
+                                            lineHeight = (bodySize.value * 1.5f).sp
+                                        )
+                                    }
+                                }
+                            }
+                        } else if (slide.rawContent.isNotBlank()) {
+                            Text(
+                                text = slide.rawContent,
+                                fontSize = bodySize,
+                                color = Color(0xFF1E293B)
+                            )
+                        }
+
+                        // Notes
+                        if (slide.notes.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Notes: ${slide.notes}",
+                                fontSize = (bodySize.value * 0.85f).sp,
+                                color = Color(0xFF713F12),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFFFEF9C3))
+                                    .padding(8.dp)
+                            )
+                        }
+                    }
                 }
             }
         }

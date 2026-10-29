@@ -1,11 +1,13 @@
 package com.simats.intellifile.data.repository
 
 import android.content.Context
+import com.simats.intellifile.data.api.IntelliFileApiService
 import com.simats.intellifile.data.api.RetrofitClient
 import com.simats.intellifile.data.model.*
 
 class AiRepository(private val context: Context) {
-    private val api = RetrofitClient.getApiService(context)
+    private val api: IntelliFileApiService
+        get() = RetrofitClient.getApiService(context)
 
     suspend fun sendChatMessage(
         message: String,
