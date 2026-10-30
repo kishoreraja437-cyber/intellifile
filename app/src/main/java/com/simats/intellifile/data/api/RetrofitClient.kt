@@ -45,6 +45,10 @@ object RetrofitClient {
                 builder.header("Authorization", "Bearer $token")
                 builder.header("X-Authorization", "Bearer $token")
             }
+            val userId = sessionManager.getUserId()
+            if (userId > 0) {
+                builder.header("X-User-Id", userId.toString())
+            }
 
             chain.proceed(builder.build())
         }

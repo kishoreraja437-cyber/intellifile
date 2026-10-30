@@ -1,6 +1,18 @@
 package com.simats.intellifile.ui.home
 
+import android.Manifest
+import androidx.compose.foundation.border
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Spring
@@ -113,9 +125,66 @@ fun HomeScreen(
     var realFiles by remember { mutableStateOf<List<LocalFileItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var hasStoragePermission by remember { mutableStateOf(LocalFileManager.hasStoragePermission(context)) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val updated = LocalFileManager.hasStoragePermission(context)
+                if (updated != hasStoragePermission) {
+                    hasStoragePermission = updated
+                    refreshTrigger++
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    val manageStorageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        hasStoragePermission = LocalFileManager.hasStoragePermission(context)
+        refreshTrigger++
+    }
+
+    val legacyPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasStoragePermission = granted
+        refreshTrigger++
+    }
+
+    fun requestStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                }
+                manageStorageLauncher.launch(intent)
+            } catch (e: Exception) {
+                try {
+                    val fallbackIntent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                    manageStorageLauncher.launch(fallbackIntent)
+                } catch (e2: Exception) {
+                    val settingsIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.parse("package:${context.packageName}")
+                    }
+                    manageStorageLauncher.launch(settingsIntent)
+                }
+            }
+        } else {
+            legacyPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+    }
+
     // Query real document files asynchronously from storage
     LaunchedEffect(refreshTrigger) {
         isLoading = true
+        hasStoragePermission = LocalFileManager.hasStoragePermission(context)
         val loaded = LocalFileManager.getDeviceFiles(context)
         realFiles = loaded
         isLoading = false
@@ -177,6 +246,66 @@ fun HomeScreen(
                     onQueryChange = { searchQuery = it },
                     onMicClick = onMicClick
                 )
+            }
+
+            // Prominent Permission Banner if permission is not yet granted
+            if (!hasStoragePermission) {
+                item {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF8F8)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.5.dp, Color(0xFF55A9AF), RoundedCornerShape(16.dp))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF55A9AF)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Folder,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Grant Document Access",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = Color(0xFF183A3C)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Allow document access to find and organize your files.",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF537779),
+                                    lineHeight = 16.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = { requestStoragePermission() },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF55A9AF)),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text("Grant", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
             }
 
             // Summary Cards Row with Real Marked Counts
@@ -282,34 +411,52 @@ fun HomeScreen(
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = {
-                                openDocLauncher.launch(
-                                    arrayOf(
-                                        "application/pdf",
-                                        "application/msword",
-                                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                        "application/vnd.ms-powerpoint",
-                                        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                                        "application/vnd.ms-excel",
-                                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                        "text/plain",
-                                        "text/csv"
-                                    )
+                        if (!hasStoragePermission) {
+                            Button(
+                                onClick = { requestStoragePermission() },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF55A9AF)
                                 )
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Pick Documents to View", fontSize = 14.sp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Folder,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Grant Document Access", fontSize = 14.sp)
+                            }
+                        } else {
+                            Button(
+                                onClick = {
+                                    openDocLauncher.launch(
+                                        arrayOf(
+                                            "application/pdf",
+                                            "application/msword",
+                                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                            "application/vnd.ms-powerpoint",
+                                            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                                            "application/vnd.ms-excel",
+                                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                            "text/plain",
+                                            "text/csv"
+                                        )
+                                    )
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Pick Documents to View", fontSize = 14.sp)
+                            }
                         }
                     }
                 }

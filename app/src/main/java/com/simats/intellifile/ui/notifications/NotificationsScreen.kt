@@ -1,9 +1,13 @@
 package com.simats.intellifile.ui.notifications
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -11,10 +15,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.outlined.AccessTime
+import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material3.*
@@ -29,8 +34,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.simats.intellifile.data.manager.NotificationHelper
 import com.simats.intellifile.data.model.UserSettingsDto
 import com.simats.intellifile.data.repository.AuthRepository
+import com.simats.intellifile.data.session.SessionManager
 import kotlinx.coroutines.launch
 
 @Composable
@@ -41,16 +48,20 @@ fun NotificationsScreen(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val sessionManager = remember { SessionManager(context) }
     val authRepo = remember { AuthRepository(context) }
 
-    var importantAlertsEnabled by remember { mutableStateOf(true) }
-    var deadlineRemindersEnabled by remember { mutableStateOf(true) }
-    var newDocumentAlertsEnabled by remember { mutableStateOf(true) }
-    var quietHoursEnabled by remember { mutableStateOf(false) }
+    // Initialize immediately from local session to prevent UI flicker
+    val initialSettings = remember { sessionManager.getNotificationSettings() }
+    var importantAlertsEnabled by remember { mutableStateOf(initialSettings.important_alerts) }
+    var deadlineRemindersEnabled by remember { mutableStateOf(initialSettings.deadline_reminders) }
+    var newDocumentAlertsEnabled by remember { mutableStateOf(initialSettings.new_doc_alerts) }
+    var quietHoursEnabled by remember { mutableStateOf(initialSettings.quiet_hours) }
 
     var isLoading by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
 
+    // Fetch up-to-date user settings from backend
     LaunchedEffect(Unit) {
         isLoading = true
         val result = authRepo.getSettings()
@@ -60,6 +71,31 @@ fun NotificationsScreen(
             deadlineRemindersEnabled = settings.deadline_reminders
             newDocumentAlertsEnabled = settings.new_doc_alerts
             quietHoursEnabled = settings.quiet_hours
+        }
+    }
+
+    // Helper to auto-save to SessionManager and background sync
+    fun onSettingChanged(
+        important: Boolean = importantAlertsEnabled,
+        deadlines: Boolean = deadlineRemindersEnabled,
+        newDocs: Boolean = newDocumentAlertsEnabled,
+        quiet: Boolean = quietHoursEnabled
+    ) {
+        sessionManager.saveNotificationSettings(
+            importantAlerts = important,
+            deadlineReminders = deadlines,
+            newDocAlerts = newDocs,
+            quietHours = quiet
+        )
+        coroutineScope.launch {
+            authRepo.updateSettings(
+                UserSettingsDto(
+                    important_alerts = important,
+                    deadline_reminders = deadlines,
+                    new_doc_alerts = newDocs,
+                    quiet_hours = quiet
+                )
+            )
         }
     }
 
@@ -129,7 +165,10 @@ fun NotificationsScreen(
                 title = "Important file alerts",
                 description = "Get notified when files are marked as important.",
                 checked = importantAlertsEnabled,
-                onCheckedChange = { importantAlertsEnabled = it }
+                onCheckedChange = { checked ->
+                    importantAlertsEnabled = checked
+                    onSettingChanged(important = checked)
+                }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -142,7 +181,10 @@ fun NotificationsScreen(
                 title = "Deadline reminders",
                 description = "Receive reminders for upcoming deadlines.",
                 checked = deadlineRemindersEnabled,
-                onCheckedChange = { deadlineRemindersEnabled = it }
+                onCheckedChange = { checked ->
+                    deadlineRemindersEnabled = checked
+                    onSettingChanged(deadlines = checked)
+                }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -155,7 +197,10 @@ fun NotificationsScreen(
                 title = "New document alerts",
                 description = "Notify when new files are scanned or added.",
                 checked = newDocumentAlertsEnabled,
-                onCheckedChange = { newDocumentAlertsEnabled = it }
+                onCheckedChange = { checked ->
+                    newDocumentAlertsEnabled = checked
+                    onSettingChanged(newDocs = checked)
+                }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -168,10 +213,90 @@ fun NotificationsScreen(
                 title = "Quiet hours",
                 description = "Pause alerts during late hours.",
                 checked = quietHoursEnabled,
-                onCheckedChange = { quietHoursEnabled = it }
+                onCheckedChange = { checked ->
+                    quietHoursEnabled = checked
+                    onSettingChanged(quiet = checked)
+                }
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            // Expandable Quiet Hours schedule card
+            AnimatedVisibility(
+                visible = quietHoursEnabled,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFFF3F4F6))
+                        .border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(16.dp))
+                        .padding(14.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Outlined.Bedtime,
+                            contentDescription = "Quiet Hours Active",
+                            tint = Color(0xFF4B5563),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Quiet Schedule: 10:00 PM – 7:00 AM",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1F2937)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Notification popups and sound alerts are automatically silenced during these hours so you can rest undisturbed.",
+                        fontSize = 12.sp,
+                        color = Color(0xFF6B7280),
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Action: Test Notification
+            OutlinedButton(
+                onClick = {
+                    NotificationHelper.sendTestNotification(context, "Important File")
+                    Toast.makeText(context, "Test notification triggered!", Toast.LENGTH_SHORT).show()
+                },
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.primary
+                ),
+                border = ButtonDefaults.outlinedButtonBorder.copy(
+                    brush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.NotificationsActive,
+                        contentDescription = "Test Notification",
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Send Test Notification",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Save Settings Button
             Button(
@@ -187,7 +312,7 @@ fun NotificationsScreen(
                         val result = authRepo.updateSettings(newSettings)
                         isSaving = false
                         result.onSuccess {
-                            Toast.makeText(context, "Notification preferences saved", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Notification preferences saved successfully", Toast.LENGTH_SHORT).show()
                             onSaveSettingsClick()
                         }.onFailure { ex ->
                             Toast.makeText(context, ex.localizedMessage ?: "Failed to save settings", Toast.LENGTH_SHORT).show()
@@ -274,12 +399,30 @@ fun NotificationToggleCard(
         Column(
             modifier = Modifier.weight(1f)
         ) {
-            Text(
-                text = title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF111827)
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF111827)
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (checked) Color(0xFFDEF7EC) else Color(0xFFF3F4F6))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = if (checked) "ON" else "OFF",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (checked) Color(0xFF03543F) else Color(0xFF6B7280)
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(3.dp))
 

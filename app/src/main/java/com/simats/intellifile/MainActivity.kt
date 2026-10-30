@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.simats.intellifile.data.api.RetrofitClient
+import com.simats.intellifile.data.manager.LocalFileManager
 import com.simats.intellifile.data.session.SessionManager
 import com.simats.intellifile.ui.auth.ForgotPasswordScreen
 import com.simats.intellifile.ui.auth.LoginScreen
@@ -54,7 +55,11 @@ class AppNavigationViewModel(application: Application) : AndroidViewModel(applic
 
     fun onSplashFinished() {
         if (sessionManager.isLoggedIn()) {
-            _currentScreen.value = AppScreen.MAIN
+            if (!LocalFileManager.hasStoragePermission(getApplication())) {
+                _currentScreen.value = AppScreen.PERMISSION
+            } else {
+                _currentScreen.value = AppScreen.MAIN
+            }
         } else {
             _currentScreen.value = AppScreen.ONBOARD
         }
@@ -65,11 +70,19 @@ class AppNavigationViewModel(application: Application) : AndroidViewModel(applic
     }
 
     fun onLoginSuccess() {
-        _currentScreen.value = AppScreen.MAIN
+        if (!LocalFileManager.hasStoragePermission(getApplication())) {
+            _currentScreen.value = AppScreen.PERMISSION
+        } else {
+            _currentScreen.value = AppScreen.MAIN
+        }
     }
 
     fun onSignUpSuccess() {
-        _currentScreen.value = AppScreen.MAIN
+        if (!LocalFileManager.hasStoragePermission(getApplication())) {
+            _currentScreen.value = AppScreen.PERMISSION
+        } else {
+            _currentScreen.value = AppScreen.MAIN
+        }
     }
 
     fun onSignUpClicked() {

@@ -64,11 +64,13 @@ data class SettingsResponse(
 )
 
 data class UpdateSettingsRequest(
-    @SerializedName("theme_mode") val theme_mode: String,
-    @SerializedName("important_alerts") val important_alerts: Int,
-    @SerializedName("deadline_reminders") val deadline_reminders: Int,
-    @SerializedName("new_doc_alerts") val new_doc_alerts: Int,
-    @SerializedName("quiet_hours") val quiet_hours: Int
+    @SerializedName("theme_mode") val theme_mode: String? = null,
+    @SerializedName("important_alerts") val important_alerts: Int? = null,
+    @SerializedName("deadline_reminders") val deadline_reminders: Int? = null,
+    @SerializedName("new_doc_alerts") val new_doc_alerts: Int? = null,
+    @SerializedName("quiet_hours") val quiet_hours: Int? = null,
+    @SerializedName("user_id") val user_id: Int? = null,
+    @SerializedName("email") val email: String? = null
 )
 
 // --- Documents ---

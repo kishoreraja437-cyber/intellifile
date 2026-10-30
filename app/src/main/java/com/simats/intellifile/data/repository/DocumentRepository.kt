@@ -6,6 +6,7 @@ import com.simats.intellifile.data.api.IntelliFileApiService
 import com.simats.intellifile.data.api.RetrofitClient
 import com.simats.intellifile.data.manager.LocalFileManager
 import com.simats.intellifile.data.model.*
+import com.simats.intellifile.data.session.SessionManager
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -50,10 +51,20 @@ class DocumentRepository(private val context: Context) {
             val requestFile = uploadFile.asRequestBody(mimeType.toMediaTypeOrNull())
             val filePart = MultipartBody.Part.createFormData("document", fileName, requestFile)
 
+            val sessionManager = SessionManager(context)
+            val userId = sessionManager.getUserId()
+            val userIdPart = if (userId > 0) userId.toString().toRequestBody("text/plain".toMediaTypeOrNull()) else null
+            val titlePart = fileName.toRequestBody("text/plain".toMediaTypeOrNull())
             val categoryPart = category?.takeIf { it.isNotBlank() }?.toRequestBody("text/plain".toMediaTypeOrNull())
             val priorityPart = priority?.takeIf { it.isNotBlank() }?.toRequestBody("text/plain".toMediaTypeOrNull())
 
-            val response = api.uploadDocument(filePart, categoryPart, priorityPart)
+            val response = api.uploadDocument(
+                document = filePart,
+                category = categoryPart,
+                priority = priorityPart,
+                title = titlePart,
+                userId = userIdPart
+            )
             if (response.isSuccessful && response.body()?.success == true) {
                 val doc = response.body()?.document ?: return Result.failure(Exception("Upload completed but no document returned"))
                 Result.success(doc)

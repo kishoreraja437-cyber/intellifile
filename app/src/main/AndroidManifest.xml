@@ -5,6 +5,7 @@
     <!-- Network permissions for explicit AI Vault actions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Document and storage permissions -->
     <!-- Android 11+ (API 30+) document & file access -->

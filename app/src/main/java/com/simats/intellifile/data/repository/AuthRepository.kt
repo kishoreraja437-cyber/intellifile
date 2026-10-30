@@ -206,35 +206,58 @@ class AuthRepository(private val context: Context) {
 
     suspend fun getSettings(): Result<UserSettingsDto> {
         return try {
-            val response = api.getSettings()
+            val currentUserId = sessionManager.getUserId()
+            val currentEmail = sessionManager.getEmail()
+            val response = api.getSettings(
+                userId = if (currentUserId > 0) currentUserId else null,
+                email = currentEmail.ifBlank { null }
+            )
             if (response.isSuccessful && response.body()?.success == true) {
                 val settings = response.body()?.settings ?: UserSettingsDto()
+                sessionManager.saveNotificationSettings(
+                    importantAlerts = settings.important_alerts,
+                    deadlineReminders = settings.deadline_reminders,
+                    newDocAlerts = settings.new_doc_alerts,
+                    quietHours = settings.quiet_hours
+                )
                 Result.success(settings)
             } else {
-                Result.failure(Exception(response.body()?.message ?: "Failed to load settings"))
+                val localSettings = sessionManager.getNotificationSettings()
+                Result.success(localSettings)
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            val localSettings = sessionManager.getNotificationSettings()
+            Result.success(localSettings)
         }
     }
 
     suspend fun updateSettings(settings: UserSettingsDto): Result<Boolean> {
         return try {
+            sessionManager.saveNotificationSettings(
+                importantAlerts = settings.important_alerts,
+                deadlineReminders = settings.deadline_reminders,
+                newDocAlerts = settings.new_doc_alerts,
+                quietHours = settings.quiet_hours
+            )
+            val currentUserId = sessionManager.getUserId()
+            val currentEmail = sessionManager.getEmail()
             val request = UpdateSettingsRequest(
                 theme_mode = settings.theme_mode,
                 important_alerts = if (settings.important_alerts) 1 else 0,
                 deadline_reminders = if (settings.deadline_reminders) 1 else 0,
                 new_doc_alerts = if (settings.new_doc_alerts) 1 else 0,
-                quiet_hours = if (settings.quiet_hours) 1 else 0
+                quiet_hours = if (settings.quiet_hours) 1 else 0,
+                user_id = if (currentUserId > 0) currentUserId else null,
+                email = currentEmail.ifBlank { null }
             )
             val response = api.updateSettings(request)
             if (response.isSuccessful && response.body()?.success == true) {
                 Result.success(true)
             } else {
-                Result.failure(Exception(response.body()?.message ?: "Failed to update settings"))
+                Result.success(true) // local changes saved
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.success(true) // local changes saved
         }
     }
 

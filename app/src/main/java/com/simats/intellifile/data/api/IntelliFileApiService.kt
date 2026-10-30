@@ -51,7 +51,10 @@ interface IntelliFileApiService {
     ): Response<GenericResponse>
 
     @GET("auth/get_settings.php")
-    suspend fun getSettings(): Response<SettingsResponse>
+    suspend fun getSettings(
+        @Query("user_id") userId: Int? = null,
+        @Query("email") email: String? = null
+    ): Response<SettingsResponse>
 
     @POST("auth/update_settings.php")
     suspend fun updateSettings(
@@ -68,7 +71,9 @@ interface IntelliFileApiService {
     suspend fun uploadDocument(
         @Part document: MultipartBody.Part,
         @Part("category") category: RequestBody? = null,
-        @Part("priority") priority: RequestBody? = null
+        @Part("priority") priority: RequestBody? = null,
+        @Part("title") title: RequestBody? = null,
+        @Part("user_id") userId: RequestBody? = null
     ): Response<DocumentUploadResponse>
 
     @GET("documents/list.php")
