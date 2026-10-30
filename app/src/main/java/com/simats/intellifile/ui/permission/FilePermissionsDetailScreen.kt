@@ -97,7 +97,7 @@ fun FilePermissionsDetailScreen(
             PermissionItemCard(
                 icon = Icons.Outlined.Description,
                 title = "Documents Access",
-                description = "Access to your documents (PDF, DOCX, PPT, XLS, TXT) for searching and organizing.",
+                description = "Access to your documents (PDF, DOCX, XLS, TXT) for searching and organizing.",
                 isGranted = hasPermission,
                 onClick = onManageAccessClick
             )

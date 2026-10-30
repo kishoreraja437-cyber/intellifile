@@ -405,7 +405,7 @@ fun HomeScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "IntelliFile reads document files (PDF, Word, PPT, Excel, Text) locally on your phone.",
+                            text = "IntelliFile reads document files (PDF, Word, Excel, Text) locally on your phone.",
                             fontSize = 13.sp,
                             color = Color(0xFF6B7280),
                             textAlign = TextAlign.Center
@@ -435,8 +435,6 @@ fun HomeScreen(
                                             "application/pdf",
                                             "application/msword",
                                             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                            "application/vnd.ms-powerpoint",
-                                            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
                                             "application/vnd.ms-excel",
                                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                             "text/plain",

@@ -681,8 +681,6 @@ fun MyFilesScreen(
                                             "application/pdf",
                                             "application/msword",
                                             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                            "application/vnd.ms-powerpoint",
-                                            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
                                             "application/vnd.ms-excel",
                                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                             "text/plain"
@@ -846,7 +844,7 @@ fun MyFilesScreen(
                             )
                             VaultBenefitItem(
                                 title = "Deep Content Extraction",
-                                desc = "Full text extraction for PDF, DOCX, PPTX, XLSX, and TXT files."
+                                desc = "Full text extraction for PDF, DOCX, XLSX, and TXT files."
                             )
                             VaultBenefitItem(
                                 title = "Semantic AI Search & Q&A",

@@ -44,7 +44,6 @@ enum class FileFormatFilter(val label: String) {
     ALL("All"),
     PDF("PDF"),
     DOC("DOC"),
-    PPT("PPT"),
     OTHER("Other")
 }
 
@@ -91,8 +90,7 @@ fun RecentFilesScreen(
                 FileFormatFilter.ALL -> true
                 FileFormatFilter.PDF -> file.format.equals("PDF", ignoreCase = true)
                 FileFormatFilter.DOC -> file.format.equals("DOC", ignoreCase = true) || file.format.equals("DOCX", ignoreCase = true)
-                FileFormatFilter.PPT -> file.format.equals("PPT", ignoreCase = true) || file.format.equals("PPTX", ignoreCase = true)
-                FileFormatFilter.OTHER -> !listOf("PDF", "DOC", "DOCX", "PPT", "PPTX").contains(file.format.uppercase())
+                FileFormatFilter.OTHER -> !listOf("PDF", "DOC", "DOCX").contains(file.format.uppercase())
             }
             matchesSearch && matchesFormat
         }

@@ -146,7 +146,7 @@ fun PermissionScreen(
             ) {
                 PermissionPointItem(
                     icon = Icons.Default.Person,
-                    text = "Access documents (PDF, DOC, PPT, XLS, TXT)\nfor organizing"
+                    text = "Access documents (PDF, DOC, XLS, TXT)\nfor organizing"
                 )
 
                 PermissionPointItem(
