@@ -57,13 +57,13 @@ class AuthRepository(private val context: Context) {
         }
     }
 
-    suspend fun forgotPassword(email: String, newPassword: String): Result<String> {
+    suspend fun forgotPassword(email: String, newPassword: String, confirmPassword: String = newPassword): Result<String> {
         return try {
             val response = api.forgotPassword(
                 ForgotPasswordRequest(
                     email = email.trim(),
                     new_password = newPassword,
-                    confirm_password = newPassword
+                    confirm_password = confirmPassword
                 )
             )
             if (response.isSuccessful && response.body()?.success == true) {

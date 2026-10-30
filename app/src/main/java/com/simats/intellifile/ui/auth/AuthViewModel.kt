@@ -102,11 +102,30 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     fun forgotPassword(
         email: String,
         newPass: String,
-        onSuccess: () -> Unit,
+        confirmPass: String = newPass,
+        onSuccess: (String) -> Unit,
         onError: (String) -> Unit = {}
     ) {
-        if (email.isBlank() || newPass.isBlank()) {
-            val msg = "Please enter your email and a new password."
+        val trimmedEmail = email.trim()
+        val trimmedPass = newPass.trim()
+        val trimmedConfirm = confirmPass.trim()
+
+        if (trimmedEmail.isBlank() || trimmedPass.isBlank() || trimmedConfirm.isBlank()) {
+            val msg = "Please fill in all fields."
+            _uiState.value = _uiState.value.copy(errorMessage = msg)
+            onError(msg)
+            return
+        }
+
+        if (trimmedPass.length < 8) {
+            val msg = "Password must be at least 8 characters long."
+            _uiState.value = _uiState.value.copy(errorMessage = msg)
+            onError(msg)
+            return
+        }
+
+        if (trimmedPass != trimmedConfirm) {
+            val msg = "New password and confirmation password do not match."
             _uiState.value = _uiState.value.copy(errorMessage = msg)
             onError(msg)
             return
@@ -114,14 +133,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
-            val result = authRepo.forgotPassword(email, newPass)
+            val result = authRepo.forgotPassword(trimmedEmail, trimmedPass, trimmedConfirm)
             result.onSuccess { msg ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     successMessage = msg,
                     errorMessage = null
                 )
-                onSuccess()
+                onSuccess(msg)
             }.onFailure { ex ->
                 val msg = ex.localizedMessage ?: "Password reset failed."
                 _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = msg)

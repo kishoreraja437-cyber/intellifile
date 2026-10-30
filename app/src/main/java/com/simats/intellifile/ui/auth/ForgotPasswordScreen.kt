@@ -1,7 +1,9 @@
 package com.simats.intellifile.ui.auth
 
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -12,6 +14,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Mail
 import androidx.compose.material.icons.outlined.Visibility
@@ -22,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -34,21 +39,30 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.simats.intellifile.R
 import com.simats.intellifile.ui.theme.IntellifileTheme
 
 @Composable
 fun ForgotPasswordScreen(
+    authViewModel: AuthViewModel = viewModel(),
     onResetSuccess: () -> Unit = {},
     onBackToLoginClick: () -> Unit = {},
     onBackClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val uiState by authViewModel.uiState.collectAsState()
+
     var emailInput by remember { mutableStateOf("") }
     var newPasswordInput by remember { mutableStateOf("") }
     var confirmPasswordInput by remember { mutableStateOf("") }
     var isNewPasswordVisible by remember { mutableStateOf(false) }
     var isConfirmPasswordVisible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        authViewModel.clearError()
+    }
 
     Box(
         modifier = modifier
@@ -64,7 +78,7 @@ fun ForgotPasswordScreen(
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Top Bar
+            // Top Bar with Back Arrow
             Box(
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -91,7 +105,7 @@ fun ForgotPasswordScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Title
+            // Screen Title
             Text(
                 text = buildAnnotatedString {
                     withStyle(style = SpanStyle(color = Color(0xFF183A3C))) {
@@ -109,13 +123,79 @@ fun ForgotPasswordScreen(
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "Enter your registered email and create a new password",
+                text = "Enter your registered email and choose a strong new password",
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Error Banner
+            if (uiState.errorMessage != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFFEE2E2))
+                        .border(1.dp, Color(0xFFFCA5A5), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ErrorOutline,
+                            contentDescription = "Error",
+                            tint = Color(0xFFDC2626),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = uiState.errorMessage ?: "Password reset failed",
+                            color = Color(0xFFB91C1C),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            lineHeight = 18.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Success Banner
+            if (uiState.successMessage != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFDCFCE7))
+                        .border(1.dp, Color(0xFF86EFAC), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "Success",
+                            tint = Color(0xFF16A34A),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = uiState.successMessage ?: "Password updated successfully!",
+                            color = Color(0xFF15803D),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            lineHeight = 18.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
             // Email Input Field
             Column(
@@ -161,7 +241,10 @@ fun ForgotPasswordScreen(
                         }
                         BasicTextField(
                             value = emailInput,
-                            onValueChange = { emailInput = it },
+                            onValueChange = {
+                                emailInput = it
+                                if (uiState.errorMessage != null) authViewModel.clearError()
+                            },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                             modifier = Modifier.fillMaxWidth()
@@ -177,7 +260,7 @@ fun ForgotPasswordScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "New Password",
+                    text = "New Password (min 8 chars)",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -216,7 +299,10 @@ fun ForgotPasswordScreen(
                         }
                         BasicTextField(
                             value = newPasswordInput,
-                            onValueChange = { newPasswordInput = it },
+                            onValueChange = {
+                                newPasswordInput = it
+                                if (uiState.errorMessage != null) authViewModel.clearError()
+                            },
                             singleLine = true,
                             visualTransformation = if (isNewPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -284,7 +370,10 @@ fun ForgotPasswordScreen(
                         }
                         BasicTextField(
                             value = confirmPasswordInput,
-                            onValueChange = { confirmPasswordInput = it },
+                            onValueChange = {
+                                confirmPasswordInput = it
+                                if (uiState.errorMessage != null) authViewModel.clearError()
+                            },
                             singleLine = true,
                             visualTransformation = if (isConfirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -310,30 +399,49 @@ fun ForgotPasswordScreen(
 
             // Reset Password Button
             Button(
-                onClick = onResetSuccess,
+                onClick = {
+                    authViewModel.forgotPassword(
+                        email = emailInput,
+                        newPass = newPasswordInput,
+                        confirmPass = confirmPasswordInput,
+                        onSuccess = { msg ->
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            onResetSuccess()
+                        }
+                    )
+                },
+                enabled = !uiState.isLoading,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(26.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "Reset Password",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
+                if (uiState.isLoading) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(22.dp),
+                        strokeWidth = 2.dp
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "Reset Password",
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp)
-                    )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "Reset Password",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "Reset Password",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
 
