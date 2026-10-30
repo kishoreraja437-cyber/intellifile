@@ -1,6 +1,10 @@
 package com.simats.intellifile.ui.detail
 
 import android.net.Uri
+import android.widget.Toast
+import androidx.compose.material3.CircularProgressIndicator
+import com.simats.intellifile.data.repository.DocumentRepository
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -74,6 +78,9 @@ fun FileDetailScreen(
     onPriorityChanged: (PriorityLevel?) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val docRepository = remember { DocumentRepository(context) }
+    var isUploadingToVault by remember { mutableStateOf(false) }
     var selectedPriority by remember(fileData.priority) { mutableStateOf(fileData.priority) }
     var isVaultSynced by remember(fileData.isVaultSynced) { mutableStateOf(fileData.isVaultSynced) }
     var showVaultConfirmDialog by remember { mutableStateOf(false) }
@@ -244,13 +251,29 @@ fun FileDetailScreen(
                 Button(
                     onClick = {
                         showVaultConfirmDialog = false
-                        isVaultSynced = true
-                        val key = if (fileData.path.isNotBlank()) fileData.path else fileData.uriString
-                        LocalFileDatabaseHelper.getInstance(context).setVaultStatus(
-                            uriOrPath = key,
-                            fileName = fileData.fileName,
-                            isSynced = true
-                        )
+                        isUploadingToVault = true
+                        scope.launch {
+                            val result = docRepository.uploadToVault(
+                                filePath = fileData.path,
+                                uriString = fileData.uriString,
+                                fileName = fileData.fileName,
+                                category = fileData.category,
+                                priority = selectedPriority?.name
+                            )
+                            isUploadingToVault = false
+                            result.onSuccess {
+                                isVaultSynced = true
+                                val key = if (fileData.path.isNotBlank()) fileData.path else fileData.uriString
+                                LocalFileDatabaseHelper.getInstance(context).setVaultStatus(
+                                    uriOrPath = key,
+                                    fileName = fileData.fileName,
+                                    isSynced = true
+                                )
+                                Toast.makeText(context, "${fileData.fileName} uploaded to AI Vault successfully!", Toast.LENGTH_SHORT).show()
+                            }.onFailure { err ->
+                                Toast.makeText(context, "AI Vault upload failed: ${err.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
@@ -399,12 +422,21 @@ fun FileDetailScreen(
                     if (!isVaultSynced) {
                         Button(
                             onClick = { showVaultConfirmDialog = true },
+                            enabled = !isUploadingToVault,
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                             shape = RoundedCornerShape(10.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                             modifier = Modifier.height(34.dp)
                         ) {
-                            Text("Add to Vault", fontSize = 12.sp)
+                            if (isUploadingToVault) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text("Add to Vault", fontSize = 12.sp)
+                            }
                         }
                     }
                 }

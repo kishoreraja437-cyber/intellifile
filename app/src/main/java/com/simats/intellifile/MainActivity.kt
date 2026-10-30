@@ -44,7 +44,12 @@ class AppNavigationViewModel(application: Application) : AndroidViewModel(applic
     private val _currentScreen = MutableStateFlow(AppScreen.SPLASH)
     val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
 
-    private val _themeMode = MutableStateFlow(AppThemeMode.LIGHT)
+    private val initialTheme = try {
+        AppThemeMode.valueOf(sessionManager.getThemeMode())
+    } catch (e: Exception) {
+        AppThemeMode.LIGHT
+    }
+    private val _themeMode = MutableStateFlow(initialTheme)
     val themeMode: StateFlow<AppThemeMode> = _themeMode.asStateFlow()
 
     fun onSplashFinished() {
@@ -106,6 +111,7 @@ class AppNavigationViewModel(application: Application) : AndroidViewModel(applic
     }
 
     fun onThemeSelected(mode: AppThemeMode) {
+        sessionManager.saveThemeMode(mode.name)
         _themeMode.value = mode
     }
 }

@@ -1,5 +1,6 @@
 package com.simats.intellifile.ui.theme
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,10 +29,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.simats.intellifile.data.model.UserSettingsDto
+import com.simats.intellifile.data.repository.AuthRepository
+import com.simats.intellifile.data.session.SessionManager
+import kotlinx.coroutines.launch
 
 enum class AppThemeMode(val title: String, val description: String) {
     LIGHT("Light Theme", "Clean and bright interface for daytime use."),
@@ -46,6 +52,10 @@ fun ThemeSettingsScreen(
     onBackClick: () -> Unit = {},
     onSaveTheme: (AppThemeMode) -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val sessionManager = remember { SessionManager(context) }
+    val authRepo = remember { AuthRepository(context) }
     var selectedTheme by remember { mutableStateOf(initialThemeMode) }
 
     Box(
@@ -130,7 +140,14 @@ fun ThemeSettingsScreen(
 
             // Save Button
             Button(
-                onClick = { onSaveTheme(selectedTheme) },
+                onClick = {
+                    sessionManager.saveThemeMode(selectedTheme.name)
+                    onSaveTheme(selectedTheme)
+                    scope.launch {
+                        authRepo.updateSettings(UserSettingsDto(theme_mode = selectedTheme.name))
+                    }
+                    Toast.makeText(context, "Theme updated successfully", Toast.LENGTH_SHORT).show()
+                },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
