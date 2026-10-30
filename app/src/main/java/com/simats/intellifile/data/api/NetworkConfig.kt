@@ -20,16 +20,30 @@ object NetworkConfig {
 
     /**
      * Resolves the active base URL for backend network requests.
+     * Guaranteed single base URL across the entire app.
      */
     fun getBaseUrl(context: Context? = null): String {
-        if (context != null) {
-            val prefs = context.applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-            val custom = prefs.getString(KEY_CUSTOM_BASE_URL, null)
-            if (!custom.isNullOrBlank()) {
-                return if (custom.endsWith("/")) custom else "$custom/"
-            }
-        }
         return if (BASE_URL.endsWith("/")) BASE_URL else "$BASE_URL/"
+    }
+
+    /**
+     * Resolves relative or localhost media/photo paths into accessible full URLs.
+     */
+    fun resolveMediaUrl(rawUrl: String?): String? {
+        if (rawUrl.isNullOrBlank()) return null
+        val cleaned = rawUrl.trim()
+        if (cleaned.contains("localhost") || cleaned.contains("127.0.0.1") || cleaned.contains("10.0.2.2") || cleaned.contains("172.23.176.96")) {
+            val path = cleaned.substringAfter("/intellifile_backend/", "").ifBlank {
+                cleaned.substringAfter("uploads/", "uploads/")
+            }.trimStart('/')
+            val relPath = if (path.startsWith("uploads/")) path else "uploads/$path"
+            return getBaseUrl() + relPath
+        }
+        if (cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
+            return cleaned
+        }
+        val relPath = cleaned.trimStart('/')
+        return getBaseUrl() + relPath
     }
 
     /**

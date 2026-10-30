@@ -17,7 +17,8 @@ data class AuthResponse(
     @SerializedName("success") val success: Boolean,
     @SerializedName("message") val message: String? = null,
     @SerializedName("token") val token: String? = null,
-    @SerializedName("user") val user: UserDto? = null
+    @SerializedName("user") val user: UserDto? = null,
+    @SerializedName("profile") val profile: UserDto? = null
 )
 
 data class LoginRequest(
@@ -33,7 +34,8 @@ data class SignUpRequest(
 
 data class ForgotPasswordRequest(
     @SerializedName("email") val email: String,
-    @SerializedName("new_password") val new_password: String
+    @SerializedName("new_password") val new_password: String,
+    @SerializedName("confirm_password") val confirm_password: String? = null
 )
 
 data class ChangePasswordRequest(
@@ -43,7 +45,8 @@ data class ChangePasswordRequest(
 
 data class EditProfileRequest(
     @SerializedName("full_name") val full_name: String,
-    @SerializedName("email") val email: String
+    @SerializedName("email") val email: String,
+    @SerializedName("user_id") val user_id: Int? = null
 )
 
 data class UserSettingsDto(
@@ -254,5 +257,6 @@ data class GenericResponse(
     @SerializedName("success") val success: Boolean,
     @SerializedName("message") val message: String? = null,
     @SerializedName("share_url") val share_url: String? = null,
-    @SerializedName("profile_image_url") val profile_image_url: String? = null
+    @SerializedName("profile_image_url") val profile_image_url: String? = null,
+    @SerializedName("profile_image") val profile_image: String? = null
 )

@@ -4,6 +4,7 @@ import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -33,14 +34,7 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,11 +52,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.simats.intellifile.R
 import com.simats.intellifile.ui.dialog.LogoutConfirmationDialog
 
 @Composable
 fun ProfileScreen(
+    profileViewModel: ProfileViewModel = viewModel(),
     modifier: Modifier = Modifier,
     userName: String = "User Name",
     userEmail: String = "user@email.com",
@@ -74,16 +71,33 @@ fun ProfileScreen(
     onHelpSupportClick: () -> Unit = {},
     onLogoutClick: () -> Unit = {}
 ) {
-    var isDarkMode by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val uiState by profileViewModel.uiState.collectAsState()
+
+    val user = uiState.user
+    val currentName = user?.full_name?.ifBlank { userName } ?: userName
+    val currentEmail = user?.email?.ifBlank { userEmail } ?: userEmail
+    val profileImageUrl = user?.profile_image
+
+    val isDarkMode = uiState.settings.theme_mode.uppercase() == "DARK"
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
     var showCameraPhotoPicker by remember { mutableStateOf(false) }
+    var showViewPhotoDialog by remember { mutableStateOf(false) }
 
-    var currentName by remember { mutableStateOf(userName) }
-    var currentEmail by remember { mutableStateOf(userEmail) }
-
-    val context = LocalContext.current
     var selectedAvatarUri by remember { mutableStateOf<Uri?>(null) }
+
+    LaunchedEffect(uiState.statusMessage) {
+        uiState.statusMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+        }
+    }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -91,6 +105,30 @@ fun ProfileScreen(
         if (uri != null) {
             selectedAvatarUri = uri
             showCameraPhotoPicker = false
+            profileViewModel.uploadProfilePhoto(uri) {
+                selectedAvatarUri = null
+            }
+        }
+    }
+
+    val cameraPhotoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) {
+            try {
+                val tempFile = java.io.File(context.cacheDir, "camera_profile_${System.currentTimeMillis()}.jpg")
+                tempFile.outputStream().use { out ->
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, out)
+                }
+                val uri = Uri.fromFile(tempFile)
+                selectedAvatarUri = uri
+                showCameraPhotoPicker = false
+                profileViewModel.uploadProfilePhoto(uri) {
+                    selectedAvatarUri = null
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "Failed to capture image: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -99,7 +137,9 @@ fun ProfileScreen(
             onDismissRequest = { showLogoutDialog = false },
             onConfirmLogout = {
                 showLogoutDialog = false
-                onLogoutClick()
+                profileViewModel.logout {
+                    onLogoutClick()
+                }
             },
             onCancel = { showLogoutDialog = false }
         )
@@ -109,20 +149,20 @@ fun ProfileScreen(
         EditProfileDialog(
             initialName = currentName,
             initialEmail = currentEmail,
+            isLoading = uiState.isLoading,
             onDismissRequest = { showEditProfileDialog = false },
             onSaveProfile = { newName, newEmail ->
-                currentName = newName
-                currentEmail = newEmail
-                showEditProfileDialog = false
+                profileViewModel.editProfile(newName, newEmail) {
+                    showEditProfileDialog = false
+                }
             }
         )
     }
 
-    var showViewPhotoDialog by remember { mutableStateOf(false) }
-
     if (showViewPhotoDialog) {
         ViewProfilePhotoDialog(
             selectedAvatarUri = selectedAvatarUri,
+            remoteImageUrl = profileImageUrl,
             onDismissRequest = { showViewPhotoDialog = false }
         )
     }
@@ -134,11 +174,15 @@ fun ProfileScreen(
                 showCameraPhotoPicker = false
                 showViewPhotoDialog = true
             },
+            onTakePhoto = {
+                cameraPhotoLauncher.launch(null)
+            },
             onChooseFromGallery = {
                 photoPickerLauncher.launch("image/*")
             },
             onRemovePhoto = {
                 selectedAvatarUri = null
+                profileViewModel.removeProfilePhoto()
                 showCameraPhotoPicker = false
             }
         )
@@ -183,7 +227,17 @@ fun ProfileScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            if (uiState.isLoading) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp),
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(13.dp))
+            } else {
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
             // User Avatar Section
             Column(
@@ -223,6 +277,17 @@ fun ProfileScreen(
                                 bitmap = customBitmap,
                                 contentDescription = "User Avatar",
                                 contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(100.dp)
+                                    .clip(CircleShape)
+                            )
+                        } else if (!profileImageUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = profileImageUrl,
+                                contentDescription = "User Avatar",
+                                contentScale = ContentScale.Crop,
+                                placeholder = painterResource(id = R.drawable.human),
+                                error = painterResource(id = R.drawable.human),
                                 modifier = Modifier
                                     .size(100.dp)
                                     .clip(CircleShape)
@@ -426,6 +491,7 @@ fun ProfileScreen(
 fun EditProfileDialog(
     initialName: String,
     initialEmail: String,
+    isLoading: Boolean = false,
     onDismissRequest: () -> Unit,
     onSaveProfile: (name: String, email: String) -> Unit
 ) {
@@ -506,18 +572,27 @@ fun EditProfileDialog(
                             onSaveProfile(nameInput, emailInput)
                         }
                     },
+                    enabled = !isLoading,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp)
                 ) {
-                    Text(
-                        text = "Save Changes",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            text = "Save Changes",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -525,6 +600,7 @@ fun EditProfileDialog(
                 // Cancel Button
                 Button(
                     onClick = onDismissRequest,
+                    enabled = !isLoading,
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
@@ -607,6 +683,7 @@ fun ProfileInputField(
 fun ChangePhotoDialog(
     onDismissRequest: () -> Unit,
     onViewPhoto: () -> Unit,
+    onTakePhoto: () -> Unit,
     onChooseFromGallery: () -> Unit,
     onRemovePhoto: () -> Unit
 ) {
@@ -695,6 +772,37 @@ fun ChangePhotoDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
+                // Take Photo (Camera) Button
+                Button(
+                    onClick = onTakePhoto,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = "Take Photo",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Take Photo (Camera)",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
                 // Choose from Gallery Button
                 Button(
                     onClick = onChooseFromGallery,
@@ -769,6 +877,7 @@ fun ChangePhotoDialog(
 @Composable
 fun ViewProfilePhotoDialog(
     selectedAvatarUri: Uri?,
+    remoteImageUrl: String? = null,
     onDismissRequest: () -> Unit
 ) {
     val context = LocalContext.current
@@ -846,6 +955,17 @@ fun ViewProfilePhotoDialog(
                             bitmap = customBitmap,
                             contentDescription = "Full Profile Picture",
                             contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                        )
+                    } else if (!remoteImageUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = remoteImageUrl,
+                            contentDescription = "Full Profile Picture",
+                            contentScale = ContentScale.Crop,
+                            placeholder = painterResource(id = R.drawable.human),
+                            error = painterResource(id = R.drawable.human),
                             modifier = Modifier
                                 .fillMaxSize()
                                 .clip(CircleShape)

@@ -33,11 +33,12 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun loadProfile() {
+        val cachedImage = authRepo.sessionManager.getProfileImage()
         val cachedUser = UserDto(
             id = authRepo.sessionManager.getUserId(),
             full_name = authRepo.sessionManager.getFullName().ifBlank { "User" },
             email = authRepo.sessionManager.getEmail().ifBlank { "user@example.com" },
-            profile_image = authRepo.sessionManager.getProfileImage()
+            profile_image = cachedImage
         )
         _uiState.value = _uiState.value.copy(user = cachedUser)
 
@@ -45,15 +46,20 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             _uiState.value = _uiState.value.copy(isLoading = true)
             val result = authRepo.getProfile()
             result.onSuccess { user ->
+                val finalUser = if (user.profile_image.isNullOrBlank() && !cachedImage.isNullOrBlank()) {
+                    user.copy(profile_image = cachedImage)
+                } else {
+                    user
+                }
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    user = user,
+                    user = finalUser,
                     errorMessage = null
                 )
             }.onFailure { ex ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    errorMessage = ex.localizedMessage
+                    errorMessage = null // Keep cached user visible cleanly without blocking UI
                 )
             }
         }

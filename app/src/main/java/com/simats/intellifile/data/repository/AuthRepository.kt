@@ -21,7 +21,9 @@ class AuthRepository(private val context: Context) {
             if (response.isSuccessful && response.body()?.success == true) {
                 val body = response.body()!!
                 val token = body.token ?: ""
-                val user = body.user ?: return Result.failure(Exception("No user profile returned"))
+                var user = body.user ?: return Result.failure(Exception("No user profile returned"))
+                val resolvedImg = com.simats.intellifile.data.api.NetworkConfig.resolveMediaUrl(user.profile_image)
+                user = user.copy(profile_image = resolvedImg)
                 sessionManager.saveUserSession(token, user)
                 RetrofitClient.resetClient()
                 Result.success(user)
@@ -40,7 +42,9 @@ class AuthRepository(private val context: Context) {
             if (response.isSuccessful && response.body()?.success == true) {
                 val body = response.body()!!
                 val token = body.token ?: ""
-                val user = body.user ?: return Result.failure(Exception("No user profile returned"))
+                var user = body.user ?: return Result.failure(Exception("No user profile returned"))
+                val resolvedImg = com.simats.intellifile.data.api.NetworkConfig.resolveMediaUrl(user.profile_image)
+                user = user.copy(profile_image = resolvedImg)
                 sessionManager.saveUserSession(token, user)
                 RetrofitClient.resetClient()
                 Result.success(user)
@@ -55,7 +59,13 @@ class AuthRepository(private val context: Context) {
 
     suspend fun forgotPassword(email: String, newPassword: String): Result<String> {
         return try {
-            val response = api.forgotPassword(ForgotPasswordRequest(email.trim(), newPassword))
+            val response = api.forgotPassword(
+                ForgotPasswordRequest(
+                    email = email.trim(),
+                    new_password = newPassword,
+                    confirm_password = newPassword
+                )
+            )
             if (response.isSuccessful && response.body()?.success == true) {
                 Result.success(response.body()?.message ?: "Password reset successful")
             } else {
@@ -99,7 +109,9 @@ class AuthRepository(private val context: Context) {
         return try {
             val response = api.getProfile()
             if (response.isSuccessful && response.body()?.success == true) {
-                val user = response.body()?.user ?: return Result.failure(Exception("User not found"))
+                var user = response.body()?.user ?: response.body()?.profile ?: return Result.failure(Exception("User not found"))
+                val resolvedImg = com.simats.intellifile.data.api.NetworkConfig.resolveMediaUrl(user.profile_image)
+                user = user.copy(profile_image = resolvedImg)
                 sessionManager.updateProfile(user.full_name, user.email, user.profile_image)
                 Result.success(user)
             } else {
@@ -113,9 +125,9 @@ class AuthRepository(private val context: Context) {
 
     suspend fun editProfile(name: String, email: String): Result<UserDto> {
         return try {
-            val response = api.editProfile(EditProfileRequest(name.trim(), email.trim()))
+            val response = api.editProfile(EditProfileRequest(name.trim(), email.trim(), user_id = sessionManager.getUserId()))
             if (response.isSuccessful && response.body()?.success == true) {
-                val user = response.body()?.user ?: UserDto(
+                val user = response.body()?.user ?: response.body()?.profile ?: UserDto(
                     id = sessionManager.getUserId(),
                     full_name = name,
                     email = email
@@ -137,7 +149,7 @@ class AuthRepository(private val context: Context) {
             val part = MultipartBody.Part.createFormData("profile_image", imageFile.name, requestFile)
             val response = api.uploadProfileImage(part)
             if (response.isSuccessful && response.body()?.success == true) {
-                val url = response.body()?.profile_image_url ?: ""
+                val url = response.body()?.profile_image_url ?: response.body()?.profile_image ?: ""
                 sessionManager.updateProfile(
                     name = sessionManager.getFullName(),
                     email = sessionManager.getEmail(),
