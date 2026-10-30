@@ -495,6 +495,9 @@ fun MainScreen(
                                         PriorityLevel.LOW -> PriorityFilter.LOW
                                     }
                                     selectedTab = BottomNavItem.SAVED
+                                },
+                                onNavigateToAiChat = { _ ->
+                                    selectedTab = BottomNavItem.AI
                                 }
                             )
                             BottomNavItem.SAVED -> SavedScreen(

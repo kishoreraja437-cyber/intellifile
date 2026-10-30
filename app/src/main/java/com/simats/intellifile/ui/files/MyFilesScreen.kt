@@ -48,6 +48,13 @@ import com.simats.intellifile.data.manager.LocalFileManager
 import com.simats.intellifile.data.model.DocumentDto
 import com.simats.intellifile.data.model.LocalFileItem
 import com.simats.intellifile.data.repository.DocumentRepository
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.ui.text.style.TextAlign
+import com.simats.intellifile.data.model.AiSummarizeResponse
+import com.simats.intellifile.data.repository.AiRepository
+
 import com.simats.intellifile.ui.home.PriorityLevel
 import com.simats.intellifile.ui.home.PrioritySummaryCard
 import kotlinx.coroutines.launch
@@ -61,11 +68,13 @@ enum class StorageSourceTab {
 fun MyFilesScreen(
     modifier: Modifier = Modifier,
     onBackClick: () -> Unit = {},
-    onQuickAccessClick: (PriorityLevel) -> Unit = {}
+    onQuickAccessClick: (PriorityLevel) -> Unit = {},
+    onNavigateToAiChat: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val docRepo = remember { DocumentRepository(context) }
+    val aiRepo = remember { AiRepository(context) }
     val dbHelper = remember { LocalFileDatabaseHelper.getInstance(context) }
 
     var selectedSource by remember { mutableStateOf(StorageSourceTab.DEVICE_FILES) }
@@ -78,7 +87,61 @@ fun MyFilesScreen(
     var isVaultLoading by remember { mutableStateOf(false) }
     var isUploadingToVault by remember { mutableStateOf(false) }
     var selectedSummaryDoc by remember { mutableStateOf<DocumentDto?>(null) }
+    var isGeneratingInsights by remember { mutableStateOf(false) }
+    var aiInsightsResult by remember { mutableStateOf<AiSummarizeResponse?>(null) }
+    var aiInsightsError by remember { mutableStateOf<String?>(null) }
     var docToDelete by remember { mutableStateOf<DocumentDto?>(null) }
+
+    // Function to generate and load AI Insights
+    fun loadInsightsForDoc(doc: DocumentDto) {
+        selectedSummaryDoc = doc
+        isGeneratingInsights = true
+        aiInsightsResult = null
+        aiInsightsError = null
+
+        coroutineScope.launch {
+            var contentToSummarize = doc.content_text
+            if (contentToSummarize.isNullOrBlank()) {
+                val matchingLocal = realFiles.find { it.title.equals(doc.title, ignoreCase = true) }
+                if (matchingLocal != null) {
+                    try {
+                        contentToSummarize = LocalFileManager.readTextContent(
+                            context = context,
+                            uriString = matchingLocal.uri.toString(),
+                            path = matchingLocal.path,
+                            format = matchingLocal.format
+                        )
+                    } catch (_: Exception) {}
+                }
+            }
+
+            val res = aiRepo.summarizeDocument(
+                documentId = if (doc.id > 0) doc.id else null,
+                title = doc.title,
+                contentText = contentToSummarize
+            )
+
+            isGeneratingInsights = false
+            res.onSuccess { summaryResponse ->
+                aiInsightsResult = summaryResponse
+            }.onFailure { ex ->
+                if (!contentToSummarize.isNullOrBlank()) {
+                    val rawSentences = contentToSummarize.split(Regex("(?<=[.!?\\n])\\s+")).filter { it.isNotBlank() }
+                    val bullets = rawSentences.take(4).map { it.trim().trimStart('-', '*', '•').trim() }
+                    val fallbackSummary = if (rawSentences.size > 2) rawSentences.take(2).joinToString(" ") else contentToSummarize.take(300)
+                    aiInsightsResult = AiSummarizeResponse(
+                        success = true,
+                        title = doc.title,
+                        summary = fallbackSummary,
+                        bullet_points = bullets,
+                        sentence_count = bullets.size
+                    )
+                } else {
+                    aiInsightsError = ex.message ?: "Failed to generate AI insights"
+                }
+            }
+        }
+    }
 
     // Query real local document files
     LaunchedEffect(refreshTrigger) {
@@ -153,96 +216,392 @@ fun MyFilesScreen(
     val normalSweep = if (totalPrioritized > 0) (normalCount.toFloat() / totalPrioritized) * 360f else 0f
     val lowSweep = if (totalPrioritized > 0) (lowCount.toFloat() / totalPrioritized) * 360f else 0f
 
-    // AI Summary Modal Dialog
+    // AI Document Insights Modal Dialog
     selectedSummaryDoc?.let { doc ->
         AlertDialog(
-            onDismissRequest = { selectedSummaryDoc = null },
+            onDismissRequest = {
+                selectedSummaryDoc = null
+                aiInsightsResult = null
+                aiInsightsError = null
+            },
             title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "AI Document Insights",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "AI Document Insights",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Neural Analysis & Summarization",
+                            fontSize = 11.sp,
+                            color = Color(0xFF6B7280)
+                        )
+                    }
                 }
             },
             text = {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 420.dp)
+                        .heightIn(max = 480.dp)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = doc.title,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                        ) {
-                            Text(text = doc.format, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFFDEF7EC))
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                        ) {
-                            Text(text = doc.priority, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF03543F))
-                        }
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFFE1EFFE))
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                        ) {
-                            Text(text = doc.file_size, fontSize = 11.sp, color = Color(0xFF1E429F))
+                    // Document Header Card
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = doc.title,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFFE0E7FF))
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text(text = doc.format, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF3730A3))
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(
+                                            when (doc.priority.uppercase()) {
+                                                "IMPORTANT" -> Color(0xFFFEE2E2)
+                                                "NORMAL" -> Color(0xFFDEF7EC)
+                                                else -> Color(0xFFF3F4F6)
+                                            }
+                                        )
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = doc.priority,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = when (doc.priority.uppercase()) {
+                                            "IMPORTANT" -> Color(0xFF991B1B)
+                                            "NORMAL" -> Color(0xFF03543F)
+                                            else -> Color(0xFF374151)
+                                        }
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFFF3F4F6))
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text(text = doc.file_size, fontSize = 11.sp, color = Color(0xFF4B5563))
+                                }
+                            }
                         }
                     }
 
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    if (isGeneratingInsights) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(36.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 3.dp
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                text = "Analyzing document with AI...",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp,
+                                color = Color(0xFF1F2937)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Extracting executive summary and key points",
+                                fontSize = 12.sp,
+                                color = Color(0xFF6B7280)
+                            )
+                        }
+                    } else if (aiInsightsResult != null) {
+                        val insights = aiInsightsResult!!
 
-                    Text(
-                        text = "AI Extracted Summary & Context:",
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                        // 1. Executive Summary Box
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFFF0FDF4))
+                                .border(1.dp, Color(0xFFBBF7D0), RoundedCornerShape(12.dp))
+                                .padding(12.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = Color(0xFF16A34A),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "AI Executive Summary",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF166534)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = insights.summary ?: "Summary generated successfully.",
+                                fontSize = 13.sp,
+                                color = Color(0xFF1E293B),
+                                lineHeight = 19.sp
+                            )
+                        }
 
-                    val summaryContent = if (!doc.content_text.isNullOrBlank()) {
-                        doc.content_text
-                    } else if (doc.has_text) {
-                        "Document text successfully extracted and indexed into the semantic vector vault. You can ask questions about this document in AI Chat."
-                    } else {
-                        "Document received in AI Vault. Server AI extraction processing completed."
+                        // 2. Key Highlights / Bullet points
+                        if (insights.bullet_points.isNotEmpty()) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFFF8FAFC))
+                                    .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
+                                    .padding(12.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lightbulb,
+                                        contentDescription = null,
+                                        tint = Color(0xFFEAB308),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Key Takeaways & Points",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = Color(0xFF334155)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                insights.bullet_points.forEachIndexed { index, point ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 3.dp),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .padding(top = 4.dp)
+                                                .size(16.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "${index + 1}",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = point,
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF374151),
+                                            lineHeight = 17.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // 3. Document Analysis Badges
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFF3F4F6))
+                                    .padding(8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Pages", fontSize = 10.sp, color = Color(0xFF6B7280))
+                                    Text("${doc.total_pages}", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFF3F4F6))
+                                    .padding(8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Engine", fontSize = 10.sp, color = Color(0xFF6B7280))
+                                    Text("Neural NLP", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFF3F4F6))
+                                    .padding(8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Vault Status", fontSize = 10.sp, color = Color(0xFF6B7280))
+                                    Text("Indexed", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
+                                }
+                            }
+                        }
+
+                        // 4. Raw Extracted Preview (if available)
+                        if (!doc.content_text.isNullOrBlank()) {
+                            var showRawText by remember { mutableStateOf(false) }
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFF8FAFC))
+                                    .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
+                                    .padding(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showRawText = !showRawText },
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Extracted Text Preview",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF475569)
+                                    )
+                                    Text(
+                                        text = if (showRawText) "Hide" else "Show",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                if (showRawText) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = doc.content_text.take(600) + if (doc.content_text.length > 600) "..." else "",
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF64748B),
+                                        lineHeight = 16.sp
+                                    )
+                                }
+                            }
+                        }
+                    } else if (aiInsightsError != null) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFFFEF2F2))
+                                .border(1.dp, Color(0xFFFECACA), RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Unable to Generate Insights",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color(0xFF991B1B)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = aiInsightsError ?: "Unknown error occurred.",
+                                fontSize = 12.sp,
+                                color = Color(0xFF7F1D1D),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Button(
+                                onClick = { loadInsightsForDoc(doc) },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Retry Analysis", fontSize = 12.sp)
+                            }
+                        }
                     }
-
-                    Text(
-                        text = summaryContent,
-                        fontSize = 13.sp,
-                        color = Color(0xFF374151),
-                        lineHeight = 18.sp
-                    )
                 }
             },
             confirmButton = {
-                TextButton(onClick = { selectedSummaryDoc = null }) {
-                    Text("Close", fontWeight = FontWeight.Bold)
+                Button(
+                    onClick = {
+                        val docTitle = doc.title
+                        selectedSummaryDoc = null
+                        aiInsightsResult = null
+                        onNavigateToAiChat(docTitle)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Chat,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Chat with AI", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        selectedSummaryDoc = null
+                        aiInsightsResult = null
+                        aiInsightsError = null
+                    }
+                ) {
+                    Text("Close", color = Color(0xFF6B7280), fontWeight = FontWeight.SemiBold)
                 }
             }
         )
@@ -782,7 +1141,7 @@ fun MyFilesScreen(
                         items(vaultDocuments) { doc ->
                             VaultDocumentCard(
                                 doc = doc,
-                                onViewSummaryClick = { selectedSummaryDoc = doc },
+                                onViewSummaryClick = { loadInsightsForDoc(doc) },
                                 onDeleteClick = { docToDelete = doc }
                             )
                         }
