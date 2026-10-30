@@ -21,7 +21,10 @@ interface IntelliFileApiService {
     ): Response<AuthResponse>
 
     @GET("auth/profile.php")
-    suspend fun getProfile(): Response<AuthResponse>
+    suspend fun getProfile(
+        @Query("user_id") userId: Int? = null,
+        @Query("email") email: String? = null
+    ): Response<AuthResponse>
 
     @POST("auth/edit_profile.php")
     suspend fun editProfile(

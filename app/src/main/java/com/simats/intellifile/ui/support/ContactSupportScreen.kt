@@ -1,5 +1,8 @@
 package com.simats.intellifile.ui.support
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,33 +14,30 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Mail
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.simats.intellifile.data.repository.SupportRepository
+import com.simats.intellifile.data.session.SessionManager
+import kotlinx.coroutines.launch
 
 @Composable
 fun ContactSupportScreen(
@@ -48,11 +48,19 @@ fun ContactSupportScreen(
     onFaqClick: () -> Unit = {},
     onSendMessageClick: (name: String, email: String, subject: String, message: String) -> Unit = { _, _, _, _ -> }
 ) {
-    var nameInput by remember { mutableStateOf("") }
-    var emailInput by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val sessionManager = remember { SessionManager(context) }
+    val supportRepo = remember { SupportRepository(context) }
+
+    var nameInput by remember { mutableStateOf(sessionManager.getFullName()) }
+    var emailInput by remember { mutableStateOf(sessionManager.getEmail()) }
     var selectedSubject by remember { mutableStateOf("") }
     var messageInput by remember { mutableStateOf("") }
     var isSubjectDropdownOpen by remember { mutableStateOf(false) }
+
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val subjectOptions = listOf(
         "General Question",
@@ -124,7 +132,17 @@ fun ContactSupportScreen(
                 badgeColor = Color(0xFF6C5CE7),
                 title = "Email Support",
                 subtitle = "support@intellifile.app",
-                onClick = onEmailSupportClick
+                onClick = {
+                    try {
+                        val emailIntent = Intent(Intent.ACTION_SENDTO).apply {
+                            data = Uri.parse("mailto:support@intellifile.app")
+                            putExtra(Intent.EXTRA_SUBJECT, "IntelliFile Support Request")
+                        }
+                        context.startActivity(emailIntent)
+                    } catch (e: Exception) {
+                        onEmailSupportClick()
+                    }
+                }
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -135,7 +153,9 @@ fun ContactSupportScreen(
                 badgeColor = Color(0xFFEF4444),
                 title = "Report a Problem",
                 subtitle = "Let us know about any bugs\nor issues you face.",
-                onClick = onReportProblemClick
+                onClick = {
+                    selectedSubject = "Bug Report / Issue"
+                }
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -145,7 +165,7 @@ fun ContactSupportScreen(
                 icon = Icons.AutoMirrored.Outlined.HelpOutline,
                 badgeColor = Color(0xFF3B82F6),
                 title = "FAQs & Help Center",
-                subtitle = "Find answers to common\nquestions.",
+                subtitle = "Find answers to common questions.",
                 onClick = onFaqClick
             )
 
@@ -159,25 +179,60 @@ fun ContactSupportScreen(
                 color = Color(0xFF111827)
             )
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Form Input 1: Name
+            // Error Banner
+            if (errorMessage != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFFEE2E2))
+                        .border(1.dp, Color(0xFFFCA5A5), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.ErrorOutline,
+                            contentDescription = "Error",
+                            tint = Color(0xFFDC2626),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = errorMessage ?: "",
+                            color = Color(0xFFB91C1C),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(14.dp))
+            }
+
+            // Form Input 1: Full Name
             FormInputField(
-                label = "Name",
+                label = "Full Name",
                 value = nameInput,
-                onValueChange = { nameInput = it },
+                onValueChange = {
+                    nameInput = it
+                    errorMessage = null
+                },
                 placeholder = "Enter your name",
                 icon = Icons.Outlined.Person
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Form Input 2: Email
+            // Form Input 2: Email Address
             FormInputField(
-                label = "Email",
+                label = "Email Address",
                 value = emailInput,
-                onValueChange = { emailInput = it },
-                placeholder = "Enter your email",
+                onValueChange = {
+                    emailInput = it
+                    errorMessage = null
+                },
+                placeholder = "user@example.com",
                 icon = Icons.Outlined.Mail
             )
 
@@ -188,9 +243,9 @@ fun ContactSupportScreen(
                 FormInputField(
                     label = "Subject",
                     value = selectedSubject,
-                    onValueChange = { },
-                    placeholder = "Select a subject",
-                    icon = Icons.AutoMirrored.Outlined.Assignment,
+                    onValueChange = {},
+                    placeholder = "Select subject",
+                    icon = Icons.Outlined.ChatBubbleOutline,
                     trailingIcon = Icons.Default.KeyboardArrowDown,
                     readOnly = true,
                     onClick = { isSubjectDropdownOpen = true }
@@ -207,6 +262,7 @@ fun ContactSupportScreen(
                             onClick = {
                                 selectedSubject = option
                                 isSubjectDropdownOpen = false
+                                errorMessage = null
                             }
                         )
                     }
@@ -219,11 +275,14 @@ fun ContactSupportScreen(
             FormInputField(
                 label = "Message",
                 value = messageInput,
-                onValueChange = { messageInput = it },
+                onValueChange = {
+                    messageInput = it
+                    errorMessage = null
+                },
                 placeholder = "Type your message here...",
                 icon = Icons.Outlined.ChatBubbleOutline,
                 singleLine = false,
-                minHeight = 80.dp
+                minHeight = 90.dp
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -231,31 +290,65 @@ fun ContactSupportScreen(
             // Send Message Button
             Button(
                 onClick = {
-                    onSendMessageClick(nameInput, emailInput, selectedSubject, messageInput)
+                    val name = nameInput.trim()
+                    val email = emailInput.trim()
+                    val subject = selectedSubject.trim()
+                    val message = messageInput.trim()
+
+                    if (name.isBlank() || email.isBlank() || subject.isBlank() || message.isBlank()) {
+                        errorMessage = "Please fill in all fields before sending."
+                        return@Button
+                    }
+
+                    if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                        errorMessage = "Please enter a valid email address."
+                        return@Button
+                    }
+
+                    coroutineScope.launch {
+                        isLoading = true
+                        errorMessage = null
+                        val result = supportRepo.submitContactMessage(name, email, subject, message)
+                        isLoading = false
+                        result.onSuccess {
+                            onSendMessageClick(name, email, subject, message)
+                        }.onFailure { ex ->
+                            errorMessage = ex.localizedMessage ?: "Failed to send message. Please try again."
+                        }
+                    }
                 },
+                enabled = !isLoading,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.Send,
-                        contentDescription = "Send Message",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(22.dp),
+                        strokeWidth = 2.dp
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Send Message",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.Send,
+                            contentDescription = "Send Message",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Send Message",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
                 }
             }
 

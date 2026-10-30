@@ -1,5 +1,6 @@
 package com.simats.intellifile.ui.notifications
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,24 +17,21 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.simats.intellifile.data.model.UserSettingsDto
+import com.simats.intellifile.data.repository.AuthRepository
+import kotlinx.coroutines.launch
 
 @Composable
 fun NotificationsScreen(
@@ -41,10 +39,29 @@ fun NotificationsScreen(
     onBackClick: () -> Unit = {},
     onSaveSettingsClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val authRepo = remember { AuthRepository(context) }
+
     var importantAlertsEnabled by remember { mutableStateOf(true) }
     var deadlineRemindersEnabled by remember { mutableStateOf(true) }
     var newDocumentAlertsEnabled by remember { mutableStateOf(true) }
     var quietHoursEnabled by remember { mutableStateOf(false) }
+
+    var isLoading by remember { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        isLoading = true
+        val result = authRepo.getSettings()
+        isLoading = false
+        result.onSuccess { settings ->
+            importantAlertsEnabled = settings.important_alerts
+            deadlineRemindersEnabled = settings.deadline_reminders
+            newDocumentAlertsEnabled = settings.new_doc_alerts
+            quietHoursEnabled = settings.quiet_hours
+        }
+    }
 
     Box(
         modifier = modifier
@@ -94,6 +111,16 @@ fun NotificationsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            if (isLoading) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp),
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             // Option 1: Important file alerts
             NotificationToggleCard(
                 icon = Icons.Default.PriorityHigh,
@@ -123,149 +150,82 @@ fun NotificationsScreen(
             // Option 3: New document alerts
             NotificationToggleCard(
                 icon = Icons.Outlined.Description,
-                iconBackgroundColor = Color(0xFF10B981),
-                badgeContainerColor = Color(0xFFE2F7ED),
+                iconBackgroundColor = MaterialTheme.colorScheme.primary,
+                badgeContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                 title = "New document alerts",
-                description = "Get notified when new files are added to your folders.",
+                description = "Notify when new files are scanned or added.",
                 checked = newDocumentAlertsEnabled,
                 onCheckedChange = { newDocumentAlertsEnabled = it }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Option 4: Quiet hours with Time Range Pill
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-                    .border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(20.dp))
-                    .background(Color.White)
-                    .padding(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.DarkMode,
-                            contentDescription = "Quiet hours",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(14.dp))
-
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = "Quiet hours",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Text(
-                            text = "Do not disturb during selected hours.",
-                            fontSize = 12.sp,
-                            color = Color(0xFF6B7280)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Switch(
-                        checked = quietHoursEnabled,
-                        onCheckedChange = { quietHoursEnabled = it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            uncheckedThumbColor = Color.White,
-                            uncheckedTrackColor = Color(0xFFD1D5DB)
-                        )
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Time Range Selection Pill
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable { /* Select quiet hours */ }
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.AccessTime,
-                            contentDescription = "Time",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-
-                        Spacer(modifier = Modifier.width(10.dp))
-
-                        Text(
-                            text = "From 10:00 PM   To   7:00 AM",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "Select Time",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
+            // Option 4: Quiet hours
+            NotificationToggleCard(
+                icon = Icons.Outlined.DarkMode,
+                iconBackgroundColor = Color(0xFF4B5563),
+                badgeContainerColor = Color(0xFFF3F4F6),
+                title = "Quiet hours",
+                description = "Pause alerts during late hours.",
+                checked = quietHoursEnabled,
+                onCheckedChange = { quietHoursEnabled = it }
+            )
 
             Spacer(modifier = Modifier.height(28.dp))
 
             // Save Settings Button
             Button(
-                onClick = onSaveSettingsClick,
+                onClick = {
+                    coroutineScope.launch {
+                        isSaving = true
+                        val newSettings = UserSettingsDto(
+                            important_alerts = importantAlertsEnabled,
+                            deadline_reminders = deadlineRemindersEnabled,
+                            new_doc_alerts = newDocumentAlertsEnabled,
+                            quiet_hours = quietHoursEnabled
+                        )
+                        val result = authRepo.updateSettings(newSettings)
+                        isSaving = false
+                        result.onSuccess {
+                            Toast.makeText(context, "Notification preferences saved", Toast.LENGTH_SHORT).show()
+                            onSaveSettingsClick()
+                        }.onFailure { ex ->
+                            Toast.makeText(context, ex.localizedMessage ?: "Failed to save settings", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
+                enabled = !isSaving,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Save,
-                        contentDescription = "Save Settings",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(22.dp),
+                        strokeWidth = 2.dp
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Save Settings",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Save,
+                            contentDescription = "Save Settings",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Save Settings",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
                 }
             }
 
@@ -301,20 +261,12 @@ fun NotificationToggleCard(
                 .background(badgeContainerColor),
             contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(iconBackgroundColor),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = Color.White,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = iconBackgroundColor,
+                modifier = Modifier.size(24.dp)
+            )
         }
 
         Spacer(modifier = Modifier.width(14.dp))
@@ -329,13 +281,13 @@ fun NotificationToggleCard(
                 color = Color(0xFF111827)
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(3.dp))
 
             Text(
                 text = description,
                 fontSize = 12.sp,
                 color = Color(0xFF6B7280),
-                lineHeight = 17.sp
+                lineHeight = 16.sp
             )
         }
 
@@ -346,9 +298,9 @@ fun NotificationToggleCard(
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
-                checkedTrackColor = Color(0xFF6C5CE7),
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
                 uncheckedThumbColor = Color.White,
-                uncheckedTrackColor = Color(0xFFD1D5DB)
+                uncheckedTrackColor = Color(0xFFE5E7EB)
             )
         )
     }

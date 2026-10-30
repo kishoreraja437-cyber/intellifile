@@ -75,8 +75,11 @@ fun ProfileScreen(
     val uiState by profileViewModel.uiState.collectAsState()
 
     val user = uiState.user
-    val currentName = user?.full_name?.ifBlank { userName } ?: userName
-    val currentEmail = user?.email?.ifBlank { userEmail } ?: userEmail
+    val sessionEmail = profileViewModel.getEmail()
+    val sessionName = profileViewModel.getFullName()
+
+    val currentName = user?.full_name?.ifBlank { sessionName }?.ifBlank { userName } ?: sessionName.ifBlank { userName }
+    val currentEmail = user?.email?.ifBlank { sessionEmail }?.ifBlank { userEmail } ?: sessionEmail.ifBlank { userEmail }
     val profileImageUrl = user?.profile_image
 
     val isDarkMode = uiState.settings.theme_mode.uppercase() == "DARK"
@@ -86,6 +89,10 @@ fun ProfileScreen(
     var showViewPhotoDialog by remember { mutableStateOf(false) }
 
     var selectedAvatarUri by remember { mutableStateOf<Uri?>(null) }
+
+    LaunchedEffect(Unit) {
+        profileViewModel.loadProfile()
+    }
 
     LaunchedEffect(uiState.statusMessage) {
         uiState.statusMessage?.let {

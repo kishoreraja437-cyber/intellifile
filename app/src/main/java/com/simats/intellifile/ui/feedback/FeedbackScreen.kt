@@ -1,6 +1,7 @@
 package com.simats.intellifile.ui.feedback
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -11,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Lightbulb
@@ -18,18 +20,14 @@ import androidx.compose.material.icons.outlined.Mail
 import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material.icons.outlined.SentimentSatisfied
 import androidx.compose.material.icons.outlined.StarBorder
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -38,6 +36,9 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.simats.intellifile.data.repository.SupportRepository
+import com.simats.intellifile.data.session.SessionManager
+import kotlinx.coroutines.launch
 
 enum class FeedbackCategory(val label: String, val icon: ImageVector) {
     BUG("Bug", Icons.Outlined.BugReport),
@@ -51,10 +52,18 @@ fun FeedbackScreen(
     onBackClick: () -> Unit = {},
     onSubmitFeedbackClick: (rating: Int, category: FeedbackCategory, feedbackText: String, email: String) -> Unit = { _, _, _, _ -> }
 ) {
-    var rating by remember { mutableIntStateOf(4) }
-    var selectedCategory by remember { mutableStateOf(FeedbackCategory.BUG) }
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val sessionManager = remember { SessionManager(context) }
+    val supportRepo = remember { SupportRepository(context) }
+
+    var rating by remember { mutableIntStateOf(5) }
+    var selectedCategory by remember { mutableStateOf(FeedbackCategory.EXPERIENCE) }
     var feedbackText by remember { mutableStateOf("") }
-    var emailInput by remember { mutableStateOf("") }
+    var emailInput by remember { mutableStateOf(sessionManager.getEmail()) }
+
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val maxChars = 500
 
@@ -103,82 +112,117 @@ fun FeedbackScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(80.dp)
+                        .size(56.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFEEF0FD)),
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.RateReview,
-                        contentDescription = "Feedback",
-                        tint = Color(0xFF6C5CE7),
-                        modifier = Modifier.size(42.dp)
+                        contentDescription = "Rate",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
-                    text = "Help us improve IntelliFile",
+                    text = buildAnnotatedString {
+                        withStyle(style = SpanStyle(color = Color(0xFF183A3C))) {
+                            append("We Value Your ")
+                        }
+                        withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
+                            append("Feedback")
+                        }
+                    },
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111827),
                     textAlign = TextAlign.Center
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = "Your feedback helps us build a better\nexperience for everyone.",
+                    text = "Help us improve IntelliFile by sharing your experience.",
                     fontSize = 13.sp,
                     color = Color(0xFF6B7280),
-                    textAlign = TextAlign.Center,
-                    lineHeight = 18.sp
+                    textAlign = TextAlign.Center
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Rate Your Experience
-            Text(
-                text = "Rate your experience",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF111827)
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Star Rating Bar
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                (1..5).forEach { starIndex ->
-                    val isSelected = starIndex <= rating
-                    Icon(
-                        imageVector = if (isSelected) Icons.Default.Star else Icons.Outlined.StarBorder,
-                        contentDescription = "$starIndex Star",
-                        tint = if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFF9CA3AF),
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clickable { rating = starIndex }
-                    )
+            // Error Banner
+            if (errorMessage != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFFEE2E2))
+                        .border(1.dp, Color(0xFFFCA5A5), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.ErrorOutline,
+                            contentDescription = "Error",
+                            tint = Color(0xFFDC2626),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = errorMessage ?: "",
+                            color = Color(0xFFB91C1C),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
+                Spacer(modifier = Modifier.height(14.dp))
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Feedback Category Title
+            // Section 1: How was your experience?
             Text(
-                text = "Feedback Category",
+                text = "How was your experience?",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Star Rating Row (1-5)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                for (i in 1..5) {
+                    IconButton(
+                        onClick = { rating = i },
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (i <= rating) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                            contentDescription = "Star $i",
+                            tint = if (i <= rating) Color(0xFFF59E0B) else Color(0xFFD1D5DB),
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Section 2: What would you like to share?
+            Text(
+                text = "What would you like to share?",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Category Chips Row
             Row(
@@ -186,77 +230,78 @@ fun FeedbackScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 FeedbackCategory.entries.forEach { category ->
-                    val isSelected = category == selectedCategory
                     CategoryChip(
                         category = category,
-                        isSelected = isSelected,
+                        isSelected = selectedCategory == category,
                         onClick = { selectedCategory = category },
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // Your Feedback Text Input
+            // Section 3: Feedback text box
             Text(
-                text = buildAnnotatedString {
-                    append("Your Feedback ")
-                    withStyle(style = SpanStyle(color = Color(0xFF9CA3AF), fontWeight = FontWeight.Normal)) {
-                        append("(Optional)")
-                    }
-                },
-                fontSize = 14.sp,
+                text = "Your Feedback",
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            Box(
+            // Feedback Text Area Box
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(120.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(14.dp)
+                    .padding(16.dp)
             ) {
-                if (feedbackText.isEmpty()) {
-                    Text(
-                        text = "Tell us what you think...",
-                        fontSize = 14.sp,
-                        color = Color(0xFF9CA3AF)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp),
+                    contentAlignment = Alignment.TopStart
+                ) {
+                    if (feedbackText.isEmpty()) {
+                        Text(
+                            text = "Tell us what you liked, what went wrong, or suggestions for improvement...",
+                            fontSize = 14.sp,
+                            color = Color(0xFF9CA3AF),
+                            lineHeight = 20.sp
+                        )
+                    }
+                    BasicTextField(
+                        value = feedbackText,
+                        onValueChange = {
+                            if (it.length <= maxChars) {
+                                feedbackText = it
+                                errorMessage = null
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
 
-                BasicTextField(
-                    value = feedbackText,
-                    onValueChange = {
-                        if (it.length <= maxChars) feedbackText = it
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
                     text = "${feedbackText.length}/$maxChars",
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     color = Color(0xFF9CA3AF),
-                    modifier = Modifier.align(Alignment.BottomEnd)
+                    modifier = Modifier.align(Alignment.End)
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Email Input Field
+            // Section 4: Email Address Field
             Text(
-                text = buildAnnotatedString {
-                    append("Email ")
-                    withStyle(style = SpanStyle(color = Color(0xFF9CA3AF), fontWeight = FontWeight.Normal)) {
-                        append("(Optional)")
-                    }
-                },
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
+                text = "Email Address (optional, for follow-up)",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onBackground
             )
 
@@ -265,8 +310,8 @@ fun FeedbackScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .height(52.dp)
+                    .clip(RoundedCornerShape(14.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -274,7 +319,7 @@ fun FeedbackScreen(
                 Icon(
                     imageVector = Icons.Outlined.Mail,
                     contentDescription = "Email",
-                    tint = Color(0xFF374151),
+                    tint = Color(0xFF6B7280),
                     modifier = Modifier.size(20.dp)
                 )
 
@@ -293,7 +338,10 @@ fun FeedbackScreen(
                     }
                     BasicTextField(
                         value = emailInput,
-                        onValueChange = { emailInput = it },
+                        onValueChange = {
+                            emailInput = it
+                            errorMessage = null
+                        },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -305,31 +353,61 @@ fun FeedbackScreen(
             // Submit Feedback Button
             Button(
                 onClick = {
-                    onSubmitFeedbackClick(rating, selectedCategory, feedbackText, emailInput)
+                    val text = feedbackText.trim()
+                    if (text.isBlank()) {
+                        errorMessage = "Please enter your feedback text before submitting."
+                        return@Button
+                    }
+
+                    coroutineScope.launch {
+                        isLoading = true
+                        errorMessage = null
+                        val result = supportRepo.submitFeedback(
+                            rating = rating,
+                            category = selectedCategory.label,
+                            feedbackText = text,
+                            email = emailInput.trim().ifBlank { null }
+                        )
+                        isLoading = false
+                        result.onSuccess {
+                            onSubmitFeedbackClick(rating, selectedCategory, text, emailInput.trim())
+                        }.onFailure { ex ->
+                            errorMessage = ex.localizedMessage ?: "Failed to submit feedback. Please try again."
+                        }
+                    }
                 },
+                enabled = !isLoading,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.Send,
-                        contentDescription = "Submit Feedback",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(22.dp),
+                        strokeWidth = 2.dp
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Submit Feedback",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.Send,
+                            contentDescription = "Submit Feedback",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Submit Feedback",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
                 }
             }
 

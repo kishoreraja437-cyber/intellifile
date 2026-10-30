@@ -17,13 +17,18 @@ class AuthRepository(private val context: Context) {
 
     suspend fun login(email: String, password: String): Result<UserDto> {
         return try {
-            val response = api.login(LoginRequest(email.trim(), password))
+            val trimmedEmail = email.trim()
+            val response = api.login(LoginRequest(trimmedEmail, password))
             if (response.isSuccessful && response.body()?.success == true) {
                 val body = response.body()!!
                 val token = body.token ?: ""
-                var user = body.user ?: return Result.failure(Exception("No user profile returned"))
+                var user = body.user ?: body.profile ?: return Result.failure(Exception("No user profile returned"))
+                val resolvedEmail = if (!user.email.isNullOrBlank()) user.email.trim() else trimmedEmail
                 val resolvedImg = com.simats.intellifile.data.api.NetworkConfig.resolveMediaUrl(user.profile_image)
-                user = user.copy(profile_image = resolvedImg)
+                user = user.copy(
+                    email = resolvedEmail,
+                    profile_image = resolvedImg
+                )
                 sessionManager.saveUserSession(token, user)
                 RetrofitClient.resetClient()
                 Result.success(user)
@@ -38,13 +43,18 @@ class AuthRepository(private val context: Context) {
 
     suspend fun signup(fullName: String, email: String, password: String): Result<UserDto> {
         return try {
-            val response = api.signup(SignUpRequest(fullName.trim(), email.trim(), password))
+            val trimmedEmail = email.trim()
+            val response = api.signup(SignUpRequest(fullName.trim(), trimmedEmail, password))
             if (response.isSuccessful && response.body()?.success == true) {
                 val body = response.body()!!
                 val token = body.token ?: ""
-                var user = body.user ?: return Result.failure(Exception("No user profile returned"))
+                var user = body.user ?: body.profile ?: return Result.failure(Exception("No user profile returned"))
+                val resolvedEmail = if (!user.email.isNullOrBlank()) user.email.trim() else trimmedEmail
                 val resolvedImg = com.simats.intellifile.data.api.NetworkConfig.resolveMediaUrl(user.profile_image)
-                user = user.copy(profile_image = resolvedImg)
+                user = user.copy(
+                    email = resolvedEmail,
+                    profile_image = resolvedImg
+                )
                 sessionManager.saveUserSession(token, user)
                 RetrofitClient.resetClient()
                 Result.success(user)
@@ -107,11 +117,22 @@ class AuthRepository(private val context: Context) {
 
     suspend fun getProfile(): Result<UserDto> {
         return try {
-            val response = api.getProfile()
+            val currentUserId = sessionManager.getUserId()
+            val currentEmail = sessionManager.getEmail()
+            val response = api.getProfile(
+                userId = if (currentUserId > 0) currentUserId else null,
+                email = currentEmail.ifBlank { null }
+            )
             if (response.isSuccessful && response.body()?.success == true) {
                 var user = response.body()?.user ?: response.body()?.profile ?: return Result.failure(Exception("User not found"))
+                val resolvedEmail = if (!user.email.isNullOrBlank()) user.email.trim() else currentEmail
+                val resolvedName = if (!user.full_name.isNullOrBlank()) user.full_name.trim() else sessionManager.getFullName()
                 val resolvedImg = com.simats.intellifile.data.api.NetworkConfig.resolveMediaUrl(user.profile_image)
-                user = user.copy(profile_image = resolvedImg)
+                user = user.copy(
+                    full_name = resolvedName,
+                    email = resolvedEmail,
+                    profile_image = resolvedImg
+                )
                 sessionManager.updateProfile(user.full_name, user.email, user.profile_image)
                 Result.success(user)
             } else {

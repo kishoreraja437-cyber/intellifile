@@ -32,12 +32,19 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
         loadSettings()
     }
 
+    fun getEmail(): String = authRepo.sessionManager.getEmail()
+    fun getFullName(): String = authRepo.sessionManager.getFullName()
+    fun getProfileImage(): String? = authRepo.sessionManager.getProfileImage()
+
     fun loadProfile() {
+        val cachedEmail = authRepo.sessionManager.getEmail()
+        val cachedName = authRepo.sessionManager.getFullName()
         val cachedImage = authRepo.sessionManager.getProfileImage()
+
         val cachedUser = UserDto(
             id = authRepo.sessionManager.getUserId(),
-            full_name = authRepo.sessionManager.getFullName().ifBlank { "User" },
-            email = authRepo.sessionManager.getEmail().ifBlank { "user@example.com" },
+            full_name = cachedName.ifBlank { "User" },
+            email = cachedEmail.ifBlank { "user@example.com" },
             profile_image = cachedImage
         )
         _uiState.value = _uiState.value.copy(user = cachedUser)
@@ -46,11 +53,18 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             _uiState.value = _uiState.value.copy(isLoading = true)
             val result = authRepo.getProfile()
             result.onSuccess { user ->
-                val finalUser = if (user.profile_image.isNullOrBlank() && !cachedImage.isNullOrBlank()) {
-                    user.copy(profile_image = cachedImage)
+                val finalEmail = if (user.email.isNotBlank()) user.email else cachedEmail
+                val finalName = if (user.full_name.isNotBlank()) user.full_name else cachedName
+                val finalImage = if (user.profile_image.isNullOrBlank() && !cachedImage.isNullOrBlank()) {
+                    cachedImage
                 } else {
-                    user
+                    user.profile_image
                 }
+                val finalUser = user.copy(
+                    email = finalEmail,
+                    full_name = finalName,
+                    profile_image = finalImage
+                )
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     user = finalUser,

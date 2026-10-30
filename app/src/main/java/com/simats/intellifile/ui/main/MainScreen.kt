@@ -99,6 +99,7 @@ fun MainScreen(
     onLogout: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val sessionManager = remember { com.simats.intellifile.data.session.SessionManager(context) }
     var selectedTab by remember { mutableStateOf(BottomNavItem.HOME) }
     var savedPriorityFilter by remember { mutableStateOf(PriorityFilter.ALL) }
 
@@ -532,6 +533,8 @@ fun MainScreen(
                                 }
                             )
                             BottomNavItem.PROFILE -> ProfileScreen(
+                                userName = sessionManager.getFullName(),
+                                userEmail = sessionManager.getEmail(),
                                 onBackClick = { selectedTab = BottomNavItem.HOME },
                                 onFilePermissionsClick = { isFilePermissionsOpen = true },
                                 onNotificationsClick = { isNotificationsOpen = true },
