@@ -194,6 +194,7 @@ data class AiChatResponse(
     @SerializedName("success") val success: Boolean,
     @SerializedName("conversation_id") val conversation_id: Int = 0,
     @SerializedName("category") val category: String? = null,
+    @SerializedName("query_type") val query_type: String? = null,
     @SerializedName("message") val message: AiChatMessageDto? = null,
     @SerializedName("reply") val reply: String? = null,
     @SerializedName("related_files") val related_files: List<RelatedFileDto>? = null
