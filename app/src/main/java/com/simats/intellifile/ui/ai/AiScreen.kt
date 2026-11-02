@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,15 +32,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.intellifile.R
+import com.simats.intellifile.data.repository.AiRepository
 import com.simats.intellifile.ui.home.PriorityLevel
 import com.simats.intellifile.ui.home.PriorityTag
+import kotlinx.coroutines.launch
 
 data class AiFileResult(
     val title: String,
@@ -47,12 +52,19 @@ data class AiFileResult(
     val size: String,
     val dateText: String,
     val priority: PriorityLevel,
-    val iconResId: Int = R.drawable.pdf
+    val iconResId: Int = R.drawable.pdf,
+    val id: Int? = null,
+    val page: Int? = null,
+    val snippet: String? = null
 )
 
 sealed class ChatMessage {
     data class User(val text: String) : ChatMessage()
-    data class Ai(val text: String, val files: List<AiFileResult> = emptyList()) : ChatMessage()
+    data class Ai(
+        val text: String,
+        val files: List<AiFileResult> = emptyList(),
+        val isLoading: Boolean = false
+    ) : ChatMessage()
 }
 
 @Composable
@@ -62,36 +74,19 @@ fun AiScreen(
     onOpenFile: (AiFileResult) -> Unit = {},
     onViewSearchHistoryClick: () -> Unit = {}
 ) {
-    var promptInput by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val aiRepository = remember { AiRepository(context) }
 
-    val initialMessages = remember {
-        mutableStateListOf(
-            ChatMessage.User("Find my AML assignment file"),
+    var promptInput by remember { mutableStateOf("") }
+    var currentConversationId by remember { mutableStateOf<Int?>(null) }
+    var isThinking by remember { mutableStateOf(false) }
+
+    val chatMessages = remember {
+        mutableStateListOf<ChatMessage>(
             ChatMessage.Ai(
-                text = "I found 3 files related to AML assignment.",
-                files = listOf(
-                    AiFileResult(
-                        title = "AML Assignment.pdf",
-                        format = "PDF",
-                        size = "2.4 MB",
-                        dateText = "Oct 5, 2024",
-                        priority = PriorityLevel.IMPORTANT
-                    ),
-                    AiFileResult(
-                        title = "AML Notes.pdf",
-                        format = "PDF",
-                        size = "5.1 MB",
-                        dateText = "Oct 2, 2024",
-                        priority = PriorityLevel.NORMAL
-                    ),
-                    AiFileResult(
-                        title = "AML Question Bank.pdf",
-                        format = "PDF",
-                        size = "3.2 MB",
-                        dateText = "Sep 28, 2024",
-                        priority = PriorityLevel.LOW
-                    )
-                )
+                text = "Hello! I am your IntelliFile AI Assistant powered by RAG and Small Language Models.\n\nAsk me anything about your uploaded documents, request summaries, or extract key takeaways.",
+                files = emptyList()
             )
         )
     }
@@ -119,7 +114,7 @@ fun AiScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(top = 12.dp, bottom = 16.dp)
             ) {
-                items(initialMessages) { message ->
+                items(chatMessages) { message ->
                     when (message) {
                         is ChatMessage.User -> {
                             UserMessageBubble(text = message.text)
@@ -128,6 +123,7 @@ fun AiScreen(
                             AiMessageBubble(
                                 text = message.text,
                                 files = message.files,
+                                isLoading = message.isLoading,
                                 onOpenFile = onOpenFile
                             )
                         }
@@ -138,17 +134,75 @@ fun AiScreen(
             // Bottom Prompt Bar
             AiBottomInputBar(
                 query = promptInput,
+                isThinking = isThinking,
                 onQueryChange = { promptInput = it },
                 onSendClick = {
-                    if (promptInput.isNotBlank()) {
-                        initialMessages.add(ChatMessage.User(promptInput))
-                        val userQuery = promptInput
+                    if (promptInput.isNotBlank() && !isThinking) {
+                        val userQuery = promptInput.trim()
                         promptInput = ""
-                        initialMessages.add(
-                            ChatMessage.Ai(
-                                text = "Searching for files matching \"$userQuery\"..."
-                            )
+                        chatMessages.add(ChatMessage.User(userQuery))
+                        isThinking = true
+
+                        val loadingMsg = ChatMessage.Ai(
+                            text = "Retrieving context and generating grounded answer...",
+                            isLoading = true
                         )
+                        chatMessages.add(loadingMsg)
+
+                        coroutineScope.launch {
+                            val result = aiRepository.sendChatMessage(
+                                message = userQuery,
+                                conversationId = currentConversationId
+                            )
+                            isThinking = false
+                            chatMessages.remove(loadingMsg)
+
+                            result.onSuccess { response ->
+                                currentConversationId = response.conversation_id
+                                val replyText = response.message?.text
+                                    ?: response.reply
+                                    ?: "I analyzed your documents."
+
+                                val rawFiles = response.message?.files
+                                    ?: response.message?.related_files
+                                    ?: response.related_files
+                                    ?: emptyList()
+
+                                val mappedFiles = rawFiles.map { rf ->
+                                    val prio = when (rf.priority?.uppercase()) {
+                                        "IMPORTANT" -> PriorityLevel.IMPORTANT
+                                        "LOW" -> PriorityLevel.LOW
+                                        else -> PriorityLevel.NORMAL
+                                    }
+                                    val icon = when (rf.format?.uppercase()) {
+                                        "DOCX", "DOC" -> R.drawable.doc
+                                        else -> R.drawable.pdf
+                                    }
+                                    val pageStr = if (rf.page != null && rf.page > 0) "Page ${rf.page}" else null
+                                    val metaDetails = listOfNotNull(rf.format ?: "PDF", pageStr, rf.size).joinToString(" · ")
+
+                                    AiFileResult(
+                                        title = rf.title,
+                                        format = rf.format ?: "PDF",
+                                        size = rf.size ?: "1.0 MB",
+                                        dateText = metaDetails,
+                                        priority = prio,
+                                        iconResId = icon,
+                                        id = rf.id,
+                                        page = rf.page,
+                                        snippet = rf.snippet
+                                    )
+                                }
+
+                                chatMessages.add(ChatMessage.Ai(text = replyText, files = mappedFiles))
+                            }.onFailure { err ->
+                                chatMessages.add(
+                                    ChatMessage.Ai(
+                                        text = "Could not reach the AI service: ${err.localizedMessage}\nPlease make sure the Python AI microservice is running."
+                                    )
+                                )
+                            }
+                        }
                     }
                 }
             )
@@ -255,7 +309,6 @@ fun AiHeader(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // Glowing Cyan AI Fluid Orb Avatar
         AiFluidOrbAvatar(
             size = 90.dp,
             iconSize = 48.dp
@@ -280,7 +333,6 @@ fun AiHeader(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // View AI Search History Button
         ViewSearchHistoryButton(
             onClick = onViewSearchHistoryClick,
             modifier = Modifier.padding(horizontal = 20.dp)
@@ -368,6 +420,7 @@ fun UserMessageBubble(
 fun AiMessageBubble(
     text: String,
     files: List<AiFileResult>,
+    isLoading: Boolean = false,
     onOpenFile: (AiFileResult) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -388,12 +441,31 @@ fun AiMessageBubble(
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(horizontal = 18.dp, vertical = 12.dp)
         ) {
-            Text(
-                text = text,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onBackground,
-                fontWeight = FontWeight.Medium
-            )
+            if (isLoading) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = text,
+                        fontSize = 13.sp,
+                        fontStyle = FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
+                    )
+                }
+            } else {
+                Text(
+                    text = text,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.Medium
+                )
+            }
         }
 
         if (files.isNotEmpty()) {
@@ -441,10 +513,21 @@ fun AiFileCard(
             Spacer(modifier = Modifier.height(3.dp))
 
             Text(
-                text = "${file.format} · ${file.size} · ${file.dateText}",
+                text = file.dateText,
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
+
+            if (!file.snippet.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "\"${file.snippet}\"",
+                    fontSize = 11.sp,
+                    fontStyle = FontStyle.Italic,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    maxLines = 2
+                )
+            }
 
             Spacer(modifier = Modifier.height(6.dp))
 
@@ -473,6 +556,7 @@ fun AiFileCard(
 @Composable
 fun AiBottomInputBar(
     query: String,
+    isThinking: Boolean = false,
     onQueryChange: (String) -> Unit,
     onSendClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -493,7 +577,7 @@ fun AiBottomInputBar(
         ) {
             if (query.isEmpty()) {
                 Text(
-                    text = "Ask anything about your files...",
+                    text = if (isThinking) "AI is thinking..." else "Ask anything about your files...",
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                 )
@@ -502,6 +586,7 @@ fun AiBottomInputBar(
                 value = query,
                 onValueChange = onQueryChange,
                 singleLine = true,
+                enabled = !isThinking,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -512,8 +597,8 @@ fun AiBottomInputBar(
             modifier = Modifier
                 .size(42.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary)
-                .clickable { onSendClick() },
+                .background(if (isThinking) Color.Gray else MaterialTheme.colorScheme.primary)
+                .clickable(enabled = !isThinking) { onSendClick() },
             contentAlignment = Alignment.Center
         ) {
             Icon(

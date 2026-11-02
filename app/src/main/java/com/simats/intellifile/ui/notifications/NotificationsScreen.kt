@@ -61,16 +61,18 @@ fun NotificationsScreen(
     var isLoading by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
 
-    // Fetch up-to-date user settings from backend
+    // Fetch up-to-date user settings from backend only if not cached locally
     LaunchedEffect(Unit) {
-        isLoading = true
-        val result = authRepo.getSettings()
-        isLoading = false
-        result.onSuccess { settings ->
-            importantAlertsEnabled = settings.important_alerts
-            deadlineRemindersEnabled = settings.deadline_reminders
-            newDocumentAlertsEnabled = settings.new_doc_alerts
-            quietHoursEnabled = settings.quiet_hours
+        if (!sessionManager.hasCachedSettings()) {
+            isLoading = true
+            val result = authRepo.getSettings(forceRefresh = false)
+            isLoading = false
+            result.onSuccess { settings ->
+                importantAlertsEnabled = settings.important_alerts
+                deadlineRemindersEnabled = settings.deadline_reminders
+                newDocumentAlertsEnabled = settings.new_doc_alerts
+                quietHoursEnabled = settings.quiet_hours
+            }
         }
     }
 

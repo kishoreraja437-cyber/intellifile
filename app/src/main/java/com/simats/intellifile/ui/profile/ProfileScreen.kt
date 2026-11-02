@@ -91,7 +91,9 @@ fun ProfileScreen(
     var selectedAvatarUri by remember { mutableStateOf<Uri?>(null) }
 
     LaunchedEffect(Unit) {
-        profileViewModel.loadProfile()
+        if (!profileViewModel.authRepo.hasCachedProfile() && uiState.user == null) {
+            profileViewModel.loadProfile(forceRefresh = false)
+        }
     }
 
     LaunchedEffect(uiState.statusMessage) {

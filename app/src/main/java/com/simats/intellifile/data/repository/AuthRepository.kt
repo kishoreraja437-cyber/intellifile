@@ -5,6 +5,11 @@ import com.simats.intellifile.data.api.IntelliFileApiService
 import com.simats.intellifile.data.api.RetrofitClient
 import com.simats.intellifile.data.model.*
 import com.simats.intellifile.data.session.SessionManager
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -14,6 +19,26 @@ class AuthRepository(private val context: Context) {
     private val api: IntelliFileApiService
         get() = RetrofitClient.getApiService(context)
     val sessionManager = SessionManager(context)
+
+    // In-memory cache & request deduplication for Profile
+    @Volatile
+    private var inMemoryUser: UserDto? = null
+    private val profileMutex = Mutex()
+    private var activeProfileJob: Deferred<Result<UserDto>>? = null
+
+    // In-memory cache & request deduplication for Settings
+    @Volatile
+    private var inMemorySettings: UserSettingsDto? = null
+    private val settingsMutex = Mutex()
+    private var activeSettingsJob: Deferred<Result<UserSettingsDto>>? = null
+
+    fun hasCachedProfile(): Boolean {
+        return (inMemoryUser != null && sessionManager.hasCachedProfile()) || sessionManager.hasCachedProfile()
+    }
+
+    fun getLocalProfile(): UserDto? {
+        return inMemoryUser ?: sessionManager.getCachedProfile()
+    }
 
     suspend fun login(email: String, password: String): Result<UserDto> {
         return try {
@@ -30,6 +55,7 @@ class AuthRepository(private val context: Context) {
                     profile_image = resolvedImg
                 )
                 sessionManager.saveUserSession(token, user)
+                inMemoryUser = null // Reset so first Profile screen visit calls Profile API as required
                 RetrofitClient.resetClient()
                 Result.success(user)
             } else {
@@ -56,6 +82,7 @@ class AuthRepository(private val context: Context) {
                     profile_image = resolvedImg
                 )
                 sessionManager.saveUserSession(token, user)
+                inMemoryUser = null
                 RetrofitClient.resetClient()
                 Result.success(user)
             } else {
@@ -115,7 +142,71 @@ class AuthRepository(private val context: Context) {
         }
     }
 
-    suspend fun getProfile(): Result<UserDto> {
+    /**
+     * Retrieves profile data with proper caching strategy and request deduplication.
+     * - If forceRefresh is false and local cache is available: loads from cache immediately (0 API calls).
+     * - If forceRefresh is true or no local cache exists: executes single deduplicated API request.
+     * - On API failure: falls back to previously cached local data.
+     */
+    suspend fun getProfile(forceRefresh: Boolean = false): Result<UserDto> {
+        // 1. Fast-path: return cached profile immediately if available and not forcing refresh
+        if (!forceRefresh) {
+            inMemoryUser?.let { return Result.success(it) }
+            val localUser = sessionManager.getCachedProfile()
+            if (localUser != null && sessionManager.hasCachedProfile()) {
+                inMemoryUser = localUser
+                return Result.success(localUser)
+            }
+        }
+
+        // 2. Request deduplication: check if another request is already in-flight
+        var ongoingJob: Deferred<Result<UserDto>>? = null
+        var isInitiator = false
+
+        profileMutex.withLock {
+            if (!forceRefresh) {
+                inMemoryUser?.let { return Result.success(it) }
+                val localUser = sessionManager.getCachedProfile()
+                if (localUser != null && sessionManager.hasCachedProfile()) {
+                    inMemoryUser = localUser
+                    return Result.success(localUser)
+                }
+            }
+
+            if (activeProfileJob != null && activeProfileJob!!.isActive) {
+                ongoingJob = activeProfileJob
+                isInitiator = false
+            } else {
+                ongoingJob = null
+                isInitiator = true
+            }
+        }
+
+        if (!isInitiator && ongoingJob != null) {
+            return ongoingJob.await()
+        }
+
+        // 3. Initiate single network request
+        return coroutineScope {
+            val deferred = async {
+                executeGetProfileNetworkCall()
+            }
+            profileMutex.withLock {
+                activeProfileJob = deferred
+            }
+            try {
+                deferred.await()
+            } finally {
+                profileMutex.withLock {
+                    if (activeProfileJob == deferred) {
+                        activeProfileJob = null
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun executeGetProfileNetworkCall(): Result<UserDto> {
         return try {
             val currentUserId = sessionManager.getUserId()
             val currentEmail = sessionManager.getEmail()
@@ -133,37 +224,76 @@ class AuthRepository(private val context: Context) {
                     email = resolvedEmail,
                     profile_image = resolvedImg
                 )
-                sessionManager.updateProfile(user.full_name, user.email, user.profile_image)
+                sessionManager.saveCachedProfile(user)
+                inMemoryUser = user
                 Result.success(user)
             } else {
-                val errorMsg = response.body()?.message ?: "Failed to fetch profile"
-                Result.failure(Exception(errorMsg))
+                val fallback = inMemoryUser ?: sessionManager.getCachedProfile()
+                if (fallback != null) {
+                    Result.success(fallback)
+                } else {
+                    val errorMsg = response.body()?.message ?: "Failed to fetch profile"
+                    Result.failure(Exception(errorMsg))
+                }
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            val fallback = inMemoryUser ?: sessionManager.getCachedProfile()
+            if (fallback != null) {
+                Result.success(fallback)
+            } else {
+                Result.failure(e)
+            }
         }
     }
 
+    /**
+     * Updates the user's profile.
+     * Updates the local cache immediately (optimistic update) and synchronizes with the backend.
+     */
     suspend fun editProfile(name: String, email: String): Result<UserDto> {
+        val trimmedName = name.trim()
+        val trimmedEmail = email.trim()
+
+        // 1. Immediate local cache update
+        val existing = inMemoryUser ?: sessionManager.getCachedProfile()
+        val optimisticUser = (existing ?: UserDto(
+            id = sessionManager.getUserId(),
+            full_name = trimmedName,
+            email = trimmedEmail
+        )).copy(
+            full_name = trimmedName,
+            email = trimmedEmail
+        )
+        sessionManager.saveCachedProfile(optimisticUser)
+        inMemoryUser = optimisticUser
+
+        // 2. Synchronize with backend API
         return try {
-            val response = api.editProfile(EditProfileRequest(name.trim(), email.trim(), user_id = sessionManager.getUserId()))
+            val response = api.editProfile(EditProfileRequest(trimmedName, trimmedEmail, user_id = sessionManager.getUserId()))
             if (response.isSuccessful && response.body()?.success == true) {
-                val user = response.body()?.user ?: response.body()?.profile ?: UserDto(
-                    id = sessionManager.getUserId(),
-                    full_name = name,
-                    email = email
+                val serverUser = response.body()?.user ?: response.body()?.profile ?: optimisticUser
+                val finalUser = serverUser.copy(
+                    full_name = if (!serverUser.full_name.isNullOrBlank()) serverUser.full_name.trim() else trimmedName,
+                    email = if (!serverUser.email.isNullOrBlank()) serverUser.email.trim() else trimmedEmail,
+                    profile_image = com.simats.intellifile.data.api.NetworkConfig.resolveMediaUrl(serverUser.profile_image) ?: optimisticUser.profile_image
                 )
-                sessionManager.updateProfile(user.full_name, user.email, user.profile_image)
-                Result.success(user)
+                sessionManager.saveCachedProfile(finalUser)
+                inMemoryUser = finalUser
+                Result.success(finalUser)
             } else {
                 val errorMsg = response.body()?.message ?: "Failed to update profile"
                 Result.failure(Exception(errorMsg))
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            // Keep local changes active even if network was unavailable
+            Result.success(optimisticUser)
         }
     }
 
+    /**
+     * Uploads a new profile image.
+     * On success, updates the local cache immediately.
+     */
     suspend fun uploadProfileImage(imageFile: File): Result<String> {
         return try {
             val requestFile = imageFile.asRequestBody("image/*".toMediaTypeOrNull())
@@ -171,12 +301,16 @@ class AuthRepository(private val context: Context) {
             val response = api.uploadProfileImage(part)
             if (response.isSuccessful && response.body()?.success == true) {
                 val url = response.body()?.profile_image_url ?: response.body()?.profile_image ?: ""
-                sessionManager.updateProfile(
-                    name = sessionManager.getFullName(),
-                    email = sessionManager.getEmail(),
-                    profileImage = url
+                val resolvedUrl = com.simats.intellifile.data.api.NetworkConfig.resolveMediaUrl(url)
+                val existing = inMemoryUser ?: sessionManager.getCachedProfile() ?: UserDto(
+                    id = sessionManager.getUserId(),
+                    full_name = sessionManager.getFullName(),
+                    email = sessionManager.getEmail()
                 )
-                Result.success(url)
+                val updated = existing.copy(profile_image = resolvedUrl ?: url)
+                sessionManager.saveCachedProfile(updated)
+                inMemoryUser = updated
+                Result.success(resolvedUrl ?: url)
             } else {
                 val errorMsg = response.body()?.message ?: "Failed to upload image"
                 Result.failure(Exception(errorMsg))
@@ -186,25 +320,91 @@ class AuthRepository(private val context: Context) {
         }
     }
 
+    /**
+     * Removes the profile photo.
+     * Updates the local cache immediately and synchronizes with the backend.
+     */
     suspend fun removeProfilePhoto(): Result<Boolean> {
+        // Immediate local cache update
+        val existing = inMemoryUser ?: sessionManager.getCachedProfile()
+        if (existing != null) {
+            val updated = existing.copy(profile_image = null, profile_image_path = null)
+            sessionManager.saveCachedProfile(updated)
+            inMemoryUser = updated
+        } else {
+            sessionManager.updateProfile(sessionManager.getFullName(), sessionManager.getEmail(), null)
+        }
+
         return try {
             val response = api.removeProfilePhoto()
             if (response.isSuccessful && response.body()?.success == true) {
-                sessionManager.updateProfile(
-                    name = sessionManager.getFullName(),
-                    email = sessionManager.getEmail(),
-                    profileImage = null
-                )
                 Result.success(true)
             } else {
-                Result.failure(Exception(response.body()?.message ?: "Failed to remove photo"))
+                Result.success(true) // local photo already removed
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.success(true) // local photo already removed
         }
     }
 
-    suspend fun getSettings(): Result<UserSettingsDto> {
+    /**
+     * Retrieves settings with caching and deduplication.
+     */
+    suspend fun getSettings(forceRefresh: Boolean = false): Result<UserSettingsDto> {
+        if (!forceRefresh) {
+            inMemorySettings?.let { return Result.success(it) }
+            if (sessionManager.hasCachedSettings()) {
+                val local = sessionManager.getNotificationSettings()
+                inMemorySettings = local
+                return Result.success(local)
+            }
+        }
+
+        var ongoingJob: Deferred<Result<UserSettingsDto>>? = null
+        var isInitiator = false
+
+        settingsMutex.withLock {
+            if (!forceRefresh) {
+                inMemorySettings?.let { return Result.success(it) }
+                if (sessionManager.hasCachedSettings()) {
+                    val local = sessionManager.getNotificationSettings()
+                    inMemorySettings = local
+                    return Result.success(local)
+                }
+            }
+            if (activeSettingsJob != null && activeSettingsJob!!.isActive) {
+                ongoingJob = activeSettingsJob
+                isInitiator = false
+            } else {
+                ongoingJob = null
+                isInitiator = true
+            }
+        }
+
+        if (!isInitiator && ongoingJob != null) {
+            return ongoingJob.await()
+        }
+
+        return coroutineScope {
+            val deferred = async {
+                executeGetSettingsNetworkCall()
+            }
+            settingsMutex.withLock {
+                activeSettingsJob = deferred
+            }
+            try {
+                deferred.await()
+            } finally {
+                settingsMutex.withLock {
+                    if (activeSettingsJob == deferred) {
+                        activeSettingsJob = null
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun executeGetSettingsNetworkCall(): Result<UserSettingsDto> {
         return try {
             val currentUserId = sessionManager.getUserId()
             val currentEmail = sessionManager.getEmail()
@@ -220,19 +420,23 @@ class AuthRepository(private val context: Context) {
                     newDocAlerts = settings.new_doc_alerts,
                     quietHours = settings.quiet_hours
                 )
+                inMemorySettings = settings
                 Result.success(settings)
             } else {
                 val localSettings = sessionManager.getNotificationSettings()
+                inMemorySettings = localSettings
                 Result.success(localSettings)
             }
         } catch (e: Exception) {
             val localSettings = sessionManager.getNotificationSettings()
+            inMemorySettings = localSettings
             Result.success(localSettings)
         }
     }
 
     suspend fun updateSettings(settings: UserSettingsDto): Result<Boolean> {
         return try {
+            inMemorySettings = settings
             sessionManager.saveNotificationSettings(
                 importantAlerts = settings.important_alerts,
                 deadlineReminders = settings.deadline_reminders,
@@ -261,13 +465,20 @@ class AuthRepository(private val context: Context) {
         }
     }
 
+    /**
+     * Clears all cached profile, settings, and session data on logout.
+     */
     suspend fun logout(): Result<Boolean> {
         return try {
             api.logout()
+            inMemoryUser = null
+            inMemorySettings = null
             sessionManager.clearSession()
             RetrofitClient.resetClient()
             Result.success(true)
         } catch (e: Exception) {
+            inMemoryUser = null
+            inMemorySettings = null
             sessionManager.clearSession()
             RetrofitClient.resetClient()
             Result.success(true)

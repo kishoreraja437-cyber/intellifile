@@ -174,7 +174,11 @@ data class RelatedFileDto(
     @SerializedName("title") val title: String,
     @SerializedName("format") val format: String? = null,
     @SerializedName("size") val size: String? = null,
-    @SerializedName("priority") val priority: String? = null
+    @SerializedName("priority") val priority: String? = null,
+    @SerializedName("page") val page: Int? = null,
+    @SerializedName("snippet") val snippet: String? = null,
+    @SerializedName("similarity") val similarity: Float? = null,
+    @SerializedName("file_url") val file_url: String? = null
 )
 
 data class AiChatMessageDto(
@@ -182,7 +186,8 @@ data class AiChatMessageDto(
     @SerializedName("sender") val sender: String,
     @SerializedName("text") val text: String,
     @SerializedName("time") val time: String? = null,
-    @SerializedName("related_files") val related_files: List<RelatedFileDto>? = null
+    @SerializedName("related_files") val related_files: List<RelatedFileDto>? = null,
+    @SerializedName("files") val files: List<RelatedFileDto>? = null
 )
 
 data class AiChatResponse(

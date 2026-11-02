@@ -16,14 +16,25 @@ class SessionManager(context: Context) {
         private const val KEY_FULL_NAME = "full_name"
         private const val KEY_EMAIL = "email"
         private const val KEY_PROFILE_IMAGE = "profile_image"
+        private const val KEY_PROFILE_IMAGE_PATH = "profile_image_path"
+        private const val KEY_CREATED_AT = "created_at"
         private const val KEY_IS_LOGGED_IN = "is_logged_in"
+        private const val KEY_PROFILE_CACHED = "profile_data_cached"
+        private const val KEY_PROFILE_CACHED_AT = "profile_data_cached_at"
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_IMPORTANT_ALERTS = "important_alerts"
         private const val KEY_DEADLINE_REMINDERS = "deadline_reminders"
         private const val KEY_NEW_DOC_ALERTS = "new_doc_alerts"
         private const val KEY_QUIET_HOURS = "quiet_hours"
+        private const val KEY_SETTINGS_CACHED = "settings_data_cached"
     }
 
+    /**
+     * Saves user authentication session upon login or signup.
+     * Note: Does not mark KEY_PROFILE_CACHED so the first Profile screen visit
+     * fetches full profile details from the server, satisfying the requirement:
+     * "First profile opening -> API call -> Save locally. Subsequent openings -> Load from cache -> No API call."
+     */
     fun saveUserSession(token: String, user: UserDto) {
         prefs.edit().apply {
             putString(KEY_TOKEN, token)
@@ -33,7 +44,81 @@ class SessionManager(context: Context) {
             if (!user.profile_image.isNullOrBlank()) {
                 putString(KEY_PROFILE_IMAGE, user.profile_image)
             }
+            if (!user.created_at.isNullOrBlank()) {
+                putString(KEY_CREATED_AT, user.created_at)
+            }
             putBoolean(KEY_IS_LOGGED_IN, true)
+            // Reset profile cached flag on fresh login so first profile opening fetches once
+            putBoolean(KEY_PROFILE_CACHED, false)
+            apply()
+        }
+    }
+
+    /**
+     * Checks if profile data is already available and cached in local storage.
+     */
+    fun hasCachedProfile(): Boolean {
+        val hasId = getUserId() > 0
+        val hasEmail = getEmail().isNotBlank()
+        val isMarkedCached = prefs.getBoolean(KEY_PROFILE_CACHED, false)
+        return hasId && hasEmail && isMarkedCached
+    }
+
+    /**
+     * Loads the saved profile data immediately from local storage.
+     */
+    fun getCachedProfile(): UserDto? {
+        val id = getUserId()
+        val email = getEmail()
+        val name = getFullName()
+        if (id > 0 && email.isNotBlank()) {
+            return UserDto(
+                id = id,
+                full_name = name.ifBlank { "User" },
+                email = email,
+                profile_image = getProfileImage(),
+                profile_image_path = prefs.getString(KEY_PROFILE_IMAGE_PATH, null),
+                created_at = prefs.getString(KEY_CREATED_AT, null)
+            )
+        }
+        return null
+    }
+
+    /**
+     * Saves the full profile data locally and marks it as cached.
+     */
+    fun saveCachedProfile(user: UserDto) {
+        val resolvedImage = com.simats.intellifile.data.api.NetworkConfig.resolveMediaUrl(user.profile_image)
+        prefs.edit().apply {
+            putInt(KEY_USER_ID, user.id)
+            putString(KEY_FULL_NAME, user.full_name)
+            putString(KEY_EMAIL, user.email)
+            if (!resolvedImage.isNullOrBlank()) {
+                putString(KEY_PROFILE_IMAGE, resolvedImage)
+            } else if (user.profile_image == null) {
+                remove(KEY_PROFILE_IMAGE)
+            }
+            if (!user.profile_image_path.isNullOrBlank()) {
+                putString(KEY_PROFILE_IMAGE_PATH, user.profile_image_path)
+            } else if (user.profile_image_path == null) {
+                remove(KEY_PROFILE_IMAGE_PATH)
+            }
+            if (!user.created_at.isNullOrBlank()) {
+                putString(KEY_CREATED_AT, user.created_at)
+            }
+            putBoolean(KEY_PROFILE_CACHED, true)
+            putLong(KEY_PROFILE_CACHED_AT, System.currentTimeMillis())
+            apply()
+        }
+    }
+
+    /**
+     * Invalidates the local profile cache (e.g. for forced refresh).
+     */
+    fun invalidateProfileCache() {
+        prefs.edit().apply {
+            putBoolean(KEY_PROFILE_CACHED, false)
+            putLong(KEY_PROFILE_CACHED_AT, 0L)
             apply()
         }
     }
@@ -48,6 +133,8 @@ class SessionManager(context: Context) {
             } else if (profileImage == null) {
                 remove(KEY_PROFILE_IMAGE)
             }
+            putBoolean(KEY_PROFILE_CACHED, true)
+            putLong(KEY_PROFILE_CACHED_AT, System.currentTimeMillis())
             apply()
         }
     }
@@ -65,6 +152,12 @@ class SessionManager(context: Context) {
     fun getThemeMode(): String = prefs.getString(KEY_THEME_MODE, "LIGHT") ?: "LIGHT"
     fun saveThemeMode(mode: String) {
         prefs.edit().putString(KEY_THEME_MODE, mode).apply()
+    }
+
+    fun hasCachedSettings(): Boolean = prefs.getBoolean(KEY_SETTINGS_CACHED, false)
+
+    fun markSettingsCached() {
+        prefs.edit().putBoolean(KEY_SETTINGS_CACHED, true).apply()
     }
 
     fun getNotificationSettings(): UserSettingsDto {
@@ -88,6 +181,7 @@ class SessionManager(context: Context) {
             putBoolean(KEY_DEADLINE_REMINDERS, deadlineReminders)
             putBoolean(KEY_NEW_DOC_ALERTS, newDocAlerts)
             putBoolean(KEY_QUIET_HOURS, quietHours)
+            putBoolean(KEY_SETTINGS_CACHED, true)
             apply()
         }
     }
@@ -97,6 +191,9 @@ class SessionManager(context: Context) {
     fun isNewDocAlertsEnabled(): Boolean = prefs.getBoolean(KEY_NEW_DOC_ALERTS, true)
     fun isQuietHoursEnabled(): Boolean = prefs.getBoolean(KEY_QUIET_HOURS, false)
 
+    /**
+     * Clears all cached session, profile, and settings data on logout.
+     */
     fun clearSession() {
         prefs.edit().clear().apply()
     }

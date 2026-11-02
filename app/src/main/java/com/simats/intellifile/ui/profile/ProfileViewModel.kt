@@ -23,65 +23,87 @@ data class ProfileUiState(
 )
 
 class ProfileViewModel(application: Application) : AndroidViewModel(application) {
-    private val authRepo = AuthRepository(application)
+    val authRepo = AuthRepository(application)
     private val _uiState = MutableStateFlow(ProfileUiState())
     val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
 
     init {
-        loadProfile()
-        loadSettings()
+        // 1. Immediately load local cached profile and settings (0 network requests)
+        val initialUser = authRepo.getLocalProfile()
+        val initialSettings = authRepo.sessionManager.getNotificationSettings()
+        _uiState.value = _uiState.value.copy(
+            user = initialUser,
+            settings = initialSettings,
+            isLoading = false
+        )
+
+        // 2. Only fetch from API if profile is NOT cached locally yet (first profile opening)
+        if (!authRepo.hasCachedProfile()) {
+            loadProfile(forceRefresh = false)
+        }
+        if (!authRepo.sessionManager.hasCachedSettings()) {
+            loadSettings(forceRefresh = false)
+        }
     }
 
-    fun getEmail(): String = authRepo.sessionManager.getEmail()
-    fun getFullName(): String = authRepo.sessionManager.getFullName()
-    fun getProfileImage(): String? = authRepo.sessionManager.getProfileImage()
+    fun getEmail(): String = _uiState.value.user?.email?.ifBlank { authRepo.sessionManager.getEmail() } ?: authRepo.sessionManager.getEmail()
+    fun getFullName(): String = _uiState.value.user?.full_name?.ifBlank { authRepo.sessionManager.getFullName() } ?: authRepo.sessionManager.getFullName()
+    fun getProfileImage(): String? = _uiState.value.user?.profile_image ?: authRepo.sessionManager.getProfileImage()
 
-    fun loadProfile() {
-        val cachedEmail = authRepo.sessionManager.getEmail()
-        val cachedName = authRepo.sessionManager.getFullName()
-        val cachedImage = authRepo.sessionManager.getProfileImage()
-
-        val cachedUser = UserDto(
-            id = authRepo.sessionManager.getUserId(),
-            full_name = cachedName.ifBlank { "User" },
-            email = cachedEmail.ifBlank { "user@example.com" },
-            profile_image = cachedImage
-        )
-        _uiState.value = _uiState.value.copy(user = cachedUser)
+    /**
+     * Loads profile data following the caching strategy:
+     * - If forceRefresh is false and local cache exists: loads from cache immediately (0 network calls).
+     * - If forceRefresh is true or no local cache exists: fetches from backend API and saves locally.
+     * - If network call fails: falls back to previously cached data so UI is never empty.
+     */
+    fun loadProfile(forceRefresh: Boolean = false) {
+        // Fast-path: if profile is already cached locally and not forcing refresh, do not make an API request
+        if (!forceRefresh && authRepo.hasCachedProfile()) {
+            val localUser = _uiState.value.user ?: authRepo.getLocalProfile()
+            if (localUser != null) {
+                _uiState.value = _uiState.value.copy(
+                    user = localUser,
+                    isLoading = false
+                )
+                return
+            }
+        }
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
-            val result = authRepo.getProfile()
+            val result = authRepo.getProfile(forceRefresh = forceRefresh)
             result.onSuccess { user ->
-                val finalEmail = if (user.email.isNotBlank()) user.email else cachedEmail
-                val finalName = if (user.full_name.isNotBlank()) user.full_name else cachedName
-                val finalImage = if (user.profile_image.isNullOrBlank() && !cachedImage.isNullOrBlank()) {
-                    cachedImage
-                } else {
-                    user.profile_image
-                }
-                val finalUser = user.copy(
-                    email = finalEmail,
-                    full_name = finalName,
-                    profile_image = finalImage
-                )
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    user = finalUser,
+                    user = user,
                     errorMessage = null
                 )
             }.onFailure { ex ->
+                val fallbackUser = _uiState.value.user ?: authRepo.getLocalProfile()
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    errorMessage = null // Keep cached user visible cleanly without blocking UI
+                    user = fallbackUser,
+                    errorMessage = if (fallbackUser == null) (ex.localizedMessage ?: "Failed to fetch profile") else null
                 )
             }
         }
     }
 
-    fun loadSettings() {
+    /**
+     * Explicit user-triggered refresh.
+     */
+    fun refreshProfile() {
+        loadProfile(forceRefresh = true)
+        loadSettings(forceRefresh = true)
+    }
+
+    fun loadSettings(forceRefresh: Boolean = false) {
+        if (!forceRefresh && authRepo.sessionManager.hasCachedSettings()) {
+            _uiState.value = _uiState.value.copy(settings = authRepo.sessionManager.getNotificationSettings())
+            return
+        }
         viewModelScope.launch {
-            val result = authRepo.getSettings()
+            val result = authRepo.getSettings(forceRefresh = forceRefresh)
             result.onSuccess { settings ->
                 _uiState.value = _uiState.value.copy(settings = settings)
             }
@@ -171,6 +193,7 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
     fun logout(onSuccess: () -> Unit) {
         viewModelScope.launch {
             authRepo.logout()
+            _uiState.value = ProfileUiState()
             onSuccess()
         }
     }

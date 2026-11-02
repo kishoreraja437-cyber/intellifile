@@ -7,7 +7,7 @@ object NetworkConfig {
      * Single unified Base URL used across the entire application.
      * Edit this single line whenever your server or devtunnel URL changes.
      */
-    const val BASE_URL = "https://tn89blc0-80.inc1.devtunnels.ms/intellifile_backend/"
+    const val BASE_URL = "https://glimmer-underwear-conical.ngrok-free.dev/intellifile_backend/"
 
     // Backwards-compatible aliases
     const val COMMON_BASE_URL = BASE_URL
