@@ -15,8 +15,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -70,25 +70,97 @@ sealed class ChatMessage {
 @Composable
 fun AiScreen(
     modifier: Modifier = Modifier,
+    initialConversationId: Int? = null,
     onBackClick: () -> Unit = {},
     onOpenFile: (AiFileResult) -> Unit = {},
-    onViewSearchHistoryClick: () -> Unit = {}
+    onViewSearchHistoryClick: () -> Unit = {},
+    onNewChatClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val aiRepository = remember { AiRepository(context) }
 
+    val defaultGreeting = remember {
+        ChatMessage.Ai(
+            text = "Hello! I am your IntelliFile AI Assistant powered by RAG and Small Language Models.\n\nAsk me anything about your uploaded documents, request summaries, or extract key takeaways.",
+            files = emptyList()
+        )
+    }
+
     var promptInput by remember { mutableStateOf("") }
-    var currentConversationId by remember { mutableStateOf<Int?>(null) }
+    var currentConversationId by remember { mutableStateOf(initialConversationId) }
     var isThinking by remember { mutableStateOf(false) }
+    var isLoadingConversation by remember { mutableStateOf(false) }
 
     val chatMessages = remember {
-        mutableStateListOf<ChatMessage>(
-            ChatMessage.Ai(
-                text = "Hello! I am your IntelliFile AI Assistant powered by RAG and Small Language Models.\n\nAsk me anything about your uploaded documents, request summaries, or extract key takeaways.",
-                files = emptyList()
-            )
-        )
+        mutableStateListOf<ChatMessage>(defaultGreeting)
+    }
+
+    // Load conversation when an initialConversationId is provided or changes
+    LaunchedEffect(initialConversationId) {
+        currentConversationId = initialConversationId
+        if (initialConversationId != null && initialConversationId > 0) {
+            isLoadingConversation = true
+            val result = aiRepository.getConversationMessages(initialConversationId)
+            isLoadingConversation = false
+            result.onSuccess { msgs ->
+                chatMessages.clear()
+                if (msgs.isEmpty()) {
+                    chatMessages.add(ChatMessage.Ai(text = "This conversation has no messages yet."))
+                } else {
+                    msgs.forEach { m ->
+                        if (m.sender.equals("USER", ignoreCase = true)) {
+                            chatMessages.add(ChatMessage.User(m.text))
+                        } else {
+                            val rawFiles = m.files ?: m.related_files ?: emptyList()
+                            val mappedFiles = rawFiles.map { rf ->
+                                val prio = when (rf.priority?.uppercase()) {
+                                    "IMPORTANT" -> PriorityLevel.IMPORTANT
+                                    "LOW" -> PriorityLevel.LOW
+                                    else -> PriorityLevel.NORMAL
+                                }
+                                val icon = when (rf.format?.uppercase()) {
+                                    "DOCX", "DOC" -> R.drawable.doc
+                                    else -> R.drawable.pdf
+                                }
+                                AiFileResult(
+                                    id = rf.id,
+                                    title = rf.title,
+                                    format = rf.format ?: "PDF",
+                                    size = rf.size ?: "1.0 MB",
+                                    dateText = rf.dateText ?: "Recent",
+                                    priority = prio,
+                                    iconResId = icon,
+                                    page = rf.page,
+                                    snippet = rf.snippet
+                                )
+                            }
+                            chatMessages.add(ChatMessage.Ai(text = m.text, files = mappedFiles))
+                        }
+                    }
+                }
+            }.onFailure { err ->
+                chatMessages.clear()
+                chatMessages.add(
+                    ChatMessage.Ai(
+                        text = "Failed to load conversation: ${err.localizedMessage}"
+                    )
+                )
+            }
+        } else if (initialConversationId == null && currentConversationId == null && chatMessages.size <= 1) {
+            chatMessages.clear()
+            chatMessages.add(defaultGreeting)
+        }
+    }
+
+    val handleStartNewChat: () -> Unit = {
+        currentConversationId = null
+        promptInput = ""
+        isThinking = false
+        isLoadingConversation = false
+        chatMessages.clear()
+        chatMessages.add(defaultGreeting)
+        onNewChatClick()
     }
 
     Box(
@@ -102,7 +174,9 @@ fun AiScreen(
             // Header with Back Button and Robot Avatar
             AiHeader(
                 onBackClick = onBackClick,
-                onViewSearchHistoryClick = onViewSearchHistoryClick
+                onViewSearchHistoryClick = onViewSearchHistoryClick,
+                hasActiveConversation = currentConversationId != null,
+                onNewChatClick = handleStartNewChat
             )
 
             // Chat Messages List
@@ -114,18 +188,34 @@ fun AiScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(top = 12.dp, bottom = 16.dp)
             ) {
-                items(chatMessages) { message ->
-                    when (message) {
-                        is ChatMessage.User -> {
-                            UserMessageBubble(text = message.text)
-                        }
-                        is ChatMessage.Ai -> {
-                            AiMessageBubble(
-                                text = message.text,
-                                files = message.files,
-                                isLoading = message.isLoading,
-                                onOpenFile = onOpenFile
+                if (isLoadingConversation) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 40.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(36.dp)
                             )
+                        }
+                    }
+                } else {
+                    items(chatMessages) { message ->
+                        when (message) {
+                            is ChatMessage.User -> {
+                                UserMessageBubble(text = message.text)
+                            }
+                            is ChatMessage.Ai -> {
+                                AiMessageBubble(
+                                    text = message.text,
+                                    files = message.files,
+                                    isLoading = message.isLoading,
+                                    onOpenFile = onOpenFile
+                                )
+                            }
                         }
                     }
                 }
@@ -178,23 +268,25 @@ fun AiScreen(
                                         "DOCX", "DOC" -> R.drawable.doc
                                         else -> R.drawable.pdf
                                     }
-                                    val pageStr = if (rf.page != null && rf.page > 0) "Page ${rf.page}" else null
-                                    val metaDetails = listOfNotNull(rf.format ?: "PDF", pageStr, rf.size).joinToString(" · ")
-
                                     AiFileResult(
+                                        id = rf.id,
                                         title = rf.title,
                                         format = rf.format ?: "PDF",
                                         size = rf.size ?: "1.0 MB",
-                                        dateText = metaDetails,
+                                        dateText = rf.dateText ?: "Recent",
                                         priority = prio,
                                         iconResId = icon,
-                                        id = rf.id,
                                         page = rf.page,
                                         snippet = rf.snippet
                                     )
                                 }
 
-                                chatMessages.add(ChatMessage.Ai(text = replyText, files = mappedFiles))
+                                chatMessages.add(
+                                    ChatMessage.Ai(
+                                        text = replyText,
+                                        files = mappedFiles
+                                    )
+                                )
                             }.onFailure { err ->
                                 chatMessages.add(
                                     ChatMessage.Ai(
@@ -284,7 +376,9 @@ fun AiFluidOrbAvatar(
 fun AiHeader(
     onBackClick: () -> Unit,
     onViewSearchHistoryClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    hasActiveConversation: Boolean = false,
+    onNewChatClick: () -> Unit = {}
 ) {
     Column(
         modifier = modifier
@@ -296,7 +390,8 @@ fun AiHeader(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             IconButton(onClick = onBackClick) {
                 Icon(
@@ -304,6 +399,31 @@ fun AiHeader(
                     contentDescription = "Back",
                     tint = MaterialTheme.colorScheme.onBackground
                 )
+            }
+
+            if (hasActiveConversation) {
+                Row(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable { onNewChatClick() }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "New Chat",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "New Chat",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
 

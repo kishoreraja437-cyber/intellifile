@@ -15,24 +15,29 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.simats.intellifile.data.repository.AiRepository
+import kotlinx.coroutines.launch
 
 enum class HistoryCategory(val label: String, val icon: ImageVector?) {
     ALL("All", null),
@@ -42,6 +47,7 @@ enum class HistoryCategory(val label: String, val icon: ImageVector?) {
 }
 
 data class ChatHistoryItem(
+    val id: Int = 0,
     val title: String,
     val snippet: String,
     val dateText: String,
@@ -57,74 +63,116 @@ fun AiChatHistoryScreen(
     onClearHistoryClick: () -> Unit = {},
     onHistoryItemClick: (ChatHistoryItem) -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val aiRepository = remember { AiRepository(context) }
+
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf(HistoryCategory.ALL) }
+    var isLoading by remember { mutableStateOf(false) }
+    var showClearConfirmDialog by remember { mutableStateOf(false) }
 
-    val historyItems = remember {
-        mutableStateListOf(
-            ChatHistoryItem(
-                title = "Summarize this PDF",
-                snippet = "Here's a summary of the key points from the document 'Project_Report.pdf'...",
-                dateText = "Oct 5, 2024",
-                timeText = "10:24 AM",
-                category = HistoryCategory.ANALYSIS,
-                icon = Icons.Outlined.Description
-            ),
-            ChatHistoryItem(
-                title = "Find important files",
-                snippet = "I found 5 important files related to 'assignment' in your documents...",
-                dateText = "Oct 4, 2024",
-                timeText = "04:15 PM",
-                category = HistoryCategory.SEARCH,
-                icon = Icons.Default.Search
-            ),
-            ChatHistoryItem(
-                title = "Explain this document",
-                snippet = "This document appears to be a project proposal for the AI-based document...",
-                dateText = "Oct 3, 2024",
-                timeText = "11:32 AM",
-                category = HistoryCategory.ANALYSIS,
-                icon = Icons.Outlined.ChatBubbleOutline
-            ),
-            ChatHistoryItem(
-                title = "Compare two files",
-                snippet = "The main differences between the two files are in the content and file size...",
-                dateText = "Oct 2, 2024",
-                timeText = "08:45 PM",
-                category = HistoryCategory.ANALYSIS,
-                icon = Icons.Outlined.Description
-            ),
-            ChatHistoryItem(
-                title = "Suggest file priorities",
-                snippet = "Based on your recent activity, here are the top 5 files you should prioritize...",
-                dateText = "Oct 1, 2024",
-                timeText = "02:17 PM",
-                category = HistoryCategory.GENERAL,
-                icon = Icons.Outlined.AutoAwesome
-            ),
-            ChatHistoryItem(
-                title = "General Query",
-                snippet = "What is the best way to organize my files for better productivity?",
-                dateText = "Sep 29, 2024",
-                timeText = "09:52 AM",
-                category = HistoryCategory.GENERAL,
-                icon = Icons.Outlined.ChatBubbleOutline
-            ),
-            ChatHistoryItem(
-                title = "Extract key points",
-                snippet = "Here are the key points from your document 'Notes.pdf'...",
-                dateText = "Sep 28, 2024",
-                timeText = "05:30 PM",
-                category = HistoryCategory.ANALYSIS,
-                icon = Icons.Outlined.Description
-            )
-        )
+    val historyItems = remember { mutableStateListOf<ChatHistoryItem>() }
+
+    fun fetchHistory() {
+        coroutineScope.launch {
+            isLoading = true
+            val catParam = when (selectedCategory) {
+                HistoryCategory.ALL -> "ALL"
+                HistoryCategory.ANALYSIS -> "ANALYSIS"
+                HistoryCategory.SEARCH -> "SEARCH"
+                HistoryCategory.GENERAL -> "GENERAL"
+            }
+            val result = aiRepository.getChatHistory(catParam)
+            isLoading = false
+            result.onSuccess { dtoList ->
+                historyItems.clear()
+                dtoList.forEach { dto ->
+                    val cat = when (dto.category.uppercase()) {
+                        "ANALYSIS" -> HistoryCategory.ANALYSIS
+                        "SEARCH" -> HistoryCategory.SEARCH
+                        else -> HistoryCategory.GENERAL
+                    }
+                    val icon = when (cat) {
+                        HistoryCategory.ANALYSIS -> Icons.Outlined.Description
+                        HistoryCategory.SEARCH -> Icons.Default.Search
+                        else -> Icons.Outlined.ChatBubbleOutline
+                    }
+                    historyItems.add(
+                        ChatHistoryItem(
+                            id = dto.id,
+                            title = dto.title,
+                            snippet = dto.snippet,
+                            dateText = dto.dateText ?: "Recent",
+                            timeText = dto.timeText ?: "",
+                            category = cat,
+                            icon = icon
+                        )
+                    )
+                }
+            }.onFailure {
+                // If API fails, keep current state
+            }
+        }
+    }
+
+    LaunchedEffect(selectedCategory) {
+        fetchHistory()
     }
 
     val filteredItems = historyItems.filter { item ->
-        val matchesSearch = item.title.contains(searchQuery, ignoreCase = true) || item.snippet.contains(searchQuery, ignoreCase = true)
+        val matchesSearch = searchQuery.isBlank() ||
+                item.title.contains(searchQuery, ignoreCase = true) ||
+                item.snippet.contains(searchQuery, ignoreCase = true)
         val matchesCategory = selectedCategory == HistoryCategory.ALL || item.category == selectedCategory
         matchesSearch && matchesCategory
+    }
+
+    if (showClearConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirmDialog = false },
+            title = {
+                Text(
+                    text = "Clear AI History",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to clear your AI chat history? All previous conversations and messages will be permanently deleted.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearConfirmDialog = false
+                        coroutineScope.launch {
+                            val res = aiRepository.clearChatHistory()
+                            res.onSuccess {
+                                historyItems.clear()
+                                onClearHistoryClick()
+                            }
+                        }
+                    }
+                ) {
+                    Text(
+                        text = "Clear All",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirmDialog = false }) {
+                    Text(
+                        text = "Cancel",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        )
     }
 
     Box(
@@ -167,15 +215,14 @@ fun AiChatHistoryScreen(
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = {
-                        historyItems.clear()
-                        onClearHistoryClick()
-                    }) {
-                        Icon(
-                            imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = "Clear History",
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
+                    if (historyItems.isNotEmpty()) {
+                        IconButton(onClick = { showClearConfirmDialog = true }) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteOutline,
+                                contentDescription = "Clear History",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
 
                     AiFluidOrbAvatar(
@@ -259,12 +306,59 @@ fun AiChatHistoryScreen(
                     }
                 }
 
-                // History Items List
-                items(filteredItems) { item ->
-                    HistoryCardItem(
-                        item = item,
-                        onClick = { onHistoryItemClick(item) }
-                    )
+                // Loading State
+                if (isLoading) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 40.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
+                    }
+                } else if (filteredItems.isEmpty()) {
+                    // Empty State
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 48.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Outlined.Chat,
+                                contentDescription = "Empty History",
+                                tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f),
+                                modifier = Modifier.size(56.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "No AI chat history found",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = if (searchQuery.isNotBlank()) "Try a different search keyword" else "Your conversations will appear here",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+                } else {
+                    // History Items List
+                    items(filteredItems) { item ->
+                        HistoryCardItem(
+                            item = item,
+                            onClick = { onHistoryItemClick(item) }
+                        )
+                    }
                 }
             }
         }
@@ -353,7 +447,8 @@ fun HistoryCardItem(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1
                 )
 
                 Text(
