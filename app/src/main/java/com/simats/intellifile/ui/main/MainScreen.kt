@@ -520,7 +520,12 @@ fun MainScreen(
 
                         totalPages = 1,
 
-                        onBackClick = { isDocumentViewerOpen = false },
+                        onBackClick = {
+                            isDocumentViewerOpen = false
+                            if (selectedTab == BottomNavItem.AI) {
+                                selectedDetailFile = null
+                            }
+                        },
 
                         onShareClick = { isShareOpen = true },
 
@@ -597,6 +602,16 @@ fun MainScreen(
                         onClearHistoryClick = {
 
                             activeAiConversationId = null
+
+                        },
+
+                        onDeleteIndividualClick = { deletedItem ->
+
+                            if (activeAiConversationId == deletedItem.id) {
+
+                                activeAiConversationId = null
+
+                            }
 
                         },
 
@@ -965,37 +980,28 @@ fun MainScreen(
                                 onBackClick = { selectedTab = BottomNavItem.HOME },
 
                                 onOpenFile = { aiFile ->
-
                                     val localMatch = LocalFileManager.getDeviceFiles(context).firstOrNull {
-
                                         it.title.equals(aiFile.title, ignoreCase = true) ||
-
-                                        it.title.equals(aiFile.title.substringBeforeLast('.'), ignoreCase = true)
-
+                                        it.title.equals(aiFile.title.substringBeforeLast('.'), ignoreCase = true) ||
+                                        (!aiFile.uriString.isNullOrBlank() && it.uri.toString() == aiFile.uriString) ||
+                                        (!aiFile.filePath.isNullOrBlank() && it.path == aiFile.filePath)
                                     }
 
+                                    val finalUri = if (!aiFile.uriString.isNullOrBlank()) aiFile.uriString else (localMatch?.uri?.toString() ?: "")
+                                    val finalPath = if (!aiFile.filePath.isNullOrBlank()) aiFile.filePath else (localMatch?.path ?: "")
+
                                     selectedDetailFile = FileDetailData(
-
                                         fileName = aiFile.title,
-
                                         fileSize = aiFile.size,
-
-                                        fileType = aiFile.format,
-
+                                        fileType = "${aiFile.format} Document",
                                         createdDate = aiFile.dateText,
-
                                         modifiedDate = aiFile.dateText,
-
                                         priority = aiFile.priority,
-
                                         iconResId = aiFile.iconResId,
-
-                                        uriString = localMatch?.uri?.toString() ?: "",
-
-                                        path = localMatch?.path ?: ""
-
+                                        uriString = finalUri,
+                                        path = finalPath
                                     )
-
+                                    isDocumentViewerOpen = true
                                 },
 
                                 onViewSearchHistoryClick = { isAiHistoryOpen = true },
@@ -1143,6 +1149,42 @@ fun MainScreen(
         if (isVoiceAssistantOpen) {
             VoiceAssistantModal(
                 onDismiss = { isVoiceAssistantOpen = false },
+                onNavigateToTab = { tab ->
+                    isVoiceAssistantOpen = false
+                    isRecentFilesOpen = false
+                    isAiHistoryOpen = false
+                    selectedDetailFile = null
+                    isNotificationsOpen = false
+                    isThemeOpen = false
+                    isAboutOpen = false
+                    isHelpSupportOpen = false
+                    selectedTab = tab
+                },
+                onNavigateToOverlay = { overlayKey ->
+                    isVoiceAssistantOpen = false
+                    when (overlayKey) {
+                        "recent_files" -> isRecentFilesOpen = true
+                        "notifications" -> isNotificationsOpen = true
+                        "theme" -> isThemeOpen = true
+                        "about" -> isAboutOpen = true
+                        "help" -> isHelpSupportOpen = true
+                        "ai_history" -> isAiHistoryOpen = true
+                    }
+                },
+                onGoBack = {
+                    isVoiceAssistantOpen = false
+                    if (isOverlayScreenOpen) {
+                        isRecentFilesOpen = false
+                        isAiHistoryOpen = false
+                        selectedDetailFile = null
+                        isNotificationsOpen = false
+                        isThemeOpen = false
+                        isAboutOpen = false
+                        isHelpSupportOpen = false
+                    } else if (selectedTab != BottomNavItem.HOME) {
+                        selectedTab = BottomNavItem.HOME
+                    }
+                },
                 onOpenInAiChat = { convId ->
                     isVoiceAssistantOpen = false
                     activeAiConversationId = convId

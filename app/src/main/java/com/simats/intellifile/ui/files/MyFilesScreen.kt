@@ -292,28 +292,30 @@ fun MyFilesScreen(
                                 ) {
                                     Text(text = doc.format, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF3730A3))
                                 }
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(
-                                            when (doc.priority.uppercase()) {
-                                                "IMPORTANT" -> Color(0xFFFEE2E2)
-                                                "NORMAL" -> Color(0xFFDEF7EC)
-                                                else -> Color(0xFFF3F4F6)
+                                if (!doc.priority.isNullOrBlank()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(
+                                                when (doc.priority.uppercase()) {
+                                                    "IMPORTANT" -> Color(0xFFFEE2E2)
+                                                    "NORMAL" -> Color(0xFFDEF7EC)
+                                                    else -> Color(0xFFF3F4F6)
+                                                }
+                                            )
+                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = doc.priority,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = when (doc.priority.uppercase()) {
+                                                "IMPORTANT" -> Color(0xFF991B1B)
+                                                "NORMAL" -> Color(0xFF03543F)
+                                                else -> Color(0xFF374151)
                                             }
                                         )
-                                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = doc.priority,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = when (doc.priority.uppercase()) {
-                                            "IMPORTANT" -> Color(0xFF991B1B)
-                                            "NORMAL" -> Color(0xFF03543F)
-                                            else -> Color(0xFF374151)
-                                        }
-                                    )
+                                    }
                                 }
                                 Box(
                                     modifier = Modifier
@@ -1315,18 +1317,25 @@ fun VaultDocumentCard(
                         )
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFFF3F4F6))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = doc.priority,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFF4B5563)
-                        )
+                    if (!doc.priority.isNullOrBlank()) {
+                        val prioColor = when (doc.priority.uppercase()) {
+                            "IMPORTANT" -> Pair(Color(0xFFFFEAEE), Color(0xFFEF4444))
+                            "LOW" -> Pair(Color(0xFFE2F7ED), Color(0xFF10B981))
+                            else -> Pair(Color(0xFFFFF6D8), Color(0xFFD97706))
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(prioColor.first)
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = doc.priority,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = prioColor.second
+                            )
+                        }
                     }
                 }
 

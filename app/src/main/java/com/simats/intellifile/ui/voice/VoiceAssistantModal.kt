@@ -2,6 +2,7 @@ package com.simats.intellifile.ui.voice
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -14,8 +15,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -27,10 +26,12 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.*
@@ -43,7 +44,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -52,12 +52,14 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.simats.intellifile.R
 import com.simats.intellifile.data.manager.LocalFileManager
+import com.simats.intellifile.data.model.LocalFileItem
 import com.simats.intellifile.data.repository.AiRepository
 import com.simats.intellifile.ui.ai.AiFileResult
 import com.simats.intellifile.ui.ai.AiFluidOrbAvatar
 import com.simats.intellifile.ui.detail.FileDetailData
 import com.simats.intellifile.ui.home.PriorityLevel
 import com.simats.intellifile.ui.home.PriorityTag
+import com.simats.intellifile.ui.main.BottomNavItem
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -75,6 +77,9 @@ enum class AssistantVoiceState {
 fun VoiceAssistantModal(
     modifier: Modifier = Modifier,
     onDismiss: () -> Unit = {},
+    onNavigateToTab: (BottomNavItem) -> Unit = {},
+    onNavigateToOverlay: (String) -> Unit = {},
+    onGoBack: () -> Unit = {},
     onOpenInAiChat: (Int?) -> Unit = {},
     onSearchHome: (String) -> Unit = {},
     onOpenFile: (FileDetailData) -> Unit = {}
@@ -96,11 +101,14 @@ fun VoiceAssistantModal(
     var voiceState by remember { mutableStateOf(AssistantVoiceState.IDLE) }
     var soundLevelRms by remember { mutableFloatStateOf(0f) }
     var userSpeechText by remember { mutableStateOf("") }
+    var manualInputText by remember { mutableStateOf("") }
     var assistantReplyText by remember { mutableStateOf("") }
-    var attachedFiles by remember { mutableStateOf<List<AiFileResult>>(emptyList()) }
+    var foundDeviceFiles by remember { mutableStateOf<List<LocalFileItem>>(emptyList()) }
+    var attachedAiFiles by remember { mutableStateOf<List<AiFileResult>>(emptyList()) }
     var currentConversationId by remember { mutableStateOf<Int?>(null) }
-    var statusMessage by remember { mutableStateOf("Tap the microphone and speak...") }
+    var statusMessage by remember { mutableStateOf("Tap the microphone or type below...") }
     var isMuted by remember { mutableStateOf(false) }
+    var isBusy by remember { mutableStateOf(false) }
 
     // TTS Setup
     var ttsInstance by remember { mutableStateOf<TextToSpeech?>(null) }
@@ -142,10 +150,17 @@ fun VoiceAssistantModal(
     }
 
     fun cleanTextForSpeech(raw: String): String {
-        return raw.replace(Regex("[*#_`~>•]"), "")
+        val clean = raw.replace(Regex("[*#_`~>•]"), "")
             .replace(Regex("https?://\\S+"), "")
             .replace(Regex("\\s+"), " ")
             .trim()
+        // If response is very long, speak the first 2-3 sentences to keep voice interaction natural
+        val sentences = clean.split(Regex("(?<=[.!?])\\s+"))
+        return if (sentences.size > 3) {
+            sentences.take(3).joinToString(" ")
+        } else {
+            clean
+        }
     }
 
     fun speakAnswer(text: String) {
@@ -192,7 +207,7 @@ fun VoiceAssistantModal(
             val recognized = matches?.firstOrNull()?.trim()
             if (!recognized.isNullOrBlank()) {
                 userSpeechText = recognized
-                // Proceed with query
+                // Process through VoiceCommandProcessor
             } else {
                 voiceState = AssistantVoiceState.IDLE
             }
@@ -201,112 +216,238 @@ fun VoiceAssistantModal(
         }
     }
 
-    fun executeQuery(spokenQuery: String) {
-        val query = spokenQuery.trim()
-        if (query.isBlank()) return
+    fun executeCommand(rawSpokenQuery: String) {
+        val query = rawSpokenQuery.trim()
+        if (query.isBlank() || isBusy) return
 
         stopSpeaking()
+        isBusy = true
         userSpeechText = query
         voiceState = AssistantVoiceState.PROCESSING
-        statusMessage = "Analyzing with IntelliFile AI..."
+        statusMessage = "Processing command..."
 
         coroutineScope.launch {
-            val lower = query.lowercase()
+            try {
+                val (commandType, intentResult) = VoiceCommandProcessor.processCommand(query)
 
-            // 1. Direct Voice Action: "open <document>"
-            if (lower.startsWith("open ") || lower.startsWith("view ")) {
-                val docName = query.substringAfter(" ").trim()
-                val localFiles = LocalFileManager.getDeviceFiles(context)
-                val directMatch = localFiles.firstOrNull {
-                    it.title.contains(docName, ignoreCase = true) ||
-                            it.title.substringBeforeLast('.').contains(docName, ignoreCase = true)
-                }
+                when (intentResult) {
+                    // -------------------------------------------------------------
+                    // 1. NAVIGATION_COMMAND
+                    // -------------------------------------------------------------
+                    is VoiceIntentResult.Navigation -> {
+                        assistantReplyText = intentResult.spokenConfirmation
+                        statusMessage = "Navigating..."
+                        speakAnswer(intentResult.spokenConfirmation)
+                        delay(650L)
+                        stopSpeaking()
+                        onDismiss()
 
-                if (directMatch != null) {
-                    val reply = "Opening ${directMatch.title} for you."
-                    assistantReplyText = reply
-                    statusMessage = "Opening file..."
-                    voiceState = AssistantVoiceState.SPEAKING
-                    speakAnswer(reply)
-                    delay(800L)
-                    onOpenFile(
-                        FileDetailData(
-                            fileName = directMatch.title,
-                            fileSize = directMatch.sizeFormatted,
-                            fileType = directMatch.format,
-                            createdDate = directMatch.dateText,
-                            modifiedDate = directMatch.dateText,
-                            priority = directMatch.priority,
-                            iconResId = directMatch.iconResId,
-                            uriString = directMatch.uri.toString(),
-                            path = directMatch.path
+                        when {
+                            intentResult.isBack -> onGoBack()
+                            intentResult.targetTab != null -> onNavigateToTab(intentResult.targetTab)
+                            intentResult.overlayKey != null -> onNavigateToOverlay(intentResult.overlayKey)
+                        }
+                    }
+
+                    // -------------------------------------------------------------
+                    // 2. FILE_ACTION_COMMAND (Open / View specific file)
+                    // -------------------------------------------------------------
+                    is VoiceIntentResult.FileAction -> {
+                        val allFiles = LocalFileManager.getDeviceFiles(context)
+                        val term = intentResult.targetFileName.lowercase()
+
+                        val matches = allFiles.filter {
+                            it.title.lowercase().contains(term) ||
+                                    it.title.substringBeforeLast('.').lowercase().contains(term)
+                        }
+
+                        if (matches.size == 1) {
+                            val targetFile = matches[0]
+                            val confirm = "Opening ${targetFile.title} for you."
+                            assistantReplyText = confirm
+                            statusMessage = "Opening file..."
+                            speakAnswer(confirm)
+                            delay(700L)
+                            stopSpeaking()
+                            onDismiss()
+                            onOpenFile(mapLocalToFileDetail(targetFile))
+                        } else if (matches.size > 1) {
+                            foundDeviceFiles = matches
+                            val reply = "I found ${matches.size} files matching '${intentResult.targetFileName}'. Tap one to open."
+                            assistantReplyText = reply
+                            statusMessage = "Multiple files found"
+                            voiceState = AssistantVoiceState.SPEAKING
+                            speakAnswer(reply)
+                        } else {
+                            foundDeviceFiles = emptyList()
+                            val notFound = "I could not find any file named '${intentResult.targetFileName}' on your device."
+                            assistantReplyText = notFound
+                            statusMessage = "File not found"
+                            voiceState = AssistantVoiceState.IDLE
+                            speakAnswer(notFound)
+                        }
+                    }
+
+                    // -------------------------------------------------------------
+                    // 3. FILE_SEARCH_COMMAND
+                    // -------------------------------------------------------------
+                    is VoiceIntentResult.FileSearch -> {
+                        val allFiles = LocalFileManager.getDeviceFiles(context)
+                        val term = intentResult.query.lowercase()
+                        val fmt = intentResult.formatFilter
+
+                        val filtered = allFiles.filter { file ->
+                            val matchName = term.isBlank() || file.title.lowercase().contains(term)
+                            val matchFormat = fmt == null || file.format.equals(fmt, ignoreCase = true)
+                            matchName && matchFormat
+                        }
+
+                        foundDeviceFiles = filtered
+                        if (filtered.isNotEmpty()) {
+                            val reply = if (fmt != null && term.isNotBlank()) {
+                                "Found ${filtered.size} $fmt file(s) matching '$term'."
+                            } else if (fmt != null) {
+                                "You have ${filtered.size} $fmt file(s)."
+                            } else {
+                                "I found ${filtered.size} file(s) matching '$term'."
+                            }
+                            assistantReplyText = reply
+                            statusMessage = "Search results"
+                            voiceState = AssistantVoiceState.SPEAKING
+                            speakAnswer(reply)
+
+                            // Also sync home screen search query if term is present
+                            if (term.isNotBlank()) {
+                                onSearchHome(term)
+                            }
+                        } else {
+                            val noMatch = "No files found matching '${intentResult.query}'."
+                            assistantReplyText = noMatch
+                            statusMessage = "No files found"
+                            voiceState = AssistantVoiceState.IDLE
+                            speakAnswer(noMatch)
+                        }
+                    }
+
+                    // -------------------------------------------------------------
+                    // 4. APP_DATA_QUERY (Live File Statistics & Counts)
+                    // -------------------------------------------------------------
+                    is VoiceIntentResult.AppDataQuery -> {
+                        val allFiles = LocalFileManager.getDeviceFiles(context)
+                        val (reply, filesToShow) = when (intentResult.queryType) {
+                            AppDataQueryType.TOTAL_FILES -> {
+                                val count = allFiles.size
+                                Pair("You currently have a total of $count file" + (if (count != 1) "s" else "") + " stored on your device.", allFiles.take(4))
+                            }
+                            AppDataQueryType.FORMAT_COUNT -> {
+                                val fmt = intentResult.format ?: "PDF"
+                                val count = allFiles.count { it.format.equals(fmt, ignoreCase = true) }
+                                val matching = allFiles.filter { it.format.equals(fmt, ignoreCase = true) }
+                                Pair("You have $count $fmt file" + (if (count != 1) "s" else "") + " available.", matching.take(4))
+                            }
+                            AppDataQueryType.IMPORTANT_COUNT -> {
+                                val count = allFiles.count { it.priority == PriorityLevel.IMPORTANT }
+                                val matching = allFiles.filter { it.priority == PriorityLevel.IMPORTANT }
+                                Pair("You have $count file" + (if (count != 1) "s" else "") + " marked as important.", matching.take(4))
+                            }
+                            AppDataQueryType.BOOKMARKED_COUNT -> {
+                                val count = allFiles.count { it.isBookmarked }
+                                val matching = allFiles.filter { it.isBookmarked }
+                                Pair("You have $count bookmarked file" + (if (count != 1) "s" else "") + ".", matching.take(4))
+                            }
+                            AppDataQueryType.RECENT_FILES -> {
+                                val count = allFiles.size
+                                val recent = allFiles.take(5)
+                                Pair("Here are your ${recent.size} most recently updated files.", recent)
+                            }
+                        }
+
+                        foundDeviceFiles = filesToShow
+                        assistantReplyText = reply
+                        statusMessage = "Information retrieved"
+                        voiceState = AssistantVoiceState.SPEAKING
+                        speakAnswer(reply)
+                    }
+
+                    // -------------------------------------------------------------
+                    // 5. GENERAL_AI_QUERY & DOCUMENT_QUERY (SLM & RAG)
+                    // -------------------------------------------------------------
+                    is VoiceIntentResult.AiQuery -> {
+                        foundDeviceFiles = emptyList()
+                        val result = aiRepository.sendChatMessage(
+                            message = intentResult.prompt,
+                            conversationId = currentConversationId
                         )
-                    )
-                    return@launch
-                }
-            }
 
-            // 2. Direct Voice Action: "search <query>"
-            if (lower.startsWith("search ") || lower.startsWith("find ")) {
-                val searchTerm = query.substringAfter(" ").trim()
-                onSearchHome(searchTerm)
-            }
+                        result.onSuccess { response ->
+                            currentConversationId = response.conversation_id
+                            val reply = response.message?.text ?: response.reply ?: "I analyzed your files."
+                            assistantReplyText = reply
 
-            // 3. Hybrid AI Query (SLM + RAG + App Statistics)
-            val result = aiRepository.sendChatMessage(
-                message = query,
-                conversationId = currentConversationId
-            )
+                            val rawFiles = response.message?.files
+                                ?: response.message?.related_files
+                                ?: response.related_files
+                                ?: emptyList()
 
-            result.onSuccess { response ->
-                currentConversationId = response.conversation_id
-                val reply = response.message?.text ?: response.reply ?: "Here is the information you requested."
-                assistantReplyText = reply
+                            attachedAiFiles = rawFiles.map { rf ->
+                                val prio = when (rf.priority?.uppercase()) {
+                                    "IMPORTANT" -> PriorityLevel.IMPORTANT
+                                    "NORMAL" -> PriorityLevel.NORMAL
+                                    "LOW" -> PriorityLevel.LOW
+                                    else -> null
+                                }
+                                val icon = when (rf.format?.uppercase()) {
+                                    "DOCX", "DOC" -> R.drawable.doc
+                                    else -> R.drawable.pdf
+                                }
+                                AiFileResult(
+                                    id = rf.id,
+                                    title = rf.title,
+                                    format = rf.format ?: "PDF",
+                                    size = rf.size ?: "1.0 MB",
+                                    dateText = rf.dateText ?: "Recent",
+                                    priority = prio,
+                                    iconResId = icon,
+                                    page = rf.page,
+                                    snippet = rf.snippet
+                                )
+                            }
 
-                val rawFiles = response.message?.files
-                    ?: response.message?.related_files
-                    ?: response.related_files
-                    ?: emptyList()
-
-                attachedFiles = rawFiles.map { rf ->
-                    val prio = when (rf.priority?.uppercase()) {
-                        "IMPORTANT" -> PriorityLevel.IMPORTANT
-                        "LOW" -> PriorityLevel.LOW
-                        else -> PriorityLevel.NORMAL
+                            statusMessage = if (intentResult.isDocumentQuery) "Document analysis complete" else "AI Answer"
+                            voiceState = AssistantVoiceState.SPEAKING
+                            speakAnswer(reply)
+                        }.onFailure { err ->
+                            voiceState = AssistantVoiceState.ERROR
+                            val msg = "I could not connect to the AI service right now. Please ensure the backend is running."
+                            assistantReplyText = msg
+                            statusMessage = "Service unavailable"
+                            speakAnswer(msg)
+                        }
                     }
-                    val icon = when (rf.format?.uppercase()) {
-                        "DOCX", "DOC" -> R.drawable.doc
-                        else -> R.drawable.pdf
-                    }
-                    AiFileResult(
-                        id = rf.id,
-                        title = rf.title,
-                        format = rf.format ?: "PDF",
-                        size = rf.size ?: "1.0 MB",
-                        dateText = rf.dateText ?: "Recent",
-                        priority = prio,
-                        iconResId = icon,
-                        page = rf.page,
-                        snippet = rf.snippet
-                    )
-                }
 
-                statusMessage = "AI answered:"
-                voiceState = AssistantVoiceState.SPEAKING
-                speakAnswer(reply)
-            }.onFailure { err ->
+                    // -------------------------------------------------------------
+                    // 6. UNKNOWN_COMMAND / Clarify
+                    // -------------------------------------------------------------
+                    is VoiceIntentResult.Clarify -> {
+                        assistantReplyText = intentResult.message
+                        statusMessage = "Could not understand"
+                        voiceState = AssistantVoiceState.IDLE
+                        speakAnswer(intentResult.message)
+                    }
+                }
+            } catch (e: Exception) {
                 voiceState = AssistantVoiceState.ERROR
-                val errMsg = "Could not reach AI service: ${err.localizedMessage ?: "Unknown error"}"
-                assistantReplyText = errMsg
-                statusMessage = "An error occurred"
-                speakAnswer(errMsg)
+                assistantReplyText = "An unexpected error occurred while processing your request. Please try again."
+                statusMessage = "Error occurred"
+            } finally {
+                isBusy = false
             }
         }
     }
 
     fun startListening() {
         stopSpeaking()
-        if (!hasAudioPermission) return
+        if (!hasAudioPermission || isBusy) return
 
         if (speechRecognizer != null) {
             try {
@@ -333,14 +474,14 @@ fun VoiceAssistantModal(
 
                     override fun onError(error: Int) {
                         val message = when (error) {
-                            SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
+                            SpeechRecognizer.ERROR_AUDIO -> "Audio recording issue"
                             SpeechRecognizer.ERROR_CLIENT -> "Client speech error"
-                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Audio permission missing"
-                            SpeechRecognizer.ERROR_NETWORK -> "Network connection issue"
+                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Audio permission required"
+                            SpeechRecognizer.ERROR_NETWORK -> "Network issue with voice recognition"
                             SpeechRecognizer.ERROR_NO_MATCH -> "No speech recognized. Tap mic to retry."
                             SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech recognizer is busy"
-                            SpeechRecognizer.ERROR_SERVER -> "Recognition server error"
-                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected. Tap mic to talk."
+                            SpeechRecognizer.ERROR_SERVER -> "Recognition service error"
+                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech detected. Tap mic to speak."
                             else -> "Tap the microphone to speak"
                         }
                         statusMessage = message
@@ -351,10 +492,10 @@ fun VoiceAssistantModal(
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         val text = matches?.firstOrNull()?.trim()
                         if (!text.isNullOrBlank()) {
-                            executeQuery(text)
+                            executeCommand(text)
                         } else {
                             voiceState = AssistantVoiceState.IDLE
-                            statusMessage = "Didn't catch that. Tap mic to speak."
+                            statusMessage = "Didn't catch that. Tap mic or type below."
                         }
                     }
 
@@ -373,7 +514,6 @@ fun VoiceAssistantModal(
                 voiceState = AssistantVoiceState.LISTENING
                 statusMessage = "Listening... Speak now"
             } catch (e: Exception) {
-                // Fallback to system speech launcher
                 try {
                     systemSpeechLauncher.launch(speechIntent)
                 } catch (_: Exception) {
@@ -382,7 +522,6 @@ fun VoiceAssistantModal(
                 }
             }
         } else {
-            // SpeechRecognizer unavailable directly, launch system speech activity
             try {
                 systemSpeechLauncher.launch(speechIntent)
             } catch (e: Exception) {
@@ -435,7 +574,7 @@ fun VoiceAssistantModal(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 28.dp),
+                .padding(bottom = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Header Bar
@@ -455,7 +594,7 @@ fun VoiceAssistantModal(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Powered by Hybrid RAG & SLM",
+                            text = "Navigation · File Search · AI Chat",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -463,7 +602,6 @@ fun VoiceAssistantModal(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Mute / Speaker toggle
                     IconButton(
                         onClick = {
                             isMuted = !isMuted
@@ -493,7 +631,7 @@ fun VoiceAssistantModal(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Main Content Area
             LazyColumn(
@@ -503,7 +641,7 @@ fun VoiceAssistantModal(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // If permission is missing
+                // Permission Card
                 if (!hasAudioPermission) {
                     item {
                         PermissionRequiredCard(
@@ -513,7 +651,7 @@ fun VoiceAssistantModal(
                         )
                     }
                 } else {
-                    // Central Voice Orb Visualizer
+                    // Central Voice Visualizer Orb
                     item {
                         VoiceWaveOrb(
                             state = voiceState,
@@ -528,7 +666,7 @@ fun VoiceAssistantModal(
                         )
                     }
 
-                    // Status Indicator Text
+                    // Status Indicator
                     item {
                         Text(
                             text = statusMessage,
@@ -545,7 +683,7 @@ fun VoiceAssistantModal(
                         )
                     }
 
-                    // User Spoken Transcript Card
+                    // User Spoken Transcript
                     if (userSpeechText.isNotBlank()) {
                         item {
                             UserSpeechCard(text = userSpeechText)
@@ -564,11 +702,11 @@ fun VoiceAssistantModal(
                         }
                     }
 
-                    // Attached Files Cards
-                    if (attachedFiles.isNotEmpty()) {
+                    // Local Device Matching Files
+                    if (foundDeviceFiles.isNotEmpty()) {
                         item {
                             Text(
-                                text = "Referenced Files (${attachedFiles.size})",
+                                text = "Found Files (${foundDeviceFiles.size})",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -578,7 +716,33 @@ fun VoiceAssistantModal(
                             )
                         }
 
-                        items(attachedFiles) { file ->
+                        items(foundDeviceFiles) { item ->
+                            LocalDeviceFileResultCard(
+                                item = item,
+                                onOpen = {
+                                    stopSpeaking()
+                                    onDismiss()
+                                    onOpenFile(mapLocalToFileDetail(item))
+                                }
+                            )
+                        }
+                    }
+
+                    // AI Grounded Document References
+                    if (attachedAiFiles.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Referenced Documents (${attachedAiFiles.size})",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp)
+                            )
+                        }
+
+                        items(attachedAiFiles) { file ->
                             VoiceAssistantFileCard(
                                 file = file,
                                 onOpen = {
@@ -587,6 +751,7 @@ fun VoiceAssistantModal(
                                         it.title.equals(file.title, ignoreCase = true) ||
                                                 it.title.equals(file.title.substringBeforeLast('.'), ignoreCase = true)
                                     }
+                                    onDismiss()
                                     onOpenFile(
                                         FileDetailData(
                                             fileName = file.title,
@@ -605,7 +770,7 @@ fun VoiceAssistantModal(
                         }
                     }
 
-                    // Suggested Prompts Chips (when IDLE and no conversation yet)
+                    // Quick Suggested Voice Actions (when IDLE)
                     if (userSpeechText.isBlank() && voiceState == AssistantVoiceState.IDLE) {
                         item {
                             Column(
@@ -613,7 +778,7 @@ fun VoiceAssistantModal(
                                 horizontalAlignment = Alignment.Start
                             ) {
                                 Text(
-                                    text = "Try asking:",
+                                    text = "Suggested voice commands:",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -622,10 +787,12 @@ fun VoiceAssistantModal(
                                 Spacer(modifier = Modifier.height(8.dp))
 
                                 val samplePrompts = listOf(
+                                    "Go to Profile",
+                                    "Show my Documents",
+                                    "Open Saved Files",
                                     "How many total files do I have?",
-                                    "Summarize my uploaded PDF",
-                                    "What is Machine Learning?",
-                                    "Find important files"
+                                    "Find my assignment PDF",
+                                    "What is Artificial Intelligence?"
                                 )
 
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -635,7 +802,7 @@ fun VoiceAssistantModal(
                                             color = MaterialTheme.colorScheme.surfaceVariant,
                                             modifier = Modifier.clickable {
                                                 userSpeechText = prompt
-                                                executeQuery(prompt)
+                                                executeCommand(prompt)
                                             }
                                         ) {
                                             Row(
@@ -664,16 +831,67 @@ fun VoiceAssistantModal(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Manual Text Input Fallback Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    if (manualInputText.isEmpty()) {
+                        Text(
+                            text = "Type command or question...",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
+                    BasicTextField(
+                        value = manualInputText,
+                        onValueChange = { manualInputText = it },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                IconButton(
+                    onClick = {
+                        if (manualInputText.isNotBlank()) {
+                            val txt = manualInputText.trim()
+                            manualInputText = ""
+                            executeCommand(txt)
+                        }
+                    },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send Command",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Bottom Actions Bar
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Secondary Action: Open in AI Chat if there's an ongoing answer
-                if (assistantReplyText.isNotBlank()) {
+                if (currentConversationId != null || assistantReplyText.isNotBlank()) {
                     OutlinedButton(
                         onClick = {
                             stopSpeaking()
@@ -692,6 +910,8 @@ fun VoiceAssistantModal(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(text = "Open in AI Chat", fontSize = 13.sp)
                     }
+                } else {
+                    Spacer(modifier = Modifier.width(1.dp))
                 }
 
                 // Primary Mic Action Button
@@ -727,6 +947,71 @@ fun VoiceAssistantModal(
                     )
                 }
             }
+        }
+    }
+}
+
+private fun mapLocalToFileDetail(item: LocalFileItem): FileDetailData {
+    return FileDetailData(
+        fileName = item.title,
+        fileSize = item.sizeFormatted,
+        fileType = item.format,
+        createdDate = item.dateText,
+        modifiedDate = item.dateText,
+        priority = item.priority,
+        iconResId = item.iconResId,
+        uriString = item.uri.toString(),
+        path = item.path
+    )
+}
+
+@Composable
+fun LocalDeviceFileResultCard(
+    item: LocalFileItem,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(
+            painter = painterResource(id = item.iconResId),
+            contentDescription = "File Icon",
+            modifier = Modifier.size(36.dp)
+        )
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.title,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1
+            )
+            Text(
+                text = "${item.format} · ${item.sizeFormatted} · ${item.dateText}",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Button(
+            onClick = onOpen,
+            shape = RoundedCornerShape(10.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+            modifier = Modifier.height(32.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+        ) {
+            Text(text = "Open", fontSize = 12.sp, color = Color.White)
         }
     }
 }
@@ -772,7 +1057,6 @@ fun VoiceWaveOrb(
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        // Glowing Aura Canvas
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
@@ -800,7 +1084,6 @@ fun VoiceWaveOrb(
             )
         }
 
-        // Inner Gradient Orb
         Box(
             modifier = Modifier
                 .size(70.dp)
@@ -1021,7 +1304,7 @@ fun PermissionRequiredCard(
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "IntelliFile needs microphone permission to listen to your questions, search files, and give spoken answers.",
+                text = "IntelliFile needs microphone permission to listen to your voice commands, search documents, and give spoken answers.",
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center

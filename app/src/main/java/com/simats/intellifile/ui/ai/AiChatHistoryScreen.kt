@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,6 +62,7 @@ fun AiChatHistoryScreen(
     modifier: Modifier = Modifier,
     onBackClick: () -> Unit = {},
     onClearHistoryClick: () -> Unit = {},
+    onDeleteIndividualClick: (ChatHistoryItem) -> Unit = {},
     onHistoryItemClick: (ChatHistoryItem) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -71,6 +73,7 @@ fun AiChatHistoryScreen(
     var selectedCategory by remember { mutableStateOf(HistoryCategory.ALL) }
     var isLoading by remember { mutableStateOf(false) }
     var showClearConfirmDialog by remember { mutableStateOf(false) }
+    var itemToDelete by remember { mutableStateOf<ChatHistoryItem?>(null) }
 
     val historyItems = remember { mutableStateListOf<ChatHistoryItem>() }
 
@@ -126,6 +129,56 @@ fun AiChatHistoryScreen(
                 item.snippet.contains(searchQuery, ignoreCase = true)
         val matchesCategory = selectedCategory == HistoryCategory.ALL || item.category == selectedCategory
         matchesSearch && matchesCategory
+    }
+
+    if (itemToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { itemToDelete = null },
+            title = {
+                Text(
+                    text = "Delete Chat",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to delete '${itemToDelete?.title}'? All messages in this chat will be removed.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val target = itemToDelete
+                        itemToDelete = null
+                        if (target != null) {
+                            coroutineScope.launch {
+                                val res = aiRepository.clearChatHistory(conversationId = target.id)
+                                res.onSuccess {
+                                    historyItems.removeAll { it.id == target.id }
+                                    onDeleteIndividualClick(target)
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Text(
+                        text = "Delete",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { itemToDelete = null }) {
+                    Text(
+                        text = "Cancel",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        )
     }
 
     if (showClearConfirmDialog) {
@@ -353,10 +406,11 @@ fun AiChatHistoryScreen(
                     }
                 } else {
                     // History Items List
-                    items(filteredItems) { item ->
+                    items(filteredItems, key = { it.id }) { item ->
                         HistoryCardItem(
                             item = item,
-                            onClick = { onHistoryItemClick(item) }
+                            onClick = { onHistoryItemClick(item) },
+                            onDeleteClick = { itemToDelete = item }
                         )
                     }
                 }
@@ -406,6 +460,7 @@ fun HistoryFilterChip(
 fun HistoryCardItem(
     item: ChatHistoryItem,
     onClick: () -> Unit,
+    onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -414,7 +469,7 @@ fun HistoryCardItem(
             .clip(RoundedCornerShape(18.dp))
             .background(MaterialTheme.colorScheme.surface)
             .clickable { onClick() }
-            .padding(14.dp),
+            .padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -451,11 +506,14 @@ fun HistoryCardItem(
                     maxLines = 1
                 )
 
+                Spacer(modifier = Modifier.width(6.dp))
+
                 Text(
                     text = "${item.dateText}\n${item.timeText}",
                     fontSize = 10.sp,
                     color = Color(0xFF9CA3AF),
-                    lineHeight = 13.sp
+                    lineHeight = 13.sp,
+                    textAlign = TextAlign.End
                 )
             }
 
@@ -469,7 +527,20 @@ fun HistoryCardItem(
             )
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(4.dp))
+
+        // Individual Delete Button on the side of the chat item
+        IconButton(
+            onClick = onDeleteClick,
+            modifier = Modifier.size(34.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.DeleteOutline,
+                contentDescription = "Delete Chat",
+                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.75f),
+                modifier = Modifier.size(20.dp)
+            )
+        }
 
         Icon(
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,

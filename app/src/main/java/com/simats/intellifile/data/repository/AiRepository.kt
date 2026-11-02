@@ -70,7 +70,7 @@ class AiRepository(private val context: Context) {
         return try {
             val response = api.searchDocuments(query.trim())
             if (response.isSuccessful && response.body()?.success == true) {
-                Result.success(response.body()?.documents ?: emptyList())
+                Result.success(response.body()?.allDocuments ?: emptyList())
             } else {
                 Result.failure(Exception(response.body()?.message ?: "Search failed"))
             }

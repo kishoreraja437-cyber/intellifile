@@ -172,7 +172,7 @@ data class DocumentDto(
 
     @SerializedName("location") val location: String = "Internal Storage",
 
-    @SerializedName("priority") val priority: String = "NORMAL",
+    @SerializedName("priority") val priority: String? = null,
 
     @SerializedName("is_bookmarked") val is_bookmarked: Boolean = false,
 
@@ -195,16 +195,15 @@ data class DocumentDto(
 
 
 data class DocumentListResponse(
-
     @SerializedName("success") val success: Boolean,
-
     @SerializedName("count") val count: Int = 0,
-
     @SerializedName("documents") val documents: List<DocumentDto> = emptyList(),
-
+    @SerializedName("results") val results: List<DocumentDto> = emptyList(),
     @SerializedName("message") val message: String? = null
-
-)
+) {
+    val allDocuments: List<DocumentDto>
+        get() = if (documents.isNotEmpty()) documents else results
+}
 
 
 
@@ -341,26 +340,20 @@ data class AiChatRequest(
 
 
 data class RelatedFileDto(
-
     @SerializedName("id") val id: Int? = null,
-
     @SerializedName("title") val title: String,
-
     @SerializedName("format") val format: String? = null,
-
     @SerializedName("size") val size: String? = null,
     @SerializedName("dateText") val dateText: String? = null,
-
     @SerializedName("priority") val priority: String? = null,
-
     @SerializedName("page") val page: Int? = null,
-
     @SerializedName("snippet") val snippet: String? = null,
-
     @SerializedName("similarity") val similarity: Float? = null,
-
-    @SerializedName("file_url") val file_url: String? = null
-
+    @SerializedName("file_url") val file_url: String? = null,
+    @SerializedName("file_path") val file_path: String? = null,
+    @SerializedName("category") val category: String? = null,
+    @SerializedName("source") val source: String? = null,
+    @SerializedName("uri_string") val uri_string: String? = null
 )
 
 
@@ -499,7 +492,7 @@ data class AiPredictResponse(
 
     @SerializedName("category") val category: String = "General",
 
-    @SerializedName("priority") val priority: String = "NORMAL",
+    @SerializedName("priority") val priority: String? = null,
 
     @SerializedName("confidence") val confidence: Float = 0f,
 

@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.simats.intellifile.R
+import com.simats.intellifile.data.manager.LocalFileManager
 import com.simats.intellifile.data.repository.AiRepository
 import com.simats.intellifile.ui.home.PriorityLevel
 import com.simats.intellifile.ui.home.PriorityTag
@@ -51,12 +52,25 @@ data class AiFileResult(
     val format: String,
     val size: String,
     val dateText: String,
-    val priority: PriorityLevel,
+    val priority: PriorityLevel? = null,
     val iconResId: Int = R.drawable.pdf,
     val id: Int? = null,
     val page: Int? = null,
-    val snippet: String? = null
+    val snippet: String? = null,
+    val source: String = "AI Vault", // "Device Files" or "AI Vault"
+    val uriString: String? = null,
+    val filePath: String? = null,
+    val fileUrl: String? = null,
+    val category: String? = null
 )
+
+private fun getFormatIcon(format: String?): Int {
+    return when (format?.uppercase()) {
+        "DOCX", "DOC" -> R.drawable.doc
+        "PPT", "PPTX" -> R.drawable.ppt
+        else -> R.drawable.pdf
+    }
+}
 
 sealed class ChatMessage {
     data class User(val text: String) : ChatMessage()
@@ -82,7 +96,7 @@ fun AiScreen(
 
     val defaultGreeting = remember {
         ChatMessage.Ai(
-            text = "Hello! I am your IntelliFile AI Assistant powered by RAG and Small Language Models.\n\nAsk me anything about your uploaded documents, request summaries, or extract key takeaways.",
+            text = "Hello! I am your IntelliFile AI Assistant powered by RAG and Small Language Models.\n\nAsk me anything about your uploaded documents, search for files, request summaries, or ask general questions.",
             files = emptyList()
         )
     }
@@ -116,13 +130,11 @@ fun AiScreen(
                             val mappedFiles = rawFiles.map { rf ->
                                 val prio = when (rf.priority?.uppercase()) {
                                     "IMPORTANT" -> PriorityLevel.IMPORTANT
+                                    "NORMAL" -> PriorityLevel.NORMAL
                                     "LOW" -> PriorityLevel.LOW
-                                    else -> PriorityLevel.NORMAL
+                                    else -> null
                                 }
-                                val icon = when (rf.format?.uppercase()) {
-                                    "DOCX", "DOC" -> R.drawable.doc
-                                    else -> R.drawable.pdf
-                                }
+                                val icon = getFormatIcon(rf.format)
                                 AiFileResult(
                                     id = rf.id,
                                     title = rf.title,
@@ -132,7 +144,12 @@ fun AiScreen(
                                     priority = prio,
                                     iconResId = icon,
                                     page = rf.page,
-                                    snippet = rf.snippet
+                                    snippet = rf.snippet,
+                                    source = rf.source ?: "AI Vault",
+                                    uriString = rf.uri_string,
+                                    filePath = rf.file_path,
+                                    fileUrl = rf.file_url,
+                                    category = rf.category
                                 )
                             }
                             chatMessages.add(ChatMessage.Ai(text = m.text, files = mappedFiles))
@@ -234,65 +251,217 @@ fun AiScreen(
                         isThinking = true
 
                         val loadingMsg = ChatMessage.Ai(
-                            text = "Retrieving context and generating grounded answer...",
+                            text = "Searching files and analyzing context...",
                             isLoading = true
                         )
                         chatMessages.add(loadingMsg)
 
                         coroutineScope.launch {
-                            val result = aiRepository.sendChatMessage(
-                                message = userQuery,
-                                conversationId = currentConversationId
-                            )
-                            isThinking = false
-                            chatMessages.remove(loadingMsg)
+                            val intent = AiChatIntentDetector.detect(userQuery)
 
-                            result.onSuccess { response ->
-                                currentConversationId = response.conversation_id
-                                val replyText = response.message?.text
-                                    ?: response.reply
-                                    ?: "I analyzed your documents."
-
-                                val rawFiles = response.message?.files
-                                    ?: response.message?.related_files
-                                    ?: response.related_files
-                                    ?: emptyList()
-
-                                val mappedFiles = rawFiles.map { rf ->
-                                    val prio = when (rf.priority?.uppercase()) {
-                                        "IMPORTANT" -> PriorityLevel.IMPORTANT
-                                        "LOW" -> PriorityLevel.LOW
-                                        else -> PriorityLevel.NORMAL
+                            when (intent) {
+                                is AiUserIntent.FileSearch,
+                                is AiUserIntent.FileTypeFilter,
+                                is AiUserIntent.FileOpen -> {
+                                    val searchKeyword = when (intent) {
+                                        is AiUserIntent.FileSearch -> intent.query
+                                        is AiUserIntent.FileOpen -> intent.targetName
+                                        is AiUserIntent.FileTypeFilter -> intent.format
+                                        else -> userQuery
                                     }
-                                    val icon = when (rf.format?.uppercase()) {
-                                        "DOCX", "DOC" -> R.drawable.doc
-                                        else -> R.drawable.pdf
+                                    val formatFilter = when (intent) {
+                                        is AiUserIntent.FileSearch -> intent.format
+                                        is AiUserIntent.FileTypeFilter -> intent.format
+                                        else -> null
                                     }
-                                    AiFileResult(
-                                        id = rf.id,
-                                        title = rf.title,
-                                        format = rf.format ?: "PDF",
-                                        size = rf.size ?: "1.0 MB",
-                                        dateText = rf.dateText ?: "Recent",
-                                        priority = prio,
-                                        iconResId = icon,
-                                        page = rf.page,
-                                        snippet = rf.snippet
+
+                                    // 1. Search Local Device Files using MediaStore / SAF
+                                    val localMatches = try {
+                                        val allLocal = LocalFileManager.getDeviceFiles(context)
+                                        allLocal.filter { f ->
+                                            val matchesKeyword = if (intent is AiUserIntent.FileTypeFilter) {
+                                                true
+                                            } else {
+                                                f.title.contains(searchKeyword, ignoreCase = true) ||
+                                                f.path.contains(searchKeyword, ignoreCase = true) ||
+                                                f.title.substringBeforeLast('.').contains(searchKeyword, ignoreCase = true)
+                                            }
+                                            val matchesFormat = formatFilter == null || f.format.equals(formatFilter, ignoreCase = true)
+                                            matchesKeyword && matchesFormat
+                                        }.map { item ->
+                                            AiFileResult(
+                                                id = item.id.toInt(),
+                                                title = item.title,
+                                                format = item.format,
+                                                size = item.sizeFormatted,
+                                                dateText = item.dateText,
+                                                priority = item.priority,
+                                                iconResId = getFormatIcon(item.format),
+                                                source = "Device Files",
+                                                uriString = item.uri.toString(),
+                                                filePath = item.path,
+                                                category = null
+                                            )
+                                        }
+                                    } catch (e: Exception) {
+                                        emptyList<AiFileResult>()
+                                    }
+
+                                    // 2. Search AI Vault via Backend API
+                                    val vaultResult = aiRepository.sendChatMessage(
+                                        message = userQuery,
+                                        conversationId = currentConversationId
                                     )
+
+                                    isThinking = false
+                                    chatMessages.remove(loadingMsg)
+
+                                    val vaultMatches = mutableListOf<AiFileResult>()
+
+                                    vaultResult.onSuccess { response ->
+                                        currentConversationId = response.conversation_id
+                                        val rawFiles = response.message?.files
+                                            ?: response.message?.related_files
+                                            ?: response.related_files
+                                            ?: emptyList()
+
+                                        val mapped = rawFiles.map { rf ->
+                                            val prio = when (rf.priority?.uppercase()) {
+                                                "IMPORTANT" -> PriorityLevel.IMPORTANT
+                                                "LOW" -> PriorityLevel.LOW
+                                                "NORMAL" -> PriorityLevel.NORMAL
+                                                else -> null
+                                            }
+                                            val icon = getFormatIcon(rf.format)
+                                            AiFileResult(
+                                                id = rf.id,
+                                                title = rf.title,
+                                                format = rf.format ?: "PDF",
+                                                size = rf.size ?: "1.0 MB",
+                                                dateText = rf.dateText ?: "Recent",
+                                                priority = prio,
+                                                iconResId = icon,
+                                                page = rf.page,
+                                                snippet = rf.snippet,
+                                                source = rf.source ?: "AI Vault",
+                                                uriString = rf.uri_string,
+                                                filePath = rf.file_path,
+                                                fileUrl = rf.file_url,
+                                                category = rf.category
+                                            )
+                                        }
+                                        vaultMatches.addAll(mapped)
+                                    }.onFailure { err ->
+                                        if (localMatches.isEmpty()) {
+                                            chatMessages.add(
+                                                ChatMessage.Ai(
+                                                    text = "Could not reach the AI service: ${err.localizedMessage}\nPlease make sure the backend is running."
+                                                )
+                                            )
+                                            return@launch
+                                        }
+                                    }
+
+                                    // 3. Merge & Deduplicate (Device Files + AI Vault Files)
+                                    val allMatches = mutableListOf<AiFileResult>()
+                                    allMatches.addAll(localMatches)
+                                    for (vf in vaultMatches) {
+                                        if (allMatches.none { it.title.equals(vf.title, ignoreCase = true) }) {
+                                            allMatches.add(vf)
+                                        }
+                                    }
+
+                                    // 4. Formulate Response & Display in Chat UI
+                                    if (allMatches.isEmpty()) {
+                                        val emptyMsg = "No matching files found for '$searchKeyword'. Try another filename or keyword."
+                                        chatMessages.add(ChatMessage.Ai(text = emptyMsg, files = emptyList()))
+                                    } else {
+                                        val reply = when (intent) {
+                                            is AiUserIntent.FileOpen -> {
+                                                if (allMatches.size == 1) {
+                                                    val singleDoc = allMatches.first()
+                                                    onOpenFile(singleDoc)
+                                                    "Opening '**${singleDoc.title}**'. Tap below to view if not automatically opened."
+                                                } else {
+                                                    "I found **${allMatches.size} files** matching '**$searchKeyword**'. Tap a file card below to open it:"
+                                                }
+                                            }
+                                            is AiUserIntent.FileTypeFilter -> {
+                                                val fmt = formatFilter ?: "matching"
+                                                "Here are your **${allMatches.size} ${fmt} file${if (allMatches.size > 1) "s" else ""}** found across Device Files and AI Vault:"
+                                            }
+                                            else -> {
+                                                "I found **${allMatches.size} matching file${if (allMatches.size > 1) "s" else ""}** for '**$searchKeyword**' across Device Files and AI Vault:"
+                                            }
+                                        }
+
+                                        chatMessages.add(
+                                            ChatMessage.Ai(
+                                                text = reply,
+                                                files = allMatches
+                                            )
+                                        )
+                                    }
                                 }
+                                else -> {
+                                    // GENERAL_QUERY, DOCUMENT_QUERY, or APP_DATA_QUERY
+                                    val result = aiRepository.sendChatMessage(
+                                        message = userQuery,
+                                        conversationId = currentConversationId
+                                    )
+                                    isThinking = false
+                                    chatMessages.remove(loadingMsg)
 
-                                chatMessages.add(
-                                    ChatMessage.Ai(
-                                        text = replyText,
-                                        files = mappedFiles
-                                    )
-                                )
-                            }.onFailure { err ->
-                                chatMessages.add(
-                                    ChatMessage.Ai(
-                                        text = "Could not reach the AI service: ${err.localizedMessage}\nPlease make sure the Python AI microservice is running."
-                                    )
-                                )
+                                    result.onSuccess { response ->
+                                        currentConversationId = response.conversation_id
+                                        val replyText = response.message?.text
+                                            ?: response.reply
+                                            ?: "I analyzed your documents."
+
+                                        val rawFiles = response.message?.files
+                                            ?: response.message?.related_files
+                                            ?: response.related_files
+                                            ?: emptyList()
+
+                                        val mappedFiles = rawFiles.map { rf ->
+                                            val prio = when (rf.priority?.uppercase()) {
+                                                "IMPORTANT" -> PriorityLevel.IMPORTANT
+                                                "LOW" -> PriorityLevel.LOW
+                                                else -> PriorityLevel.NORMAL
+                                            }
+                                            val icon = getFormatIcon(rf.format)
+                                            AiFileResult(
+                                                id = rf.id,
+                                                title = rf.title,
+                                                format = rf.format ?: "PDF",
+                                                size = rf.size ?: "1.0 MB",
+                                                dateText = rf.dateText ?: "Recent",
+                                                priority = prio,
+                                                iconResId = icon,
+                                                page = rf.page,
+                                                snippet = rf.snippet,
+                                                source = rf.source ?: "AI Vault",
+                                                uriString = rf.uri_string,
+                                                filePath = rf.file_path,
+                                                fileUrl = rf.file_url,
+                                                category = rf.category
+                                            )
+                                        }
+
+                                        chatMessages.add(
+                                            ChatMessage.Ai(
+                                                text = replyText,
+                                                files = mappedFiles
+                                            )
+                                        )
+                                    }.onFailure { err ->
+                                        chatMessages.add(
+                                            ChatMessage.Ai(
+                                                text = "Could not reach the AI service: ${err.localizedMessage}\nPlease make sure the Python AI microservice is running."
+                                            )
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -607,6 +776,7 @@ fun AiFileCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
             .background(MaterialTheme.colorScheme.surface)
+            .clickable { onOpenClick() }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -614,7 +784,7 @@ fun AiFileCard(
             painter = painterResource(id = file.iconResId),
             contentDescription = "File Type Icon",
             modifier = Modifier
-                .size(42.dp)
+                .size(44.dp)
                 .clip(RoundedCornerShape(10.dp))
         )
 
@@ -627,15 +797,50 @@ fun AiFileCard(
                 text = file.title,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2
             )
 
-            Spacer(modifier = Modifier.height(3.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
+            // Metadata row: Source badge, Format, Size
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Source badge
+                val isDevice = file.source == "Device Files"
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            if (isDevice) Color(0xFF0288D1).copy(alpha = 0.12f)
+                            else Color(0xFF6750A4).copy(alpha = 0.12f)
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = file.source,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isDevice) Color(0xFF0288D1) else Color(0xFF6750A4)
+                    )
+                }
+
+                Text(
+                    text = "${file.format.uppercase()} · ${file.size}",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            // Date
             Text(
                 text = file.dateText,
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )
 
             if (!file.snippet.isNullOrBlank()) {
@@ -649,9 +854,10 @@ fun AiFileCard(
                 )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            PriorityTag(priority = file.priority)
+            if (file.priority != null) {
+                Spacer(modifier = Modifier.height(6.dp))
+                PriorityTag(priority = file.priority)
+            }
         }
 
         Spacer(modifier = Modifier.width(8.dp))
@@ -660,12 +866,12 @@ fun AiFileCard(
             onClick = onOpenClick,
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             shape = RoundedCornerShape(12.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            modifier = Modifier.height(36.dp)
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+            modifier = Modifier.height(34.dp)
         ) {
             Text(
                 text = "Open",
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White
             )
