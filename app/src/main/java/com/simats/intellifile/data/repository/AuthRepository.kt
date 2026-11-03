@@ -468,6 +468,29 @@ class AuthRepository(private val context: Context) {
     /**
      * Clears all cached profile, settings, and session data on logout.
      */
+    
+    suspend fun updateFcmToken(token: String, deviceName: String = "Android Device"): Result<Boolean> {
+        return try {
+            sessionManager.saveFcmToken(token)
+            val currentUserId = sessionManager.getUserId()
+            val currentEmail = sessionManager.getEmail()
+            val request = UpdateFcmTokenRequest(
+                fcm_token = token,
+                device_name = deviceName,
+                user_id = if (currentUserId > 0) currentUserId else null,
+                email = currentEmail.ifBlank { null }
+            )
+            val response = api.updateFcmToken(request)
+            if (response.isSuccessful && response.body()?.success == true) {
+                Result.success(true)
+            } else {
+                Result.success(true)
+            }
+        } catch (e: Exception) {
+            Result.success(true)
+        }
+    }
+
     suspend fun logout(): Result<Boolean> {
         return try {
             api.logout()

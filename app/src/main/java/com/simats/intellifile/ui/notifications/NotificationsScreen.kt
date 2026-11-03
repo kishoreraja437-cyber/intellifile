@@ -1,6 +1,11 @@
 package com.simats.intellifile.ui.notifications
 
 import android.widget.Toast
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -50,6 +55,18 @@ fun NotificationsScreen(
     val coroutineScope = rememberCoroutineScope()
     val sessionManager = remember { SessionManager(context) }
     val authRepo = remember { AuthRepository(context) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            NotificationHelper.sendTestNotification(context, "New Document")
+            Toast.makeText(context, "Test notification sent! Check notification bar.", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "Notification permission is required to show alerts.", Toast.LENGTH_LONG).show()
+        }
+    }
+
 
     // Initialize immediately from local session to prevent UI flicker
     val initialSettings = remember { sessionManager.getNotificationSettings() }
@@ -141,7 +158,7 @@ fun NotificationsScreen(
 
             // Sub-heading Description
             Text(
-                text = "Stay updated with important files,\ndeadlines and new documents.",
+                text = "Stay updated when new documents are downloaded from your browser or WhatsApp, and configure quiet hours.",
                 fontSize = 14.sp,
                 color = Color(0xFF4B5563),
                 lineHeight = 20.sp
@@ -159,45 +176,13 @@ fun NotificationsScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Option 1: Important file alerts
-            NotificationToggleCard(
-                icon = Icons.Default.PriorityHigh,
-                iconBackgroundColor = Color(0xFFEF4444),
-                badgeContainerColor = Color(0xFFFFEAEE),
-                title = "Important file alerts",
-                description = "Get notified when files are marked as important.",
-                checked = importantAlertsEnabled,
-                onCheckedChange = { checked ->
-                    importantAlertsEnabled = checked
-                    onSettingChanged(important = checked)
-                }
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Option 2: Deadline reminders
-            NotificationToggleCard(
-                icon = Icons.Outlined.AccessTime,
-                iconBackgroundColor = Color(0xFFD97706),
-                badgeContainerColor = Color(0xFFFFF6D8),
-                title = "Deadline reminders",
-                description = "Receive reminders for upcoming deadlines.",
-                checked = deadlineRemindersEnabled,
-                onCheckedChange = { checked ->
-                    deadlineRemindersEnabled = checked
-                    onSettingChanged(deadlines = checked)
-                }
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Option 3: New document alerts
+            // New document alerts (e.g. Browser, WhatsApp downloads)
             NotificationToggleCard(
                 icon = Icons.Outlined.Description,
                 iconBackgroundColor = MaterialTheme.colorScheme.primary,
                 badgeContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                 title = "New document alerts",
-                description = "Notify when new files are scanned or added.",
+                description = "Get notified when new documents are downloaded in browser, WhatsApp, or saved to your device.",
                 checked = newDocumentAlertsEnabled,
                 onCheckedChange = { checked ->
                     newDocumentAlertsEnabled = checked
@@ -266,8 +251,14 @@ fun NotificationsScreen(
             // Action: Test Notification
             OutlinedButton(
                 onClick = {
-                    NotificationHelper.sendTestNotification(context, "Important File")
-                    Toast.makeText(context, "Test notification triggered!", Toast.LENGTH_SHORT).show()
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        !NotificationHelper.hasNotificationPermission(context)
+                    ) {
+                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        NotificationHelper.sendTestNotification(context, "New Document")
+                        Toast.makeText(context, "Test notification sent! Check notification bar.", Toast.LENGTH_SHORT).show()
+                    }
                 },
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.outlinedButtonColors(

@@ -1,10 +1,14 @@
 package com.simats.intellifile
 
+import android.Manifest
 import android.app.Application
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -17,10 +21,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.firebase.messaging.FirebaseMessaging
 import com.simats.intellifile.data.api.RetrofitClient
+import com.simats.intellifile.data.manager.DocumentDownloadObserver
 import com.simats.intellifile.data.manager.LocalFileManager
+import com.simats.intellifile.data.manager.NotificationHelper
+import com.simats.intellifile.data.repository.AuthRepository
+import com.simats.intellifile.data.service.DocumentJobService
+import com.simats.intellifile.data.service.DocumentMonitorService
 import com.simats.intellifile.data.session.SessionManager
 import com.simats.intellifile.ui.auth.ForgotPasswordScreen
 import com.simats.intellifile.ui.auth.LoginScreen
@@ -31,9 +43,11 @@ import com.simats.intellifile.ui.permission.PermissionScreen
 import com.simats.intellifile.ui.splash.SplashScreen
 import com.simats.intellifile.ui.theme.AppThemeMode
 import com.simats.intellifile.ui.theme.IntellifileTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 enum class AppScreen {
     SPLASH, ONBOARD, LOGIN, SIGNUP, FORGOT_PASSWORD, PERMISSION, MAIN
@@ -130,9 +144,54 @@ class AppNavigationViewModel(application: Application) : AndroidViewModel(applic
 }
 
 class MainActivity : ComponentActivity() {
+
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            NotificationHelper.createNotificationChannels(this)
+            DocumentDownloadObserver.startWatching(this)
+            DocumentMonitorService.start(this)
+            DocumentJobService.schedule(this)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // 1. Prompt for Notification permission on Android 13+ (API 33+) if not yet granted
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        // 2. Initialize notification channels
+        NotificationHelper.createNotificationChannels(this)
+
+        // 3. Start real-time monitoring of new downloads from Browser, WhatsApp, and storage
+        DocumentDownloadObserver.startWatching(this)
+        DocumentMonitorService.start(this)
+        DocumentJobService.schedule(this)
+
+        // 4. Register & sync Firebase Cloud Messaging (FCM) push token with backend
+        try {
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                if (task.isSuccessful && !task.result.isNullOrBlank()) {
+                    val token = task.result
+                    val sessionManager = SessionManager(this)
+                    sessionManager.saveFcmToken(token)
+                    if (sessionManager.isLoggedIn()) {
+                        val authRepo = AuthRepository(this)
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            authRepo.updateFcmToken(token)
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
         setContent {
             val appNavViewModel: AppNavigationViewModel = viewModel()
             val currentScreen by appNavViewModel.currentScreen.collectAsState()
@@ -198,5 +257,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        DocumentDownloadObserver.getInstance(this).checkForNewDocuments()
+        DocumentMonitorService.start(this)
+        DocumentJobService.schedule(this)
     }
 }

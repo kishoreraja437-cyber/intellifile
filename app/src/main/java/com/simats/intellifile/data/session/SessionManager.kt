@@ -27,6 +27,7 @@ class SessionManager(context: Context) {
         private const val KEY_NEW_DOC_ALERTS = "new_doc_alerts"
         private const val KEY_QUIET_HOURS = "quiet_hours"
         private const val KEY_SETTINGS_CACHED = "settings_data_cached"
+        private const val KEY_FCM_TOKEN = "fcm_token"
     }
 
     /**
@@ -190,6 +191,13 @@ class SessionManager(context: Context) {
     fun isDeadlineRemindersEnabled(): Boolean = prefs.getBoolean(KEY_DEADLINE_REMINDERS, true)
     fun isNewDocAlertsEnabled(): Boolean = prefs.getBoolean(KEY_NEW_DOC_ALERTS, true)
     fun isQuietHoursEnabled(): Boolean = prefs.getBoolean(KEY_QUIET_HOURS, false)
+
+    fun saveFcmToken(token: String) {
+        prefs.edit().putString(KEY_FCM_TOKEN, token).apply()
+    }
+
+    fun getFcmToken(): String? = prefs.getString(KEY_FCM_TOKEN, null)
+
 
     /**
      * Clears all cached session, profile, and settings data on logout.

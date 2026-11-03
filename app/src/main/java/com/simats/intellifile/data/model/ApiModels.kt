@@ -548,3 +548,11 @@ data class GenericResponse(
 
 )
 
+
+
+data class UpdateFcmTokenRequest(
+    @SerializedName("fcm_token") val fcm_token: String,
+    @SerializedName("device_name") val device_name: String? = null,
+    @SerializedName("user_id") val user_id: Int? = null,
+    @SerializedName("email") val email: String? = null
+)
