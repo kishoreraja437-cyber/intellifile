@@ -61,6 +61,8 @@ import com.simats.intellifile.ui.home.PriorityLevel
 import com.simats.intellifile.ui.home.PriorityTag
 import com.simats.intellifile.ui.main.BottomNavItem
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -292,36 +294,132 @@ fun VoiceAssistantModal(
                     // 3. FILE_SEARCH_COMMAND
                     // -------------------------------------------------------------
                     is VoiceIntentResult.FileSearch -> {
-                        val allFiles = LocalFileManager.getDeviceFiles(context)
                         val term = intentResult.query.lowercase()
                         val fmt = intentResult.formatFilter
 
-                        val filtered = allFiles.filter { file ->
-                            val matchName = term.isBlank() || file.title.lowercase().contains(term)
-                            val matchFormat = fmt == null || file.format.equals(fmt, ignoreCase = true)
-                            matchName && matchFormat
+                        // 1. Search local device files in parallel
+                        val localDeferred = async(Dispatchers.IO) {
+                            try {
+                                val allFiles = LocalFileManager.getDeviceFiles(context)
+                                val searchTokens = term.split(Regex("[\\s_\\-,.]+"))
+                                    .filter { it.length >= 2 && !setOf("the", "my", "all", "file", "files", "document", "documents", "notes", "for", "with", "about").contains(it) }
+
+                                allFiles.filter { file ->
+                                    val matchFormat = fmt == null || file.format.equals(fmt, ignoreCase = true)
+                                    if (!matchFormat) return@filter false
+                                    if (term.isBlank()) return@filter true
+
+                                    val titleLower = file.title.lowercase()
+                                    val pathLower = file.path.lowercase()
+                                    val baseName = file.title.substringBeforeLast('.').lowercase()
+
+                                    if (titleLower.contains(term) || baseName.contains(term) || pathLower.contains(term)) {
+                                        return@filter true
+                                    }
+
+                                    if (searchTokens.isNotEmpty()) {
+                                        val overlap = searchTokens.count { titleLower.contains(it) || pathLower.contains(it) }
+                                        if (overlap == searchTokens.size || (searchTokens.size >= 2 && overlap >= searchTokens.size - 1)) {
+                                            return@filter true
+                                        }
+                                    }
+
+                                    if (file.sizeBytes in 1..500_000L && setOf("TXT", "CSV", "JSON", "MD").contains(file.format.uppercase())) {
+                                        try {
+                                            val content = LocalFileManager.readTextContent(context, file.uri.toString(), file.path, file.format, 10000)
+                                            if (content.contains(term, ignoreCase = true)) return@filter true
+                                            if (searchTokens.isNotEmpty() && searchTokens.all { content.contains(it, ignoreCase = true) }) return@filter true
+                                        } catch (_: Exception) {}
+                                    }
+
+                                    false
+                                }
+                            } catch (_: Exception) {
+                                emptyList<LocalFileItem>()
+                            }
                         }
 
-                        foundDeviceFiles = filtered
-                        if (filtered.isNotEmpty()) {
+                        // 2. Search AI Vault via backend API in parallel
+                        val vaultDeferred = async(Dispatchers.IO) {
+                            try {
+                                aiRepository.sendChatMessage(
+                                    message = query,
+                                    conversationId = currentConversationId
+                                )
+                            } catch (_: Exception) {
+                                null
+                            }
+                        }
+
+                        val filteredLocal = localDeferred.await()
+                        val vaultResult = vaultDeferred.await()
+
+                        val vaultFiles = mutableListOf<AiFileResult>()
+                        vaultResult?.onSuccess { response ->
+                            currentConversationId = response.conversation_id
+                            val rawFiles = response.message?.files
+                                ?: response.message?.related_files
+                                ?: response.related_files
+                                ?: emptyList()
+
+                            val mapped = rawFiles.map { rf ->
+                                val prio = when (rf.priority?.uppercase()) {
+                                    "IMPORTANT" -> PriorityLevel.IMPORTANT
+                                    "LOW" -> PriorityLevel.LOW
+                                    "NORMAL" -> PriorityLevel.NORMAL
+                                    else -> null
+                                }
+                                val icon = when (rf.format?.uppercase()) {
+                                    "DOCX", "DOC" -> R.drawable.doc
+                                    "PPTX", "PPT" -> R.drawable.ppt
+                                    else -> R.drawable.pdf
+                                }
+                                AiFileResult(
+                                    id = rf.id,
+                                    title = rf.title,
+                                    format = rf.format ?: "PDF",
+                                    size = rf.size ?: "1.0 MB",
+                                    dateText = rf.dateText ?: "Recent",
+                                    priority = prio,
+                                    iconResId = icon,
+                                    page = rf.page,
+                                    snippet = rf.snippet,
+                                    source = rf.source ?: "AI Vault",
+                                    uriString = rf.uri_string,
+                                    filePath = rf.file_path,
+                                    fileUrl = rf.file_url,
+                                    category = rf.category
+                                )
+                            }
+                            vaultFiles.addAll(mapped)
+                        }
+
+                        val dedupedVaultFiles = vaultFiles.filter { vf ->
+                            filteredLocal.none { it.title.equals(vf.title, ignoreCase = true) }
+                        }
+
+                        foundDeviceFiles = filteredLocal
+                        attachedAiFiles = dedupedVaultFiles
+                        val totalCount = filteredLocal.size + dedupedVaultFiles.size
+
+                        if (totalCount > 0) {
                             val reply = if (fmt != null && term.isNotBlank()) {
-                                "Found ${filtered.size} $fmt file(s) matching '$term'."
+                                "Found $totalCount $fmt file(s) matching '$term' across Device Files and AI Vault."
                             } else if (fmt != null) {
-                                "You have ${filtered.size} $fmt file(s)."
+                                "Found $totalCount $fmt file(s) across Device Files and AI Vault."
                             } else {
-                                "I found ${filtered.size} file(s) matching '$term'."
+                                "I found $totalCount file(s) matching '$term' across Device Files and AI Vault."
                             }
                             assistantReplyText = reply
                             statusMessage = "Search results"
                             voiceState = AssistantVoiceState.SPEAKING
                             speakAnswer(reply)
 
-                            // Also sync home screen search query if term is present
                             if (term.isNotBlank()) {
                                 onSearchHome(term)
                             }
                         } else {
-                            val noMatch = "No files found matching '${intentResult.query}'."
+                            val noMatch = "No matching files found for '${intentResult.query}'. Try another filename or keyword."
                             assistantReplyText = noMatch
                             statusMessage = "No files found"
                             voiceState = AssistantVoiceState.IDLE
@@ -732,7 +830,7 @@ fun VoiceAssistantModal(
                     if (attachedAiFiles.isNotEmpty()) {
                         item {
                             Text(
-                                text = "Referenced Documents (${attachedAiFiles.size})",
+                                text = "AI Vault Files (${attachedAiFiles.size})",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -749,20 +847,25 @@ fun VoiceAssistantModal(
                                     stopSpeaking()
                                     val localMatch = LocalFileManager.getDeviceFiles(context).firstOrNull {
                                         it.title.equals(file.title, ignoreCase = true) ||
-                                                it.title.equals(file.title.substringBeforeLast('.'), ignoreCase = true)
+                                                it.title.equals(file.title.substringBeforeLast('.'), ignoreCase = true) ||
+                                                (!file.uriString.isNullOrBlank() && it.uri.toString() == file.uriString) ||
+                                                (!file.filePath.isNullOrBlank() && it.path == file.filePath)
                                     }
+                                    val finalUri = if (!file.uriString.isNullOrBlank()) file.uriString else (localMatch?.uri?.toString() ?: "")
+                                    val finalPath = if (!file.filePath.isNullOrBlank()) file.filePath else (localMatch?.path ?: "")
+
                                     onDismiss()
                                     onOpenFile(
                                         FileDetailData(
                                             fileName = file.title,
                                             fileSize = file.size,
-                                            fileType = file.format,
+                                            fileType = "${file.format} Document",
                                             createdDate = file.dateText,
                                             modifiedDate = file.dateText,
                                             priority = file.priority,
                                             iconResId = file.iconResId,
-                                            uriString = localMatch?.uri?.toString() ?: "",
-                                            path = localMatch?.path ?: ""
+                                            uriString = finalUri,
+                                            path = finalPath
                                         )
                                     )
                                 }
@@ -995,11 +1098,29 @@ fun LocalDeviceFileResultCard(
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1
             )
-            Text(
-                text = "${item.format} · ${item.sizeFormatted} · ${item.dateText}",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 2.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color(0xFF26E07F).copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        text = "Device Files",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF1B8A4E),
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "${item.format} • ${item.sizeFormatted} • ${item.dateText}",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
         Spacer(modifier = Modifier.width(8.dp))
@@ -1242,11 +1363,29 @@ fun VoiceAssistantFileCard(
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1
             )
-            Text(
-                text = "${file.format} · ${file.size}" + (if (file.page != null) " · Page ${file.page}" else ""),
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 2.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = if (file.source == "Device Files") Color(0xFF26E07F).copy(alpha = 0.15f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        text = file.source,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (file.source == "Device Files") Color(0xFF1B8A4E) else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "${file.format} • ${file.size}" + (if (file.page != null) " • Page ${file.page}" else ""),
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
         Spacer(modifier = Modifier.width(8.dp))

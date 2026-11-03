@@ -79,6 +79,23 @@ class VoiceCommandProcessorTest {
         assertEquals(VoiceCommandType.FILE_SEARCH_COMMAND, type5)
         assertTrue(res5 is VoiceIntentResult.FileSearch)
 
+        // Content-based and natural language voice queries
+        val (typeNL1, resNL1) = VoiceCommandProcessor.processCommand("Find my college assignment.")
+        assertEquals(VoiceCommandType.FILE_SEARCH_COMMAND, typeNL1)
+        assertTrue(resNL1 is VoiceIntentResult.FileSearch && (resNL1 as VoiceIntentResult.FileSearch).query == "college assignment")
+
+        val (typeNL2, resNL2) = VoiceCommandProcessor.processCommand("Show the PDF containing machine learning notes.")
+        assertEquals(VoiceCommandType.FILE_SEARCH_COMMAND, typeNL2)
+        assertTrue(resNL2 is VoiceIntentResult.FileSearch && (resNL2 as VoiceIntentResult.FileSearch).query == "machine learning notes" && (resNL2 as VoiceIntentResult.FileSearch).formatFilter == "PDF")
+
+        val (typeNL3, resNL3) = VoiceCommandProcessor.processCommand("Find the document where I wrote about Python.")
+        assertEquals(VoiceCommandType.FILE_SEARCH_COMMAND, typeNL3)
+        assertTrue(resNL3 is VoiceIntentResult.FileSearch && (resNL3 as VoiceIntentResult.FileSearch).query == "Python")
+
+        val (typeNL4, resNL4) = VoiceCommandProcessor.processCommand("I forgot the filename, but it contains information about cloud computing.")
+        assertEquals(VoiceCommandType.FILE_SEARCH_COMMAND, typeNL4)
+        assertTrue(resNL4 is VoiceIntentResult.FileSearch && (resNL4 as VoiceIntentResult.FileSearch).query == "cloud computing")
+
         // File Action (Open)
         val (type6, res6) = VoiceCommandProcessor.processCommand("Open my project report")
         assertEquals(VoiceCommandType.FILE_ACTION_COMMAND, type6)

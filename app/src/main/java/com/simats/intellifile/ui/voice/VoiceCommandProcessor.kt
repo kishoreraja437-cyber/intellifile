@@ -285,7 +285,7 @@ object VoiceCommandProcessor {
         }
 
         // -------------------------------------------------------------
-        // 4. FILE_SEARCH_COMMAND
+        // 4. FILE_SEARCH_COMMAND (Natural Language & Content Search)
         // -------------------------------------------------------------
         val searchPrefixes = listOf(
             "find files containing the word ",
@@ -309,39 +309,50 @@ object VoiceCommandProcessor {
         )
 
         var isSearch = false
-        var searchExtractor = clean
         for (prefix in searchPrefixes) {
             if (clean.startsWith(prefix)) {
                 isSearch = true
-                searchExtractor = clean.removePrefix(prefix).trim()
                 break
             }
         }
 
-        if (isSearch || clean.contains("files containing") || clean.contains("pdf files") || clean.contains("word documents")) {
-            var formatFilter: String? = null
-            if (Regex("\\b(pdf|pdfs)\\b").containsMatchIn(clean)) {
-                formatFilter = "PDF"
-            } else if (Regex("\\b(docx|doc|word)\\b").containsMatchIn(clean)) {
-                formatFilter = "DOCX"
-            }
+        val isVoiceSearch = isSearch ||
+                clean.startsWith("find") ||
+                clean.startsWith("search") ||
+                clean.startsWith("where is") ||
+                clean.startsWith("where are") ||
+                clean.startsWith("look for") ||
+                clean.startsWith("show me") ||
+                clean.startsWith("show") ||
+                clean.startsWith("locate") ||
+                clean.startsWith("get") ||
+                clean.startsWith("do i have") ||
+                clean.startsWith("is there") ||
+                clean.startsWith("i forgot") ||
+                clean.startsWith("i don't remember") ||
+                clean.startsWith("i dont remember") ||
+                clean.startsWith("which file") ||
+                clean.startsWith("which document") ||
+                clean.contains("files containing") ||
+                clean.contains("containing") ||
+                clean.contains("contains") ||
+                clean.contains("wrote about") ||
+                clean.contains("information about") ||
+                clean.contains("notes on") ||
+                clean.contains("pdf files") ||
+                clean.contains("word documents")
 
-            // Clean keywords
-            var queryWord = searchExtractor
-                .replace(Regex("\\b(my|the|all|file|files|document|documents)\\b"), "")
-                .trim()
-
-            if (formatFilter != null && queryWord.equals(formatFilter, ignoreCase = true)) {
-                queryWord = ""
-            }
-
-            return Pair(
-                VoiceCommandType.FILE_SEARCH_COMMAND,
-                VoiceIntentResult.FileSearch(
-                    query = queryWord,
-                    formatFilter = formatFilter
+        if (isVoiceSearch) {
+            val (topic, fmt) = com.simats.intellifile.ui.ai.AiChatIntentDetector.extractSearchTopic(trimmed)
+            if (topic.isNotBlank() || fmt != null) {
+                return Pair(
+                    VoiceCommandType.FILE_SEARCH_COMMAND,
+                    VoiceIntentResult.FileSearch(
+                        query = topic,
+                        formatFilter = fmt
+                    )
                 )
-            )
+            }
         }
 
         // -------------------------------------------------------------
