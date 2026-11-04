@@ -7,7 +7,11 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.compose.foundation.layout.Box
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -165,6 +169,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // Ensure status bar is always shown and configured
+        val initInsets = WindowCompat.getInsetsController(window, window.decorView)
+        initInsets.show(WindowInsetsCompat.Type.statusBars())
+        initInsets.isAppearanceLightStatusBars = true
+
         // 1. Prompt for Notification permission on Android 13+ (API 33+) if not yet granted
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -209,13 +218,42 @@ class MainActivity : ComponentActivity() {
                 AppThemeMode.SYSTEM -> isSystemDark
             }
 
+            DisposableEffect(isDarkTheme) {
+                enableEdgeToEdge(
+                    statusBarStyle = if (isDarkTheme) {
+                        SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.light(
+                            android.graphics.Color.TRANSPARENT,
+                            android.graphics.Color.TRANSPARENT
+                        )
+                    },
+                    navigationBarStyle = if (isDarkTheme) {
+                        SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.light(
+                            android.graphics.Color.TRANSPARENT,
+                            android.graphics.Color.TRANSPARENT
+                        )
+                    }
+                )
+                val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+                insetsController.show(WindowInsetsCompat.Type.statusBars())
+                insetsController.isAppearanceLightStatusBars = !isDarkTheme
+                insetsController.isAppearanceLightNavigationBars = !isDarkTheme
+                onDispose {}
+            }
+
             IntellifileTheme(darkTheme = isDarkTheme) {
                 Surface(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .statusBarsPadding(),
+                    modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .statusBarsPadding()
+                    ) {
                     AnimatedContent(
                         targetState = currentScreen,
                         transitionSpec = {
@@ -287,6 +325,7 @@ class MainActivity : ComponentActivity() {
                                 onThemeChanged = { mode -> appNavViewModel.onThemeSelected(mode) }
                             )
                         }
+                    }
                     }
                 }
             }
