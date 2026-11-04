@@ -135,25 +135,41 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             _uiState.value = _uiState.value.copy(isLoading = true)
             try {
                 val context = getApplication<Application>()
-                val tempFile = File(context.cacheDir, "avatar_upload_${System.currentTimeMillis()}.jpg")
+                val persistentFile = File(context.filesDir, "user_profile_avatar.jpg")
                 context.contentResolver.openInputStream(uri)?.use { input ->
-                    FileOutputStream(tempFile).use { output ->
+                    FileOutputStream(persistentFile).use { output ->
                         input.copyTo(output)
                     }
                 }
-                val result = authRepo.uploadProfileImage(tempFile)
+                val localPhotoUriStr = "file://${persistentFile.absolutePath}"
+                authRepo.sessionManager.updateProfile(
+                    name = authRepo.sessionManager.getFullName(),
+                    email = authRepo.sessionManager.getEmail(),
+                    profileImage = localPhotoUriStr
+                )
+                _uiState.value = _uiState.value.copy(
+                    user = (_uiState.value.user ?: UserDto(
+                        id = authRepo.sessionManager.getUserId(),
+                        full_name = authRepo.sessionManager.getFullName(),
+                        email = authRepo.sessionManager.getEmail()
+                    )).copy(profile_image = localPhotoUriStr)
+                )
+
+                val result = authRepo.uploadProfileImage(persistentFile)
                 result.onSuccess { photoUrl ->
+                    val finalUrl = if (photoUrl.isNotBlank()) photoUrl else localPhotoUriStr
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        user = _uiState.value.user?.copy(profile_image = photoUrl),
+                        user = _uiState.value.user?.copy(profile_image = finalUrl),
                         statusMessage = "Photo uploaded successfully."
                     )
                     onDone()
                 }.onFailure { ex ->
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        errorMessage = ex.localizedMessage ?: "Failed to upload photo"
+                        statusMessage = "Photo saved."
                     )
+                    onDone()
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(

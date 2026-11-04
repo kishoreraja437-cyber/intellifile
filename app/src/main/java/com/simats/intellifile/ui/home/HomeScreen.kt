@@ -122,6 +122,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Path
 
 import androidx.compose.ui.unit.dp
 
@@ -151,7 +157,15 @@ enum class PriorityLevel(
 
     val textColor: Color,
 
-    val icon: ImageVector
+    val icon: ImageVector,
+
+    val badgeResId: Int = R.drawable.priority_badge_important,
+
+    val borderColor: Color = Color(0xFFFFA8B6),
+
+    val glowColor: Color = Color(0xFFFF8DA1),
+
+    val gradientColors: List<Color> = listOf(Color(0xFFFFF5F7), Color(0xFFFFE6EB))
 
 ) {
 
@@ -161,13 +175,21 @@ enum class PriorityLevel(
 
         count = 0,
 
-        backgroundColor = Color(0xFFFFEAEE),
+        backgroundColor = Color(0xFFFFF0F3),
 
-        iconBackgroundColor = Color(0xFFEF4444),
+        iconBackgroundColor = Color(0xFFE11D48),
 
-        textColor = Color(0xFFEF4444),
+        textColor = Color(0xFFE11D48),
 
-        icon = Icons.Default.PriorityHigh
+        icon = Icons.Default.PriorityHigh,
+
+        badgeResId = R.drawable.priority_badge_important,
+
+        borderColor = Color(0xFFFFA8B6),
+
+        glowColor = Color(0xFFFF8DA1).copy(alpha = 0.28f),
+
+        gradientColors = listOf(Color(0xFFFFF5F7), Color(0xFFFFE6EB))
 
     ),
 
@@ -177,13 +199,21 @@ enum class PriorityLevel(
 
         count = 0,
 
-        backgroundColor = Color(0xFFFFF6D8),
+        backgroundColor = Color(0xFFFFFBF0),
 
-        iconBackgroundColor = Color(0xFFD97706),
+        iconBackgroundColor = Color(0xFFF59E0B),
 
         textColor = Color(0xFFD97706),
 
-        icon = Icons.Default.Remove
+        icon = Icons.Default.Remove,
+
+        badgeResId = R.drawable.priority_badge_normal,
+
+        borderColor = Color(0xFFFBD38D),
+
+        glowColor = Color(0xFFF59E0B).copy(alpha = 0.28f),
+
+        gradientColors = listOf(Color(0xFFFFFBF0), Color(0xFFFFF0D4))
 
     ),
 
@@ -193,13 +223,21 @@ enum class PriorityLevel(
 
         count = 0,
 
-        backgroundColor = Color(0xFFE2F7ED),
+        backgroundColor = Color(0xFFF0FDF4),
 
         iconBackgroundColor = Color(0xFF10B981),
 
-        textColor = Color(0xFF10B981),
+        textColor = Color(0xFF059669),
 
-        icon = Icons.Default.Check
+        icon = Icons.Default.Check,
+
+        badgeResId = R.drawable.priority_badge_low,
+
+        borderColor = Color(0xFF9AE6B4),
+
+        glowColor = Color(0xFF10B981).copy(alpha = 0.28f),
+
+        gradientColors = listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7))
 
     )
 
@@ -1241,7 +1279,8 @@ fun PrioritySummaryCard(
 
 ) {
 
-    var isCardPressed by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isCardPressed by interactionSource.collectIsPressedAsState()
     val cardScale by animateFloatAsState(
         targetValue = if (isCardPressed) 0.94f else 1.0f,
         animationSpec = spring(
@@ -1251,89 +1290,99 @@ fun PrioritySummaryCard(
         label = "cardScale"
     )
 
-    Column(
-
-
+    Box(
         modifier = modifier
-
-            .clip(RoundedCornerShape(20.dp))
-
-            .background(priority.backgroundColor)
-
-            .clickable { onClick() }
-
-            .padding(vertical = 16.dp, horizontal = 12.dp),
-
-        horizontalAlignment = Alignment.CenterHorizontally,
-
-        verticalArrangement = Arrangement.Center
-
-    ) {
-
-        Box(
-
-            modifier = Modifier
-
-                .size(36.dp)
-
-                .clip(CircleShape)
-
-                .background(priority.iconBackgroundColor),
-
-            contentAlignment = Alignment.Center
-
-        ) {
-
-            Icon(
-
-                imageVector = priority.icon,
-
-                contentDescription = priority.title,
-
-                tint = Color.White,
-
-                modifier = Modifier.size(18.dp)
-
+            .graphicsLayer {
+                scaleX = cardScale
+                scaleY = cardScale
+            }
+            .shadow(
+                elevation = 6.dp,
+                shape = RoundedCornerShape(22.dp),
+                ambientColor = priority.glowColor,
+                spotColor = priority.glowColor,
+                clip = false
             )
-
+            .clip(RoundedCornerShape(22.dp))
+            .background(
+                brush = Brush.verticalGradient(priority.gradientColors)
+            )
+            .border(
+                width = 1.5.dp,
+                color = priority.borderColor,
+                shape = RoundedCornerShape(22.dp)
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) { onClick() }
+    ) {
+        // Specular 3D Glass Arc Highlight in top-left corner
+        Canvas(modifier = Modifier.matchParentSize()) {
+            val shineBrush = Brush.linearGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.85f),
+                    Color.White.copy(alpha = 0.30f),
+                    Color.Transparent
+                ),
+                start = Offset(0f, 0f),
+                end = Offset(size.width * 0.70f, size.height * 0.45f)
+            )
+            val cornerR = 20.dp.toPx()
+            val strokeW = 2.5.dp.toPx()
+            val path = Path().apply {
+                moveTo(cornerR, strokeW)
+                lineTo(size.width * 0.65f, strokeW)
+                quadraticTo(
+                    size.width * 0.35f, size.height * 0.30f,
+                    strokeW, size.height * 0.52f
+                )
+                lineTo(strokeW, cornerR)
+                arcTo(
+                    rect = Rect(strokeW, strokeW, cornerR * 2, cornerR * 2),
+                    startAngleDegrees = 180f,
+                    sweepAngleDegrees = 90f,
+                    forceMoveTo = false
+                )
+                close()
+            }
+            drawPath(path = path, brush = shineBrush)
         }
 
+        // Card Content: 3D Badge, Title, Dynamic Count
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp, horizontal = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Image(
+                painter = painterResource(id = priority.badgeResId),
+                contentDescription = priority.title,
+                modifier = Modifier.size(48.dp)
+            )
 
+            Spacer(modifier = Modifier.height(8.dp))
 
-        Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = priority.title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = priority.textColor,
+                maxLines = 1
+            )
 
+            Spacer(modifier = Modifier.height(4.dp))
 
-
-        Text(
-
-            text = priority.title,
-
-            fontSize = 13.sp,
-
-            fontWeight = FontWeight.SemiBold,
-
-            color = priority.textColor
-
-        )
-
-
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-
-
-        Text(
-
-            text = (count ?: priority.count).toString(),
-
-            fontSize = 22.sp,
-
-            fontWeight = FontWeight.Bold,
-
-            color = MaterialTheme.colorScheme.onSurface
-
-        )
-
+            Text(
+                text = (count ?: priority.count).toString(),
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF0F172A),
+                maxLines = 1
+            )
+        }
     }
 
 }
@@ -1500,21 +1549,21 @@ fun PriorityTag(
 
             .background(priority.backgroundColor)
 
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+            .border(1.dp, priority.borderColor, CircleShape)
+
+            .padding(horizontal = 8.dp, vertical = 4.dp),
 
         verticalAlignment = Alignment.CenterVertically
 
     ) {
 
-        Box(
+        Image(
 
-            modifier = Modifier
+            painter = painterResource(id = priority.badgeResId),
 
-                .size(6.dp)
+            contentDescription = priority.title,
 
-                .clip(CircleShape)
-
-                .background(priority.iconBackgroundColor)
+            modifier = Modifier.size(14.dp)
 
         )
 
@@ -1530,7 +1579,7 @@ fun PriorityTag(
 
             fontSize = 11.sp,
 
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.Bold,
 
             color = priority.textColor
 

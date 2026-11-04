@@ -1,6 +1,18 @@
 package com.simats.intellifile.ui.priority
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -231,20 +243,11 @@ fun PriorityOptionCard(
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .background(option.priority.iconBackgroundColor),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = option.icon,
-                contentDescription = option.priority.title,
-                tint = Color.White,
-                modifier = Modifier.size(22.dp)
-            )
-        }
+        Image(
+            painter = painterResource(id = option.priority.badgeResId),
+            contentDescription = option.priority.title,
+            modifier = Modifier.size(44.dp)
+        )
 
         Spacer(modifier = Modifier.width(16.dp))
 
@@ -315,47 +318,102 @@ fun PriorityButtonCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val cardScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.94f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "btnCardScale"
+    )
+
     val borderModifier = if (isSelected) {
         Modifier.border(
-            width = 1.5.dp,
+            width = 2.dp,
             color = priority.textColor,
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(20.dp)
         )
-    } else Modifier
+    } else {
+        Modifier.border(
+            width = 1.5.dp,
+            color = priority.borderColor,
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
 
-    Column(
+    Box(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(priority.backgroundColor)
-            .then(borderModifier)
-            .clickable { onClick() }
-            .padding(vertical = 16.dp, horizontal = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .clip(CircleShape)
-                .background(priority.iconBackgroundColor),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = priority.icon,
-                contentDescription = priority.title,
-                tint = Color.White,
-                modifier = Modifier.size(20.dp)
+            .graphicsLayer {
+                scaleX = cardScale
+                scaleY = cardScale
+            }
+            .shadow(
+                elevation = if (isSelected) 8.dp else 4.dp,
+                shape = RoundedCornerShape(20.dp),
+                ambientColor = priority.glowColor,
+                spotColor = priority.glowColor,
+                clip = false
             )
+            .clip(RoundedCornerShape(20.dp))
+            .background(brush = Brush.verticalGradient(priority.gradientColors))
+            .then(borderModifier)
+            .clickable(interactionSource = interactionSource, indication = null) { onClick() }
+    ) {
+        Canvas(modifier = Modifier.matchParentSize()) {
+            val shineBrush = Brush.linearGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.80f),
+                    Color.White.copy(alpha = 0.25f),
+                    Color.Transparent
+                ),
+                start = Offset(0f, 0f),
+                end = Offset(size.width * 0.70f, size.height * 0.45f)
+            )
+            val cornerR = 18.dp.toPx()
+            val strokeW = 2.dp.toPx()
+            val path = Path().apply {
+                moveTo(cornerR, strokeW)
+                lineTo(size.width * 0.65f, strokeW)
+                quadraticTo(
+                    size.width * 0.35f, size.height * 0.30f,
+                    strokeW, size.height * 0.52f
+                )
+                lineTo(strokeW, cornerR)
+                arcTo(
+                    rect = Rect(strokeW, strokeW, cornerR * 2, cornerR * 2),
+                    startAngleDegrees = 180f,
+                    sweepAngleDegrees = 90f,
+                    forceMoveTo = false
+                )
+                close()
+            }
+            drawPath(path = path, brush = shineBrush)
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 14.dp, horizontal = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Image(
+                painter = painterResource(id = priority.badgeResId),
+                contentDescription = priority.title,
+                modifier = Modifier.size(44.dp)
+            )
 
-        Text(
-            text = priority.title,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = priority.textColor
-        )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = priority.title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = priority.textColor
+            )
+        }
     }
 }
 

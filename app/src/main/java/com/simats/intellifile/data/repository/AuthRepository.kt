@@ -2,6 +2,7 @@ package com.simats.intellifile.data.repository
 
 import android.content.Context
 import com.simats.intellifile.data.api.IntelliFileApiService
+import com.simats.intellifile.data.api.NetworkConfig
 import com.simats.intellifile.data.api.RetrofitClient
 import com.simats.intellifile.data.model.*
 import com.simats.intellifile.data.session.SessionManager
@@ -218,7 +219,7 @@ class AuthRepository(private val context: Context) {
                 var user = response.body()?.user ?: response.body()?.profile ?: return Result.failure(Exception("User not found"))
                 val resolvedEmail = if (!user.email.isNullOrBlank()) user.email.trim() else currentEmail
                 val resolvedName = if (!user.full_name.isNullOrBlank()) user.full_name.trim() else sessionManager.getFullName()
-                val resolvedImg = com.simats.intellifile.data.api.NetworkConfig.resolveMediaUrl(user.profile_image)
+                val resolvedImg = NetworkConfig.resolveMediaUrl(user.profile_image) ?: sessionManager.getProfileImage()
                 user = user.copy(
                     full_name = resolvedName,
                     email = resolvedEmail,

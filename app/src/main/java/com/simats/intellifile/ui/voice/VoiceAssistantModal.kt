@@ -217,23 +217,6 @@ fun VoiceAssistantModal(
         }
     }
 
-    val systemSpeechLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val matches = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            val recognized = matches?.firstOrNull()?.trim()
-            if (!recognized.isNullOrBlank()) {
-                userSpeechText = recognized
-                // Process through VoiceCommandProcessor
-            } else {
-                voiceState = AssistantVoiceState.IDLE
-            }
-        } else {
-            voiceState = AssistantVoiceState.IDLE
-        }
-    }
-
     fun executeCommand(rawSpokenQuery: String) {
         val query = rawSpokenQuery.trim()
         if (query.isBlank() || isBusy) return
@@ -562,6 +545,23 @@ fun VoiceAssistantModal(
         }
     }
 
+    val systemSpeechLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val matches = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            val recognized = matches?.firstOrNull()?.trim()
+            if (!recognized.isNullOrBlank()) {
+                userSpeechText = recognized
+                executeCommand(recognized)
+            } else {
+                voiceState = AssistantVoiceState.IDLE
+            }
+        } else {
+            voiceState = AssistantVoiceState.IDLE
+        }
+    }
+
     fun startListening() {
         stopSpeaking()
         if (!hasAudioPermission || isBusy) return
@@ -590,9 +590,15 @@ fun VoiceAssistantModal(
                     }
 
                     override fun onError(error: Int) {
+                        if (error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_AUDIO || error == SpeechRecognizer.ERROR_SERVER) {
+                            try {
+                                systemSpeechLauncher.launch(speechIntent)
+                                return
+                            } catch (_: Exception) {}
+                        }
                         val message = when (error) {
-                            SpeechRecognizer.ERROR_AUDIO -> "Audio recording issue"
-                            SpeechRecognizer.ERROR_CLIENT -> "Client speech error"
+                            SpeechRecognizer.ERROR_AUDIO -> "Audio recording issue. Tap mic to retry."
+                            SpeechRecognizer.ERROR_CLIENT -> "Client speech error. Tap mic to retry."
                             SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Audio permission required"
                             SpeechRecognizer.ERROR_NETWORK -> "Network issue with voice recognition"
                             SpeechRecognizer.ERROR_NO_MATCH -> "No speech recognized. Tap mic to retry."
@@ -677,9 +683,11 @@ fun VoiceAssistantModal(
         }
     }
 
-    // Auto-start listening on first open if permission is granted
+    // Auto-start listening on first open if permission is granted, or request permission
     LaunchedEffect(hasAudioPermission) {
-        if (hasAudioPermission && voiceState == AssistantVoiceState.IDLE && userSpeechText.isEmpty()) {
+        if (!hasAudioPermission) {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        } else if (voiceState == AssistantVoiceState.IDLE && userSpeechText.isEmpty()) {
             delay(300L)
             startListening()
         }

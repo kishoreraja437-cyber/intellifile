@@ -32,6 +32,9 @@ object NetworkConfig {
     fun resolveMediaUrl(rawUrl: String?): String? {
         if (rawUrl.isNullOrBlank()) return null
         val cleaned = rawUrl.trim()
+        if (cleaned.startsWith("file:") || cleaned.startsWith("content:") || cleaned.startsWith("/")) {
+            return if (cleaned.startsWith("/")) "file://$cleaned" else cleaned
+        }
         if (cleaned.contains("localhost") || cleaned.contains("127.0.0.1") || cleaned.contains("10.0.2.2") || cleaned.contains("172.23.176.96")) {
             val path = cleaned.substringAfter("/intellifile_backend/", "").ifBlank {
                 cleaned.substringAfter("uploads/", "uploads/")
