@@ -10,9 +10,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
@@ -214,7 +219,36 @@ class MainActivity : ComponentActivity() {
                     AnimatedContent(
                         targetState = currentScreen,
                         transitionSpec = {
-                            fadeIn(animationSpec = tween(250)) togetherWith fadeOut(animationSpec = tween(200))
+                            val isForward = targetState.ordinal > initialState.ordinal
+                            if (initialState == AppScreen.SPLASH) {
+                                (fadeIn(animationSpec = tween(400, easing = FastOutSlowInEasing)) +
+                                    scaleIn(initialScale = 0.92f, animationSpec = tween(400, easing = FastOutSlowInEasing)))
+                                    .togetherWith(fadeOut(animationSpec = tween(250)))
+                            } else if (isForward) {
+                                (slideInHorizontally(
+                                    initialOffsetX = { fullWidth -> (fullWidth * 0.35f).toInt() },
+                                    animationSpec = tween(380, easing = FastOutSlowInEasing)
+                                ) + fadeIn(animationSpec = tween(300)))
+                                    .togetherWith(
+                                        slideOutHorizontally(
+                                            targetOffsetX = { fullWidth -> -(fullWidth * 0.25f).toInt() },
+                                            animationSpec = tween(350, easing = FastOutSlowInEasing)
+                                        ) + fadeOut(animationSpec = tween(250)) +
+                                        scaleOut(targetScale = 0.95f, animationSpec = tween(350, easing = FastOutSlowInEasing))
+                                    )
+                            } else {
+                                (slideInHorizontally(
+                                    initialOffsetX = { fullWidth -> -(fullWidth * 0.35f).toInt() },
+                                    animationSpec = tween(380, easing = FastOutSlowInEasing)
+                                ) + fadeIn(animationSpec = tween(300)) +
+                                scaleIn(initialScale = 0.95f, animationSpec = tween(380, easing = FastOutSlowInEasing)))
+                                    .togetherWith(
+                                        slideOutHorizontally(
+                                            targetOffsetX = { fullWidth -> (fullWidth * 0.35f).toInt() },
+                                            animationSpec = tween(350, easing = FastOutSlowInEasing)
+                                        ) + fadeOut(animationSpec = tween(250))
+                                    )
+                            }
                         },
                         label = "rootScreenTransition"
                     ) { targetScreen ->

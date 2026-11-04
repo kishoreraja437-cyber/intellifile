@@ -1,5 +1,10 @@
 package com.simats.intellifile.ui.auth
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
+
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -63,9 +68,19 @@ fun LoginScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
+        val formAlpha = remember { Animatable(0f) }
+        val formTranslateY = remember { Animatable(24f) }
+        LaunchedEffect(Unit) {
+            formAlpha.animateTo(1f, tween(350, easing = FastOutSlowInEasing))
+        }
+        LaunchedEffect(Unit) {
+            formTranslateY.animateTo(0f, tween(350, easing = FastOutSlowInEasing))
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .graphicsLayer(translationY = formTranslateY.value, alpha = formAlpha.value)
                 .padding(horizontal = 24.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally

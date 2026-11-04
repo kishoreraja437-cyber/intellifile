@@ -30,6 +30,16 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -236,6 +246,32 @@ fun MyFilesScreen(
     val importantSweep = if (totalPrioritized > 0) (importantCount.toFloat() / totalPrioritized) * 360f else 0f
     val normalSweep = if (totalPrioritized > 0) (normalCount.toFloat() / totalPrioritized) * 360f else 0f
     val lowSweep = if (totalPrioritized > 0) (lowCount.toFloat() / totalPrioritized) * 360f else 0f
+
+    val animImportantSweep by animateFloatAsState(
+        targetValue = importantSweep,
+        animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+        label = "animImportantSweep"
+    )
+    val animNormalSweep by animateFloatAsState(
+        targetValue = normalSweep,
+        animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+        label = "animNormalSweep"
+    )
+    val animLowSweep by animateFloatAsState(
+        targetValue = lowSweep,
+        animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+        label = "animLowSweep"
+    )
+
+    val refreshRotation = remember { Animatable(0f) }
+    LaunchedEffect(refreshTrigger) {
+        if (refreshTrigger > 0) {
+            refreshRotation.animateTo(
+                targetValue = refreshRotation.value + 360f,
+                animationSpec = tween(600, easing = FastOutSlowInEasing)
+            )
+        }
+    }
 
     // AI Document Insights Modal Dialog
     selectedSummaryDoc?.let { doc ->
@@ -703,7 +739,8 @@ fun MyFilesScreen(
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Refresh",
-                        tint = MaterialTheme.colorScheme.onBackground
+                        tint = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.graphicsLayer(rotationZ = refreshRotation.value)
                     )
                 }
             }
@@ -894,29 +931,29 @@ fun MyFilesScreen(
                                                 style = Stroke(width = strokeWidth)
                                             )
                                         } else {
-                                            if (importantSweep > 0) {
+                                            if (animImportantSweep > 0) {
                                                 drawArc(
                                                     color = Color(0xFFEF4444),
                                                     startAngle = startAngleOffset,
-                                                    sweepAngle = importantSweep,
+                                                    sweepAngle = animImportantSweep,
                                                     useCenter = false,
                                                     style = Stroke(width = strokeWidth)
                                                 )
                                             }
-                                            if (normalSweep > 0) {
+                                            if (animNormalSweep > 0) {
                                                 drawArc(
                                                     color = Color(0xFFF59E0B),
-                                                    startAngle = startAngleOffset + importantSweep,
-                                                    sweepAngle = normalSweep,
+                                                    startAngle = startAngleOffset + animImportantSweep,
+                                                    sweepAngle = animNormalSweep,
                                                     useCenter = false,
                                                     style = Stroke(width = strokeWidth)
                                                 )
                                             }
-                                            if (lowSweep > 0) {
+                                            if (animLowSweep > 0) {
                                                 drawArc(
                                                     color = Color(0xFF10B981),
-                                                    startAngle = startAngleOffset + importantSweep + normalSweep,
-                                                    sweepAngle = lowSweep,
+                                                    startAngle = startAngleOffset + animImportantSweep + animNormalSweep,
+                                                    sweepAngle = animLowSweep,
                                                     useCenter = false,
                                                     style = Stroke(width = strokeWidth)
                                                 )

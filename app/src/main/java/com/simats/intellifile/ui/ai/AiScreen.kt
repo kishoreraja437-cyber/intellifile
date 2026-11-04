@@ -1,6 +1,13 @@
 package com.simats.intellifile.ui.ai
 
 import androidx.compose.animation.core.*
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -769,8 +776,19 @@ fun UserMessageBubble(
     text: String,
     modifier: Modifier = Modifier
 ) {
+    val enterAnim = remember { Animatable(0.92f) }
+    val alphaAnim = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        enterAnim.animateTo(1.0f, tween(250, easing = FastOutSlowInEasing))
+    }
+    LaunchedEffect(Unit) {
+        alphaAnim.animateTo(1.0f, tween(200, easing = FastOutSlowInEasing))
+    }
+
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer(scaleX = enterAnim.value, scaleY = enterAnim.value, alpha = alphaAnim.value),
         horizontalArrangement = Arrangement.End
     ) {
         Box(
@@ -804,8 +822,30 @@ fun AiMessageBubble(
     onOpenFile: (AiFileResult) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val enterAnim = remember { Animatable(0.92f) }
+    val alphaAnim = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        enterAnim.animateTo(1.0f, tween(280, easing = FastOutSlowInEasing))
+    }
+    LaunchedEffect(Unit) {
+        alphaAnim.animateTo(1.0f, tween(220, easing = FastOutSlowInEasing))
+    }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "aiThinkingPulse")
+    val thinkingAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(750, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "thinkingAlpha"
+    )
+
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer(scaleX = enterAnim.value, scaleY = enterAnim.value, alpha = alphaAnim.value),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Box(
@@ -835,7 +875,7 @@ fun AiMessageBubble(
                         text = text,
                         fontSize = 13.sp,
                         fontStyle = FontStyle.Italic,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = thinkingAlpha)
                     )
                 }
             } else {
@@ -1038,9 +1078,16 @@ fun AiBottomInputBar(
 
         Spacer(modifier = Modifier.width(8.dp))
 
+        val sendScale by animateFloatAsState(
+            targetValue = if (query.isNotBlank() && !isThinking) 1.08f else 1.0f,
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+            label = "sendScale"
+        )
+
         Box(
             modifier = Modifier
                 .size(42.dp)
+                .graphicsLayer(scaleX = sendScale, scaleY = sendScale)
                 .clip(CircleShape)
                 .background(if (isThinking) Color.Gray else MaterialTheme.colorScheme.primary)
                 .clickable(enabled = !isThinking) { onSendClick() },

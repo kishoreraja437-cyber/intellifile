@@ -6,6 +6,8 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -402,10 +404,16 @@ fun NotificationToggleCard(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
+                val badgeColor by animateColorAsState(
+                    targetValue = if (checked) Color(0xFFDEF7EC) else Color(0xFFF3F4F6),
+                    animationSpec = tween(250),
+                    label = "badgeColor"
+                )
+
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(if (checked) Color(0xFFDEF7EC) else Color(0xFFF3F4F6))
+                        .background(badgeColor)
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(

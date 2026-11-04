@@ -32,6 +32,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 
 import androidx.activity.result.contract.ActivityResultContracts
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.Spring
 
 import androidx.compose.animation.core.animateFloatAsState
@@ -259,6 +266,15 @@ fun HomeScreen(
     }
 
     var refreshTrigger by remember { mutableIntStateOf(0) }
+    val refreshRotation = remember { Animatable(0f) }
+    LaunchedEffect(refreshTrigger) {
+        if (refreshTrigger > 0) {
+            refreshRotation.animateTo(
+                targetValue = refreshRotation.value + 360f,
+                animationSpec = tween(600, easing = FastOutSlowInEasing)
+            )
+        }
+    }
 
     var realFiles by remember { mutableStateOf<List<LocalFileItem>>(emptyList()) }
 
@@ -740,7 +756,7 @@ fun HomeScreen(
 
                                 tint = Color(0xFF6B7280),
 
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(16.dp).graphicsLayer(rotationZ = refreshRotation.value)
 
                             )
 
@@ -976,6 +992,26 @@ fun SearchBar(
 
     var isMicPressed by remember { mutableStateOf(false) }
 
+    val infiniteTransition = rememberInfiniteTransition(label = "ambientMicPulse")
+    val idlePulseScale by infiniteTransition.animateFloat(
+        initialValue = 1.0f,
+        targetValue = 1.14f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "idlePulseScale"
+    )
+    val idlePulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.28f,
+        targetValue = 0.06f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "idlePulseAlpha"
+    )
+
     val micScale by animateFloatAsState(
 
         targetValue = if (isMicPressed) 1.25f else 1.0f,
@@ -1104,6 +1140,23 @@ fun SearchBar(
 
         ) {
 
+            // Ambient breathing wave
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer(scaleX = idlePulseScale, scaleY = idlePulseScale, alpha = idlePulseAlpha)
+            ) {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFF26E07F).copy(alpha = 0.6f),
+                            Color(0xFF55A9AF).copy(alpha = 0.3f),
+                            Color.Transparent
+                        )
+                    )
+                )
+            }
+
             if (isMicPressed) {
 
                 Canvas(
@@ -1188,7 +1241,18 @@ fun PrioritySummaryCard(
 
 ) {
 
+    var isCardPressed by remember { mutableStateOf(false) }
+    val cardScale by animateFloatAsState(
+        targetValue = if (isCardPressed) 0.94f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "cardScale"
+    )
+
     Column(
+
 
         modifier = modifier
 

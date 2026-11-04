@@ -7,6 +7,10 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -1002,9 +1006,17 @@ fun ProfileOptionRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var isPressed by remember { mutableStateOf(false) }
+    val rowScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "rowScale"
+    )
+
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer(scaleX = rowScale, scaleY = rowScale)
             .clickable { onClick() }
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,

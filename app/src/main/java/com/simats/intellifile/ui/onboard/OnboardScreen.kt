@@ -1,5 +1,13 @@
 package com.simats.intellifile.ui.onboard
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -36,6 +44,34 @@ import com.simats.intellifile.ui.theme.IntellifileTheme
 fun OnboardScreen(
     onGetStartedClick: () -> Unit = {}
 ) {
+    val infiniteTransition = rememberInfiniteTransition(label = "onboardFloat")
+    val floatY1 by infiniteTransition.animateFloat(
+        initialValue = -5f,
+        targetValue = 7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "floatY1"
+    )
+    val floatY2 by infiniteTransition.animateFloat(
+        initialValue = 6f,
+        targetValue = -6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "floatY2"
+    )
+    val floatY3 by infiniteTransition.animateFloat(
+        initialValue = -4f,
+        targetValue = 6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "floatY3"
+    )
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -150,6 +186,7 @@ fun OnboardScreen(
                         .size(36.dp)
                         .align(Alignment.TopStart)
                         .offset(x = 40.dp, y = 10.dp)
+                        .graphicsLayer(translationY = floatY1)
                 )
 
                 // Floating DOC icon (Top Right)
@@ -160,6 +197,7 @@ fun OnboardScreen(
                         .size(38.dp)
                         .align(Alignment.TopEnd)
                         .offset(x = (-40).dp, y = 20.dp)
+                        .graphicsLayer(translationY = floatY2)
                 )
 
                 // Floating PPT icon (Bottom Right)
@@ -170,6 +208,7 @@ fun OnboardScreen(
                         .size(36.dp)
                         .align(Alignment.BottomEnd)
                         .offset(x = (-25).dp, y = (-20).dp)
+                        .graphicsLayer(translationY = floatY3)
                 )
 
                 // Normal file icon decoration on the left

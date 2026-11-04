@@ -1,6 +1,10 @@
 package com.simats.intellifile.ui.home
 
 import android.widget.Toast
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -591,8 +595,15 @@ fun FormatFilterChip(
     val backgroundColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val textColor = if (isSelected) Color.White else MaterialTheme.colorScheme.primary
 
+    val chipScale by animateFloatAsState(
+        targetValue = if (isSelected) 1.05f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy),
+        label = "chipScale"
+    )
+
     Box(
         modifier = modifier
+            .graphicsLayer(scaleX = chipScale, scaleY = chipScale)
             .clip(CircleShape)
             .background(backgroundColor)
             .clickable { onClick() }
@@ -639,6 +650,12 @@ fun RecentFileItemCard(
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (isMultiSelectMode) {
+            val checkScale by animateFloatAsState(
+                targetValue = if (isSelected) 1.0f else 0.2f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                label = "checkScale"
+            )
+
             Box(
                 modifier = Modifier
                     .size(24.dp)
@@ -652,7 +669,7 @@ fun RecentFileItemCard(
                         imageVector = Icons.Default.Check,
                         contentDescription = "Selected",
                         tint = Color.White,
-                        modifier = Modifier.size(15.dp)
+                        modifier = Modifier.size(15.dp).graphicsLayer(scaleX = checkScale, scaleY = checkScale)
                     )
                 }
             }

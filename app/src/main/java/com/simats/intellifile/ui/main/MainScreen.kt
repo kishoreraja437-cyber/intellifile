@@ -22,6 +22,10 @@ import androidx.compose.animation.fadeOut
 
 import androidx.compose.animation.scaleIn
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 
 import androidx.compose.foundation.Canvas
@@ -439,9 +443,48 @@ fun MainScreen(
                 targetState = currentNavigationKey,
 
                 transitionSpec = {
+                    val isInitialTab = initialState.startsWith("tab_")
+                    val isTargetTab = targetState.startsWith("tab_")
 
-                    fadeIn(animationSpec = tween(220)) togetherWith fadeOut(animationSpec = tween(180))
+                    if (isInitialTab && isTargetTab) {
+                        val tabOrder = listOf("tab_HOME", "tab_AI", "tab_FILES", "tab_SAVED", "tab_PROFILE")
+                        val initialIdx = tabOrder.indexOf(initialState).takeIf { it >= 0 } ?: 0
+                        val targetIdx = tabOrder.indexOf(targetState).takeIf { it >= 0 } ?: 0
+                        val isForward = targetIdx > initialIdx
 
+                        if (isForward) {
+                            (slideInHorizontally(animationSpec = tween(320, easing = FastOutSlowInEasing)) { fullWidth -> (fullWidth * 0.35f).toInt() } +
+                                fadeIn(animationSpec = tween(280)))
+                                .togetherWith(
+                                    slideOutHorizontally(animationSpec = tween(280, easing = FastOutSlowInEasing)) { fullWidth -> -(fullWidth * 0.25f).toInt() } +
+                                    fadeOut(animationSpec = tween(220))
+                                )
+                        } else {
+                            (slideInHorizontally(animationSpec = tween(320, easing = FastOutSlowInEasing)) { fullWidth -> -(fullWidth * 0.35f).toInt() } +
+                                fadeIn(animationSpec = tween(280)))
+                                .togetherWith(
+                                    slideOutHorizontally(animationSpec = tween(280, easing = FastOutSlowInEasing)) { fullWidth -> (fullWidth * 0.25f).toInt() } +
+                                    fadeOut(animationSpec = tween(220))
+                                )
+                        }
+                    } else if (isTargetTab && !isInitialTab) {
+                        (slideInHorizontally(animationSpec = tween(340, easing = FastOutSlowInEasing)) { fullWidth -> -(fullWidth * 0.2f).toInt() } +
+                            fadeIn(animationSpec = tween(280)) +
+                            scaleIn(initialScale = 0.95f, animationSpec = tween(340, easing = FastOutSlowInEasing)))
+                            .togetherWith(
+                                slideOutHorizontally(animationSpec = tween(320, easing = FastOutSlowInEasing)) { fullWidth -> (fullWidth * 0.4f).toInt() } +
+                                fadeOut(animationSpec = tween(250))
+                            )
+                    } else {
+                        (slideInHorizontally(animationSpec = tween(360, easing = FastOutSlowInEasing)) { fullWidth -> (fullWidth * 0.4f).toInt() } +
+                            fadeIn(animationSpec = tween(280)) +
+                            scaleIn(initialScale = 0.96f, animationSpec = tween(360, easing = FastOutSlowInEasing)))
+                            .togetherWith(
+                                slideOutHorizontally(animationSpec = tween(300, easing = FastOutSlowInEasing)) { fullWidth -> -(fullWidth * 0.2f).toInt() } +
+                                fadeOut(animationSpec = tween(220)) +
+                                scaleOut(targetScale = 0.95f, animationSpec = tween(300, easing = FastOutSlowInEasing))
+                            )
+                    }
                 },
 
                 label = "mainScreenTransition"
