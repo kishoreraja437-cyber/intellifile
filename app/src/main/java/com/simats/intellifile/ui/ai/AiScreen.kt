@@ -206,7 +206,8 @@ fun AiScreen(
                 onBackClick = onBackClick,
                 onViewSearchHistoryClick = onViewSearchHistoryClick,
                 hasActiveConversation = currentConversationId != null,
-                onNewChatClick = handleStartNewChat
+                onNewChatClick = handleStartNewChat,
+                onMicClick = onMicClick
             )
 
             // Chat Messages List
@@ -256,6 +257,7 @@ fun AiScreen(
                 query = promptInput,
                 isThinking = isThinking,
                 onQueryChange = { promptInput = it },
+                onMicClick = onMicClick,
                 onSendClick = {
                     if (promptInput.isNotBlank() && !isThinking) {
                         val userQuery = promptInput.trim()
@@ -1058,6 +1060,7 @@ fun AiBottomInputBar(
     isThinking: Boolean = false,
     onQueryChange: (String) -> Unit,
     onSendClick: () -> Unit,
+    onMicClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -1067,7 +1070,7 @@ fun AiBottomInputBar(
             .height(56.dp)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 18.dp, vertical = 6.dp),
+            .padding(horizontal = 14.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -1090,7 +1093,23 @@ fun AiBottomInputBar(
             )
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+
+        // Mic Button in bottom bar
+        IconButton(
+            onClick = onMicClick,
+            enabled = !isThinking,
+            modifier = Modifier.size(38.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Mic,
+                contentDescription = "Voice Assistant",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(4.dp))
 
         val sendScale by animateFloatAsState(
             targetValue = if (query.isNotBlank() && !isThinking) 1.08f else 1.0f,
@@ -1100,18 +1119,18 @@ fun AiBottomInputBar(
 
         Box(
             modifier = Modifier
-                .size(42.dp)
+                .size(40.dp)
                 .graphicsLayer(scaleX = sendScale, scaleY = sendScale)
                 .clip(CircleShape)
-                .background(if (isThinking) Color.Gray else MaterialTheme.colorScheme.primary)
-                .clickable(enabled = !isThinking) { onSendClick() },
+                .background(if (isThinking || query.isBlank()) Color.Gray.copy(alpha = 0.45f) else MaterialTheme.colorScheme.primary)
+                .clickable(enabled = !isThinking && query.isNotBlank()) { onSendClick() },
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.Send,
                 contentDescription = "Send",
                 tint = Color.White,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(17.dp)
             )
         }
     }
