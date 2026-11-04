@@ -21,6 +21,11 @@ import com.simats.intellifile.R
 import com.simats.intellifile.data.local.LocalFileDatabaseHelper
 import com.simats.intellifile.data.model.LocalFileItem
 import com.simats.intellifile.ui.home.PriorityLevel
+import com.simats.intellifile.data.api.NetworkConfig
+import com.simats.intellifile.data.model.DocumentDto
+import java.io.FileOutputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
 import java.text.SimpleDateFormat
@@ -618,5 +623,79 @@ object LocalFileManager {
             .replace("&gt;", ">")
             .replace("&quot;", "\"")
             .replace("&apos;", "'")
+    }
+
+    /**
+     * Resolves local file access (URI string and local file path) for an AI Vault document.
+     * 1. Checks matching local file from device.
+     * 2. Checks local file at doc.file_path.
+     * 3. Checks app cacheDir for existing downloaded/cached copy.
+     * 4. Downloads from remote server into cacheDir if remote URL is available.
+     * 5. If offline or download fails, writes doc.content_text into cacheDir so file can still be opened and viewed.
+     */
+    suspend fun resolveVaultDocumentAccess(
+        context: Context,
+        doc: DocumentDto,
+        deviceFiles: List<LocalFileItem>
+    ): Pair<String, String> = withContext(Dispatchers.IO) {
+        // 1. Try local match from device files
+        val localMatch = deviceFiles.find {
+            it.title.equals(doc.title, ignoreCase = true) ||
+            it.title.substringBeforeLast('.').equals(doc.title.substringBeforeLast('.'), ignoreCase = true) ||
+            (!doc.file_path.isNullOrBlank() && it.path == doc.file_path)
+        }
+        if (localMatch != null && (localMatch.uri != Uri.EMPTY || File(localMatch.path).exists())) {
+            return@withContext Pair(localMatch.uri.toString(), localMatch.path)
+        }
+
+        // 2. Check if a local file already exists at doc.file_path directly
+        if (!doc.file_path.isNullOrBlank()) {
+            val directFile = File(doc.file_path)
+            if (directFile.exists() && directFile.canRead()) {
+                return@withContext Pair("", directFile.absolutePath)
+            }
+        }
+
+        // 3. Check if cached in app cacheDir
+        val safeFileName = "vault_${doc.id}_" + doc.title.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val cachedFile = File(context.cacheDir, safeFileName)
+        if (cachedFile.exists() && cachedFile.length() > 0) {
+            return@withContext Pair("", cachedFile.absolutePath)
+        }
+
+        // 4. Download from remote URL if available
+        val remoteUrl = NetworkConfig.resolveMediaUrl(doc.file_url ?: doc.file_path)
+        if (!remoteUrl.isNullOrBlank()) {
+            try {
+                val url = java.net.URL(remoteUrl)
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 8000
+                conn.readTimeout = 15000
+                conn.requestMethod = "GET"
+                conn.instanceFollowRedirects = true
+                if (conn.responseCode in 200..299) {
+                    conn.inputStream.use { input ->
+                        FileOutputStream(cachedFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    if (cachedFile.exists() && cachedFile.length() > 0) {
+                        return@withContext Pair("", cachedFile.absolutePath)
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        // 5. Fallback: if document has extracted text content, create a viewable text file
+        if (!doc.content_text.isNullOrBlank()) {
+            try {
+                val textFileName = "vault_${doc.id}_${doc.title.substringBeforeLast('.')}.txt"
+                val textFile = File(context.cacheDir, textFileName)
+                textFile.writeText(doc.content_text)
+                return@withContext Pair("", textFile.absolutePath)
+            } catch (_: Exception) {}
+        }
+
+        Pair("", doc.file_path ?: "")
     }
 }

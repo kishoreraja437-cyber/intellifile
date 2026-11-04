@@ -531,7 +531,7 @@ fun MainScreen(
 
                         onBackClick = {
                             isDocumentViewerOpen = false
-                            if (selectedTab == BottomNavItem.AI) {
+                            if (selectedTab == BottomNavItem.AI || selectedTab == BottomNavItem.FILES) {
                                 selectedDetailFile = null
                             }
                         },
@@ -1050,6 +1050,14 @@ fun MainScreen(
                                 onNavigateToAiChat = { _ ->
 
                                     selectedTab = BottomNavItem.AI
+
+                                },
+
+                                onOpenFile = { fileDetail ->
+
+                                    selectedDetailFile = fileDetail
+
+                                    isDocumentViewerOpen = true
 
                                 }
 

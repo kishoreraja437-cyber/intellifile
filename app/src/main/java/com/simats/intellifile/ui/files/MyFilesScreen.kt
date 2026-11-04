@@ -28,6 +28,9 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Visibility
+import com.simats.intellifile.R
+import com.simats.intellifile.ui.detail.FileDetailData
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Description
@@ -81,7 +84,8 @@ fun MyFilesScreen(
     onBackClick: () -> Unit = {},
     onQuickAccessClick: (PriorityLevel) -> Unit = {},
     onNavigateToAiChat: (String) -> Unit = {},
-    onMicClick: () -> Unit = {}
+    onMicClick: () -> Unit = {},
+    onOpenFile: (FileDetailData) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -103,6 +107,7 @@ fun MyFilesScreen(
     var aiInsightsResult by remember { mutableStateOf<AiSummarizeResponse?>(null) }
     var aiInsightsError by remember { mutableStateOf<String?>(null) }
     var docToDelete by remember { mutableStateOf<DocumentDto?>(null) }
+    var resolvingDocId by remember { mutableIntStateOf(-1) }
 
     // Function to generate and load AI Insights
     fun loadInsightsForDoc(doc: DocumentDto) {
@@ -1217,6 +1222,43 @@ fun MyFilesScreen(
                         items(vaultDocuments) { doc ->
                             VaultDocumentCard(
                                 doc = doc,
+                                isLoadingFile = resolvingDocId == doc.id,
+                                onViewFileClick = {
+                                    coroutineScope.launch {
+                                        resolvingDocId = doc.id
+                                        val (uriStr, filePath) = LocalFileManager.resolveVaultDocumentAccess(
+                                            context = context,
+                                            doc = doc,
+                                            deviceFiles = realFiles
+                                        )
+                                        resolvingDocId = -1
+
+                                        val fileDetail = FileDetailData(
+                                            fileName = doc.title,
+                                            fileSize = doc.file_size,
+                                            fileType = "${doc.format} Document",
+                                            createdDate = doc.created_at ?: "Recent",
+                                            modifiedDate = doc.created_at ?: "Recent",
+                                            category = "AI Vault",
+                                            location = doc.location.ifBlank { "AI Vault Storage" },
+                                            priority = when (doc.priority?.uppercase()) {
+                                                "IMPORTANT" -> PriorityLevel.IMPORTANT
+                                                "NORMAL" -> PriorityLevel.NORMAL
+                                                "LOW" -> PriorityLevel.LOW
+                                                else -> null
+                                            },
+                                            iconResId = when (doc.format.uppercase()) {
+                                                "DOCX", "DOC" -> R.drawable.doc
+                                                "PPTX", "PPT" -> R.drawable.ppt
+                                                else -> R.drawable.pdf
+                                            },
+                                            uriString = uriStr,
+                                            path = filePath,
+                                            isVaultSynced = true
+                                        )
+                                        onOpenFile(fileDetail)
+                                    }
+                                },
                                 onViewSummaryClick = { loadInsightsForDoc(doc) },
                                 onDeleteClick = { docToDelete = doc }
                             )
@@ -1300,12 +1342,16 @@ fun MyFilesScreen(
 @Composable
 fun VaultDocumentCard(
     doc: DocumentDto,
+    onViewFileClick: () -> Unit,
     onViewSummaryClick: () -> Unit,
     onDeleteClick: () -> Unit,
+    isLoadingFile: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { onViewFileClick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE5E7EB))
@@ -1327,11 +1373,15 @@ fun VaultDocumentCard(
                         .background(Color(0xFFEFF6FF)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Description,
+                    val iconRes = when (doc.format.uppercase()) {
+                        "DOCX", "DOC" -> R.drawable.doc
+                        "PPTX", "PPT" -> R.drawable.ppt
+                        else -> R.drawable.pdf
+                    }
+                    androidx.compose.foundation.Image(
+                        painter = androidx.compose.ui.res.painterResource(id = iconRes),
                         contentDescription = null,
-                        tint = Color(0xFF2563EB),
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
 
@@ -1348,7 +1398,7 @@ fun VaultDocumentCard(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "${doc.format} · ${doc.file_size} · ${doc.created_at?.take(10) ?: "Recent"}",
+                        text = "${doc.format} • ${doc.file_size} • ${doc.created_at?.take(10) ?: "Recent"}",
                         fontSize = 12.sp,
                         color = Color(0xFF6B7280)
                     )
@@ -1413,27 +1463,77 @@ fun VaultDocumentCard(
                     }
                 }
 
-                Button(
-                    onClick = onViewSummaryClick,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEFF6FF)),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    modifier = Modifier.height(30.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            tint = Color(0xFF2563EB),
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "AI Insights",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF2563EB)
-                        )
+                    // View File Button
+                    Button(
+                        onClick = onViewFileClick,
+                        enabled = !isLoadingFile,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF6C63FF),
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isLoadingFile) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(12.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Opening...",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Visibility,
+                                    contentDescription = "View File",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "View",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+
+                    // AI Insights Button
+                    Button(
+                        onClick = onViewSummaryClick,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEFF6FF)),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = Color(0xFF2563EB),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "AI Insights",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF2563EB)
+                            )
+                        }
                     }
                 }
             }
