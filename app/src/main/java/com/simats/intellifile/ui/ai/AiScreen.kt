@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.outlined.AutoAwesome
@@ -99,7 +100,8 @@ fun AiScreen(
     onBackClick: () -> Unit = {},
     onOpenFile: (AiFileResult) -> Unit = {},
     onViewSearchHistoryClick: () -> Unit = {},
-    onNewChatClick: () -> Unit = {}
+    onNewChatClick: () -> Unit = {},
+    onMicClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -645,7 +647,8 @@ fun AiHeader(
     onViewSearchHistoryClick: () -> Unit,
     modifier: Modifier = Modifier,
     hasActiveConversation: Boolean = false,
-    onNewChatClick: () -> Unit = {}
+    onNewChatClick: () -> Unit = {},
+    onMicClick: () -> Unit = {}
 ) {
     Column(
         modifier = modifier
@@ -668,28 +671,39 @@ fun AiHeader(
                 )
             }
 
-            if (hasActiveConversation) {
-                Row(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable { onNewChatClick() }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onMicClick) {
                     Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "New Chat",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
+                        imageVector = Icons.Default.Mic,
+                        contentDescription = "Voice Assistant",
+                        tint = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "New Chat",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                }
+
+                if (hasActiveConversation) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Row(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clickable { onNewChatClick() }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "New Chat",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "New Chat",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         }

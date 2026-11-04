@@ -15,6 +15,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.PI
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -111,6 +118,7 @@ fun VoiceAssistantModal(
     var statusMessage by remember { mutableStateOf("Tap the microphone or type below...") }
     var isMuted by remember { mutableStateOf(false) }
     var isBusy by remember { mutableStateOf(false) }
+    var hasNavigated by remember { mutableStateOf(false) }
 
     // TTS Setup
     var ttsInstance by remember { mutableStateOf<TextToSpeech?>(null) }
@@ -237,10 +245,13 @@ fun VoiceAssistantModal(
                     // 1. NAVIGATION_COMMAND
                     // -------------------------------------------------------------
                     is VoiceIntentResult.Navigation -> {
+                        if (hasNavigated) return@launch
+                        hasNavigated = true
                         assistantReplyText = intentResult.spokenConfirmation
                         statusMessage = "Navigating..."
-                        speakAnswer(intentResult.spokenConfirmation)
-                        delay(650L)
+                        try {
+                            android.widget.Toast.makeText(context, intentResult.spokenConfirmation, android.widget.Toast.LENGTH_SHORT).show()
+                        } catch (_: Exception) {}
                         stopSpeaking()
                         onDismiss()
 
@@ -588,9 +599,19 @@ fun VoiceAssistantModal(
 
                     override fun onResults(results: Bundle?) {
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        val text = matches?.firstOrNull()?.trim()
-                        if (!text.isNullOrBlank()) {
-                            executeCommand(text)
+                        if (!matches.isNullOrEmpty()) {
+                            // Find any navigation command match first
+                            val navMatch = matches.firstOrNull { candidate ->
+                                val (cType, _) = VoiceCommandProcessor.processCommand(candidate)
+                                cType == VoiceCommandType.NAVIGATION_COMMAND
+                            }
+                            val textToRun = navMatch ?: matches.first().trim()
+                            if (textToRun.isNotBlank()) {
+                                executeCommand(textToRun)
+                            } else {
+                                voiceState = AssistantVoiceState.IDLE
+                                statusMessage = "Didn't catch that. Tap mic or type below."
+                            }
                         } else {
                             voiceState = AssistantVoiceState.IDLE
                             statusMessage = "Didn't catch that. Tap mic or type below."
@@ -602,6 +623,14 @@ fun VoiceAssistantModal(
                         val partial = partialMatches?.firstOrNull()?.trim()
                         if (!partial.isNullOrBlank()) {
                             userSpeechText = partial
+                            // If a complete navigation command is detected in partial stream, navigate immediately
+                            val (cType, _) = VoiceCommandProcessor.processCommand(partial)
+                            if (cType == VoiceCommandType.NAVIGATION_COMMAND && !isBusy && !hasNavigated) {
+                                try {
+                                    speechRecognizer?.stopListening()
+                                } catch (_: Exception) {}
+                                executeCommand(partial)
+                            }
                         }
                     }
 
@@ -682,12 +711,12 @@ fun VoiceAssistantModal(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    AiFluidOrbAvatar(size = 36.dp, iconSize = 18.dp)
+                    Image(painter = painterResource(id = R.drawable.voice_amoeba_orb), contentDescription = "Liquid AI", modifier = Modifier.size(30.dp))
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
                             text = "IntelliFile Voice Assistant",
-                            fontSize = 17.sp,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -729,14 +758,14 @@ fun VoiceAssistantModal(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Main Content Area
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f, fill = false),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Permission Card
@@ -890,12 +919,14 @@ fun VoiceAssistantModal(
                                 Spacer(modifier = Modifier.height(8.dp))
 
                                 val samplePrompts = listOf(
-                                    "Go to Profile",
-                                    "Show my Documents",
-                                    "Open Saved Files",
+                                    "Go to AI screen",
+                                    "Go to file screen",
+                                    "Go to saved screen",
+                                    "Go to profile screen",
+                                    "Go to home screen",
+                                    "Go back",
                                     "How many total files do I have?",
-                                    "Find my assignment PDF",
-                                    "What is Artificial Intelligence?"
+                                    "Find my assignment PDF"
                                 )
 
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -934,13 +965,13 @@ fun VoiceAssistantModal(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Manual Text Input Fallback Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp)
+                    .height(44.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .padding(horizontal = 14.dp, vertical = 6.dp),
@@ -986,7 +1017,7 @@ fun VoiceAssistantModal(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Bottom Actions Bar
             Row(
@@ -1017,37 +1048,75 @@ fun VoiceAssistantModal(
                     Spacer(modifier = Modifier.width(1.dp))
                 }
 
-                // Primary Mic Action Button
+                // Primary Mic Action Button with Pulsing Halo
+                val bottomMicTransition = rememberInfiniteTransition(label = "bottomMicPulse")
+                val bottomMicHaloScale by bottomMicTransition.animateFloat(
+                    initialValue = 1.0f,
+                    targetValue = 1.28f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(800, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "bottomMicHaloScale"
+                )
+                val bottomMicHaloAlpha by bottomMicTransition.animateFloat(
+                    initialValue = 0.5f,
+                    targetValue = 0.05f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(800, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "bottomMicHaloAlpha"
+                )
+
                 Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                colors = if (voiceState == AssistantVoiceState.LISTENING) {
-                                    listOf(Color(0xFF26E07F), Color(0xFF00C2A8))
-                                } else {
-                                    listOf(MaterialTheme.colorScheme.primary, Color(0xFF00C2A8))
-                                }
-                            )
-                        )
-                        .clickable {
-                            if (!hasAudioPermission) {
-                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                            } else if (voiceState == AssistantVoiceState.LISTENING) {
-                                speechRecognizer?.stopListening()
-                            } else {
-                                startListening()
-                            }
-                        },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = if (voiceState == AssistantVoiceState.LISTENING) Icons.Default.MicOff else Icons.Default.Mic,
-                        contentDescription = "Microphone",
-                        tint = Color.White,
-                        modifier = Modifier.size(28.dp)
-                    )
+                    if (voiceState == AssistantVoiceState.LISTENING) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .graphicsLayer(
+                                    scaleX = bottomMicHaloScale,
+                                    scaleY = bottomMicHaloScale,
+                                    alpha = bottomMicHaloAlpha
+                                )
+                                .clip(CircleShape)
+                                .background(Color(0xFF26E07F))
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    colors = if (voiceState == AssistantVoiceState.LISTENING) {
+                                        listOf(Color(0xFF26E07F), Color(0xFF00C2A8))
+                                    } else {
+                                        listOf(MaterialTheme.colorScheme.primary, Color(0xFF00C2A8))
+                                    }
+                                )
+                            )
+                            .clickable {
+                                if (!hasAudioPermission) {
+                                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                } else if (voiceState == AssistantVoiceState.LISTENING) {
+                                    speechRecognizer?.stopListening()
+                                } else {
+                                    startListening()
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (voiceState == AssistantVoiceState.LISTENING) Icons.Default.MicOff else Icons.Default.Mic,
+                            contentDescription = "Microphone",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
             }
         }
@@ -1144,91 +1213,309 @@ fun VoiceWaveOrb(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "voiceOrb")
+    val infiniteTransition = rememberInfiniteTransition(label = "voiceWaveAnims")
 
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 0.92f,
-        targetValue = 1.12f,
+    // Gentle hovering levitation
+    val hoverOffset by infiniteTransition.animateFloat(
+        initialValue = -3f,
+        targetValue = 3f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
+            animation = tween(2200, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "pulse"
+        label = "hoverOffset"
     )
 
-    val rotationAngle by infiniteTransition.animateFloat(
+    // Smooth continuous wave phase for sinusoidal ripples
+    val wavePhase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(2600, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "wavePhase"
+    )
+
+    // Concentric acoustic wave ripple scale & fade
+    val rippleScale by infiniteTransition.animateFloat(
+        initialValue = 0.95f,
+        targetValue = 1.32f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "rippleScale"
+    )
+    val rippleAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.50f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "rippleAlpha"
+    )
+
+    // Radiant specular shimmer sweep across the orb glass surface
+    val shimmerOffset by infiniteTransition.animateFloat(
+        initialValue = -1.2f,
+        targetValue = 2.2f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmerOffset"
+    )
+
+    // Processing neural rotation
+    val processingRotation by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(5000, easing = LinearEasing)
+            animation = tween(3200, easing = LinearEasing)
         ),
-        label = "rotation"
+        label = "processingRotation"
     )
 
-    // Dynamic scale driven by actual voice RMS amplitude
-    val liveScale = if (state == AssistantVoiceState.LISTENING) {
-        (1.0f + (soundRms.coerceIn(0f, 10f) / 18f))
+    // Dynamic voice amplitude surge from live mic input RMS
+    val voiceAudioSurge = if (state == AssistantVoiceState.LISTENING) {
+        (soundRms.coerceIn(0f, 10f) / 10f) * 0.32f
+    } else if (state == AssistantVoiceState.SPEAKING) {
+        0.20f
     } else {
-        pulseScale
+        0f
     }
 
-    Box(
-        modifier = modifier
-            .size(100.dp)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
+    val animatedVoiceSurge by animateFloatAsState(
+        targetValue = voiceAudioSurge,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium),
+        label = "animatedVoiceSurge"
+    )
+
+    val auraColor = when (state) {
+        AssistantVoiceState.LISTENING -> Color(0xFF26E07F)
+        AssistantVoiceState.PROCESSING -> Color(0xFF00E5FF)
+        AssistantVoiceState.SPEAKING -> Color(0xFF00C2A8)
+        AssistantVoiceState.ERROR -> Color(0xFFEF4444)
+        else -> Color(0xFF55A9AF)
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer(
-                    scaleX = liveScale,
-                    scaleY = liveScale,
-                    rotationZ = if (state == AssistantVoiceState.PROCESSING) rotationAngle else 0f
-                )
-        ) {
-            val auraColor = when (state) {
-                AssistantVoiceState.LISTENING -> Color(0xFF26E07F)
-                AssistantVoiceState.PROCESSING -> Color(0xFF00C2A8)
-                AssistantVoiceState.SPEAKING -> Color(0xFF55A9AF)
-                else -> Color(0xFF00C2A8)
-            }
-
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        auraColor.copy(alpha = 0.7f),
-                        auraColor.copy(alpha = 0.35f),
-                        Color.Transparent
-                    )
-                )
-            )
-        }
-
+        // Main Interactive Voice Visualizer (compact 130.dp size)
         Box(
             modifier = Modifier
-                .size(70.dp)
-                .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color(0xFF00C2A8),
-                            Color(0xFF55A9AF)
-                        )
-                    )
-                ),
+                .size(130.dp)
+                .clickable { onClick() },
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = when (state) {
-                    AssistantVoiceState.LISTENING -> Icons.Default.Mic
-                    AssistantVoiceState.PROCESSING -> Icons.Default.AutoAwesome
-                    AssistantVoiceState.SPEAKING -> Icons.AutoMirrored.Filled.VolumeUp
-                    else -> Icons.Default.SmartToy
-                },
-                contentDescription = "Voice State",
-                tint = Color.White,
-                modifier = Modifier.size(34.dp)
+            // 1. Acoustic Ripple Glow Pulse (active when Listening or Speaking)
+            if (state == AssistantVoiceState.LISTENING || state == AssistantVoiceState.SPEAKING) {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer(
+                            scaleX = rippleScale + animatedVoiceSurge * 0.5f,
+                            scaleY = rippleScale + animatedVoiceSurge * 0.5f,
+                            alpha = rippleAlpha
+                        )
+                ) {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                auraColor.copy(alpha = 0.45f),
+                                Color(0xFF00E5FF).copy(alpha = 0.15f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+                }
+            }
+
+            // 2. Concentric Sinusoidal Harmonic Wave Rings (Wavey Effect)
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer(
+                        translationY = hoverOffset,
+                        rotationZ = if (state == AssistantVoiceState.PROCESSING) processingRotation else 0f
+                    )
+            ) {
+                val cx = size.width / 2f
+                val cy = size.height / 2f
+                val baseRadius = size.width * 0.39f
+
+                // Outer Sinusoidal Wave Ring
+                val outerPath = Path()
+                val numPoints = 72
+                for (i in 0..numPoints) {
+                    val theta = (i.toFloat() / numPoints) * 2f * PI.toFloat()
+                    val wavePerturbation = sin(5f * theta + wavePhase) * (2.5f + animatedVoiceSurge * 10f)
+                    val r = (baseRadius * 1.15f + wavePerturbation + animatedVoiceSurge * 12f)
+                    val px = cx + r * cos(theta)
+                    val py = cy + r * sin(theta)
+                    if (i == 0) outerPath.moveTo(px, py) else outerPath.lineTo(px, py)
+                }
+                outerPath.close()
+
+                drawPath(
+                    path = outerPath,
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFF00E5FF).copy(alpha = if (state == AssistantVoiceState.LISTENING) 0.65f else 0.35f),
+                            auraColor.copy(alpha = 0.20f),
+                            Color.Transparent
+                        ),
+                        center = Offset(cx, cy),
+                        radius = size.width * 0.5f
+                    ),
+                    style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round)
+                )
+
+                // Inner Counter-Undulating Harmonic Wave Ring
+                val innerPath = Path()
+                for (i in 0..numPoints) {
+                    val theta = (i.toFloat() / numPoints) * 2f * PI.toFloat()
+                    val wavePerturbation = sin(6f * theta - wavePhase * 1.2f) * (2f + animatedVoiceSurge * 7f)
+                    val r = (baseRadius * 1.05f + wavePerturbation + animatedVoiceSurge * 6f)
+                    val px = cx + r * cos(theta)
+                    val py = cy + r * sin(theta)
+                    if (i == 0) innerPath.moveTo(px, py) else innerPath.lineTo(px, py)
+                }
+                innerPath.close()
+
+                drawPath(
+                    path = innerPath,
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            auraColor.copy(alpha = if (state == AssistantVoiceState.LISTENING) 0.75f else 0.40f),
+                            Color(0xFF00C2A8).copy(alpha = 0.25f),
+                            Color.Transparent
+                        ),
+                        center = Offset(cx, cy),
+                        radius = size.width * 0.46f
+                    ),
+                    style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
+                )
+            }
+
+            // 3. Compact 3D Liquid AI Energy Orb (Perfect Sphere, 100.dp - no ameba morphing)
+            Box(
+                modifier = Modifier
+                    .size(100.dp)
+                    .graphicsLayer(
+                        translationY = hoverOffset,
+                        scaleX = 1f + animatedVoiceSurge * 0.15f,
+                        scaleY = 1f + animatedVoiceSurge * 0.15f,
+                        rotationZ = if (state == AssistantVoiceState.PROCESSING) processingRotation else 0f
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.voice_amoeba_orb),
+                    contentDescription = "Liquid AI Voice Assistant",
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                // Dynamic Specular Shimmer Light Sweep Layer
+                if (state == AssistantVoiceState.LISTENING || state == AssistantVoiceState.SPEAKING) {
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxSize(0.92f)
+                            .clip(CircleShape)
+                    ) {
+                        val shimmerBandWidth = size.width * 0.65f
+                        val startX = (size.width + shimmerBandWidth) * shimmerOffset - shimmerBandWidth
+                        val startY = 0f
+                        val endX = startX + shimmerBandWidth
+                        val endY = size.height
+
+                        drawRect(
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color(0xFF00E5FF).copy(alpha = 0.15f),
+                                    Color.White.copy(alpha = 0.55f),
+                                    Color(0xFF26E07F).copy(alpha = 0.30f),
+                                    Color.Transparent
+                                ),
+                                start = Offset(startX, startY),
+                                end = Offset(endX, endY)
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // 4. Fluid Sine-Wave Audio Ribbon Visualizer (Wavey Effect)
+        FluidVoiceWaveform(
+            state = state,
+            soundRms = soundRms,
+            auraColor = auraColor,
+            wavePhase = wavePhase
+        )
+    }
+}
+
+@Composable
+fun FluidVoiceWaveform(
+    state: AssistantVoiceState,
+    soundRms: Float,
+    auraColor: Color,
+    wavePhase: Float,
+    modifier: Modifier = Modifier
+) {
+    // Dynamic amplitude based on voice state and mic volume
+    val voiceSurge = when (state) {
+        AssistantVoiceState.LISTENING -> (0.28f + (soundRms.coerceIn(0f, 10f) / 10f) * 0.72f)
+        AssistantVoiceState.SPEAKING -> 0.75f
+        AssistantVoiceState.PROCESSING -> 0.45f
+        else -> 0.18f
+    }
+
+    val animatedAmp by animateFloatAsState(
+        targetValue = voiceSurge,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium),
+        label = "animatedAmp"
+    )
+
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth(0.65f)
+            .height(28.dp)
+    ) {
+        val width = size.width
+        val height = size.height
+        val midY = height / 2f
+        val maxWaveAmp = (height * 0.42f) * animatedAmp
+
+        // 3 Layered Fluid Sine Waves with smooth tapering envelope
+        val waves = listOf(
+            Triple(2.0f, wavePhase, auraColor.copy(alpha = 0.85f)),
+            Triple(3.2f, -wavePhase * 0.9f + 1.2f, Color(0xFF00E5FF).copy(alpha = 0.60f)),
+            Triple(1.6f, wavePhase * 1.3f + 2.4f, Color(0xFF00C2A8).copy(alpha = 0.40f))
+        )
+
+        val steps = 60
+        for ((freq, phase, color) in waves) {
+            val path = Path()
+            for (i in 0..steps) {
+                val progress = i.toFloat() / steps
+                val x = progress * width
+                // Windowing envelope so wave tapers smoothly to 0 at edges
+                val envelope = sin(progress * PI.toFloat()).coerceAtLeast(0f)
+                val y = midY + sin(progress * 2f * PI.toFloat() * freq + phase) * maxWaveAmp * envelope
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            drawPath(
+                path = path,
+                color = color,
+                style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
             )
         }
     }

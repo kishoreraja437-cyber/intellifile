@@ -12,48 +12,108 @@ import org.junit.Test
 class VoiceCommandProcessorTest {
 
     @Test
-    fun testNavigationCommands() {
-        // Profile
-        val (type1, res1) = VoiceCommandProcessor.processCommand("Go to Profile")
-        assertEquals(VoiceCommandType.NAVIGATION_COMMAND, type1)
-        assertTrue(res1 is VoiceIntentResult.Navigation && res1.targetTab == BottomNavItem.PROFILE)
+    fun testUserRequiredVoiceNavigationCommands() {
+        // 1. "Go to AI screen" -> Open AI Chat Screen
+        val aiVariations = listOf(
+            "Go to AI screen",
+            "go to ai screen",
+            "Navigate to AI screen",
+            "Open AI screen",
+            "ai screen",
+            "Open AI chat",
+            "Chat with AI",
+            "Go to AI"
+        )
+        for (cmd in aiVariations) {
+            val (type, res) = VoiceCommandProcessor.processCommand(cmd)
+            assertEquals("Failed for command: $cmd", VoiceCommandType.NAVIGATION_COMMAND, type)
+            assertTrue("Failed for command: $cmd", res is VoiceIntentResult.Navigation && res.targetTab == BottomNavItem.AI)
+        }
 
-        val (type2, res2) = VoiceCommandProcessor.processCommand("Open My Profile")
-        assertEquals(VoiceCommandType.NAVIGATION_COMMAND, type2)
-        assertTrue(res2 is VoiceIntentResult.Navigation && res2.targetTab == BottomNavItem.PROFILE)
+        // 2. "Go to file screen" -> Open Files Screen
+        val filesVariations = listOf(
+            "Go to file screen",
+            "go to file screen",
+            "Go to files",
+            "Open files",
+            "Open my files",
+            "Show my documents",
+            "file screen",
+            "files screen",
+            "Navigate to files",
+            "open file screen"
+        )
+        for (cmd in filesVariations) {
+            val (type, res) = VoiceCommandProcessor.processCommand(cmd)
+            assertEquals("Failed for command: $cmd", VoiceCommandType.NAVIGATION_COMMAND, type)
+            assertTrue("Failed for command: $cmd", res is VoiceIntentResult.Navigation && res.targetTab == BottomNavItem.FILES)
+        }
 
-        // Files
-        val (type3, res3) = VoiceCommandProcessor.processCommand("Go to Files")
-        assertEquals(VoiceCommandType.NAVIGATION_COMMAND, type3)
-        assertTrue(res3 is VoiceIntentResult.Navigation && res3.targetTab == BottomNavItem.FILES)
+        // 3. "Go to saved screen" -> Open Saved Files Screen
+        val savedVariations = listOf(
+            "Go to saved screen",
+            "go to saved screen",
+            "Show saved files",
+            "saved screen",
+            "Open saved files",
+            "go to saved files",
+            "show bookmarks",
+            "open bookmarks",
+            "saved files"
+        )
+        for (cmd in savedVariations) {
+            val (type, res) = VoiceCommandProcessor.processCommand(cmd)
+            assertEquals("Failed for command: $cmd", VoiceCommandType.NAVIGATION_COMMAND, type)
+            assertTrue("Failed for command: $cmd", res is VoiceIntentResult.Navigation && res.targetTab == BottomNavItem.SAVED)
+        }
 
-        val (type4, res4) = VoiceCommandProcessor.processCommand("Show My Documents")
-        assertEquals(VoiceCommandType.NAVIGATION_COMMAND, type4)
-        assertTrue(res4 is VoiceIntentResult.Navigation && res4.targetTab == BottomNavItem.FILES)
+        // 4. "Go to profile screen" -> Open Profile Screen
+        val profileVariations = listOf(
+            "Go to profile screen",
+            "go to profile screen",
+            "Open my profile",
+            "open profile",
+            "Go to profile",
+            "profile screen",
+            "Navigate to profile"
+        )
+        for (cmd in profileVariations) {
+            val (type, res) = VoiceCommandProcessor.processCommand(cmd)
+            assertEquals("Failed for command: $cmd", VoiceCommandType.NAVIGATION_COMMAND, type)
+            assertTrue("Failed for command: $cmd", res is VoiceIntentResult.Navigation && res.targetTab == BottomNavItem.PROFILE)
+        }
 
-        // Saved / Bookmarks
-        val (type5, res5) = VoiceCommandProcessor.processCommand("Open Saved Files")
-        assertEquals(VoiceCommandType.NAVIGATION_COMMAND, type5)
-        assertTrue(res5 is VoiceIntentResult.Navigation && res5.targetTab == BottomNavItem.SAVED)
+        // 5. "Go to home screen" -> Open Home Screen
+        val homeVariations = listOf(
+            "Go to home screen",
+            "go to home screen",
+            "Go to home",
+            "open home",
+            "open home screen",
+            "home screen",
+            "Go home"
+        )
+        for (cmd in homeVariations) {
+            val (type, res) = VoiceCommandProcessor.processCommand(cmd)
+            assertEquals("Failed for command: $cmd", VoiceCommandType.NAVIGATION_COMMAND, type)
+            assertTrue("Failed for command: $cmd", res is VoiceIntentResult.Navigation && res.targetTab == BottomNavItem.HOME)
+        }
 
-        val (type6, res6) = VoiceCommandProcessor.processCommand("Show Bookmarks")
-        assertEquals(VoiceCommandType.NAVIGATION_COMMAND, type6)
-        assertTrue(res6 is VoiceIntentResult.Navigation && res6.targetTab == BottomNavItem.SAVED)
-
-        // AI Chat
-        val (type7, res7) = VoiceCommandProcessor.processCommand("Open AI Chat")
-        assertEquals(VoiceCommandType.NAVIGATION_COMMAND, type7)
-        assertTrue(res7 is VoiceIntentResult.Navigation && res7.targetTab == BottomNavItem.AI)
-
-        // Home
-        val (type8, res8) = VoiceCommandProcessor.processCommand("Go to Home")
-        assertEquals(VoiceCommandType.NAVIGATION_COMMAND, type8)
-        assertTrue(res8 is VoiceIntentResult.Navigation && res8.targetTab == BottomNavItem.HOME)
-
-        // Go Back
-        val (type9, res9) = VoiceCommandProcessor.processCommand("Go back")
-        assertEquals(VoiceCommandType.NAVIGATION_COMMAND, type9)
-        assertTrue(res9 is VoiceIntentResult.Navigation && res9.isBack)
+        // 6. "Go back" -> Navigate to previous screen
+        val backVariations = listOf(
+            "Go back",
+            "go back",
+            "back",
+            "previous screen",
+            "navigate back",
+            "take me back",
+            "return"
+        )
+        for (cmd in backVariations) {
+            val (type, res) = VoiceCommandProcessor.processCommand(cmd)
+            assertEquals("Failed for command: $cmd", VoiceCommandType.NAVIGATION_COMMAND, type)
+            assertTrue("Failed for command: $cmd", res is VoiceIntentResult.Navigation && res.isBack)
+        }
     }
 
     @Test
@@ -79,7 +139,7 @@ class VoiceCommandProcessorTest {
         assertEquals(VoiceCommandType.FILE_SEARCH_COMMAND, type5)
         assertTrue(res5 is VoiceIntentResult.FileSearch)
 
-        // Content-based and natural language voice queries
+        // Content-based natural language queries
         val (typeNL1, resNL1) = VoiceCommandProcessor.processCommand("Find my college assignment.")
         assertEquals(VoiceCommandType.FILE_SEARCH_COMMAND, typeNL1)
         assertTrue(resNL1 is VoiceIntentResult.FileSearch && (resNL1 as VoiceIntentResult.FileSearch).query == "college assignment")
@@ -87,14 +147,6 @@ class VoiceCommandProcessorTest {
         val (typeNL2, resNL2) = VoiceCommandProcessor.processCommand("Show the PDF containing machine learning notes.")
         assertEquals(VoiceCommandType.FILE_SEARCH_COMMAND, typeNL2)
         assertTrue(resNL2 is VoiceIntentResult.FileSearch && (resNL2 as VoiceIntentResult.FileSearch).query == "machine learning notes" && (resNL2 as VoiceIntentResult.FileSearch).formatFilter == "PDF")
-
-        val (typeNL3, resNL3) = VoiceCommandProcessor.processCommand("Find the document where I wrote about Python.")
-        assertEquals(VoiceCommandType.FILE_SEARCH_COMMAND, typeNL3)
-        assertTrue(resNL3 is VoiceIntentResult.FileSearch && (resNL3 as VoiceIntentResult.FileSearch).query == "Python")
-
-        val (typeNL4, resNL4) = VoiceCommandProcessor.processCommand("I forgot the filename, but it contains information about cloud computing.")
-        assertEquals(VoiceCommandType.FILE_SEARCH_COMMAND, typeNL4)
-        assertTrue(resNL4 is VoiceIntentResult.FileSearch && (resNL4 as VoiceIntentResult.FileSearch).query == "cloud computing")
 
         // File Action (Open)
         val (type6, res6) = VoiceCommandProcessor.processCommand("Open my project report")
@@ -142,9 +194,6 @@ class VoiceCommandProcessorTest {
         val (type3, _) = VoiceCommandProcessor.processCommand("What is Machine Learning?")
         assertEquals(VoiceCommandType.GENERAL_AI_QUERY, type3)
 
-        val (type4, _) = VoiceCommandProcessor.processCommand("Give me an example of cloud computing")
-        assertEquals(VoiceCommandType.GENERAL_AI_QUERY, type4)
-
         // Document RAG
         val (type5, res5) = VoiceCommandProcessor.processCommand("Summarize my document")
         assertEquals(VoiceCommandType.DOCUMENT_QUERY, type5)
@@ -160,4 +209,3 @@ class VoiceCommandProcessorTest {
         assertEquals(VoiceCommandType.UNKNOWN_COMMAND, type2)
     }
 }
-

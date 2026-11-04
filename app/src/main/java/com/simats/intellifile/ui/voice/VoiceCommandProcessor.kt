@@ -66,102 +66,196 @@ object VoiceCommandProcessor {
             )
         }
 
-        val clean = trimmed.lowercase().trimEnd('?', '.', '!', ',')
+        // Clean punctuation, extra whitespace, convert to lower case
+        val clean = trimmed.lowercase()
+            .replace(Regex("[?!.,:;'\"\\-_]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        val words = clean.split(" ")
 
         // -------------------------------------------------------------
-        // 1. NAVIGATION_COMMAND
+        // 0. APP_DATA_QUERIES (Check counts and statistics first)
+        // -------------------------------------------------------------
+        if (clean.contains("how many") || clean.contains("number of") || clean.contains("total files")) {
+            if (clean.contains("bookmark")) {
+                return Pair(
+                    VoiceCommandType.APP_DATA_QUERY,
+                    VoiceIntentResult.AppDataQuery(AppDataQueryType.BOOKMARKED_COUNT)
+                )
+            }
+            if (clean.contains("important")) {
+                return Pair(
+                    VoiceCommandType.APP_DATA_QUERY,
+                    VoiceIntentResult.AppDataQuery(AppDataQueryType.IMPORTANT_COUNT)
+                )
+            }
+            if (clean.contains("pdf") || clean.contains("pdfs")) {
+                return Pair(
+                    VoiceCommandType.APP_DATA_QUERY,
+                    VoiceIntentResult.AppDataQuery(AppDataQueryType.FORMAT_COUNT, "PDF")
+                )
+            }
+            if (clean.contains("doc") || clean.contains("word")) {
+                return Pair(
+                    VoiceCommandType.APP_DATA_QUERY,
+                    VoiceIntentResult.AppDataQuery(AppDataQueryType.FORMAT_COUNT, "DOCX")
+                )
+            }
+            if (clean.contains("total") || clean.contains("files do i have") || clean.contains("total files")) {
+                return Pair(
+                    VoiceCommandType.APP_DATA_QUERY,
+                    VoiceIntentResult.AppDataQuery(AppDataQueryType.TOTAL_FILES)
+                )
+            }
+        }
+
+        if (clean.contains("show my recently opened files") || clean.contains("recently modified files") ||
+            clean.contains("what are my recent files") || clean.contains("files uploaded today")
+        ) {
+            return Pair(
+                VoiceCommandType.APP_DATA_QUERY,
+                VoiceIntentResult.AppDataQuery(AppDataQueryType.RECENT_FILES)
+            )
+        }
+
+        // Format-specific search commands (e.g. "show all pdf files", "search pdf files")
+        if ((clean.contains("show all ") || clean.contains("search ") || clean.contains("find ")) &&
+            (clean.contains("pdf") || clean.contains("docx") || clean.contains("doc ") || clean.contains("word") || clean.contains("pptx") || clean.contains("ppt "))) {
+            val detectedFmt = when {
+                clean.contains("pdf") -> "PDF"
+                clean.contains("docx") || clean.contains("doc ") || clean.contains("word") -> "DOCX"
+                clean.contains("pptx") || clean.contains("ppt ") -> "PPTX"
+                else -> null
+            }
+            val searchQuery = clean.replace(Regex("^(show all|search for|search|find all|find|get)\\s+"), "")
+                .replace(Regex("\\b(pdf|docx|doc|word|pptx|ppt|files|file)\\b"), "")
+                .trim()
+            return Pair(
+                VoiceCommandType.FILE_SEARCH_COMMAND,
+                VoiceIntentResult.FileSearch(
+                    query = if (searchQuery.isBlank()) (detectedFmt ?: "document") else searchQuery,
+                    formatFilter = detectedFmt
+                )
+            )
+        }
+
+        // -------------------------------------------------------------
+        // 1. NAVIGATION_COMMANDS (Complete voice-controlled screen navigation)
         // -------------------------------------------------------------
 
-        // Profile
-        val navProfilePatterns = listOf(
-            "go to profile", "open profile", "open my profile", "my profile",
-            "show profile", "view profile", "profile screen"
+        // Command 6: Go Back (Checked first for immediate back navigation)
+        val navBackExact = listOf(
+            "go back", "navigate back", "back", "previous screen",
+            "go to previous screen", "take me back", "return", "previous", "go back please"
         )
-        if (navProfilePatterns.any { clean == it || clean.startsWith("$it ") }) {
-            return Pair(
-                VoiceCommandType.NAVIGATION_COMMAND,
-                VoiceIntentResult.Navigation(
-                    targetTab = BottomNavItem.PROFILE,
-                    spokenConfirmation = "Opening your Profile."
-                )
-            )
-        }
-
-        // Files
-        val navFilesPatterns = listOf(
-            "go to files", "open files", "show my documents", "open my documents",
-            "my files", "show files", "all files", "browse files", "files screen"
-        )
-        if (navFilesPatterns.any { clean == it || clean.startsWith("$it ") }) {
-            return Pair(
-                VoiceCommandType.NAVIGATION_COMMAND,
-                VoiceIntentResult.Navigation(
-                    targetTab = BottomNavItem.FILES,
-                    spokenConfirmation = "Opening your Files."
-                )
-            )
-        }
-
-        // Saved / Bookmarks
-        val navSavedPatterns = listOf(
-            "open saved files", "show bookmarks", "open saved", "show saved",
-            "show saved files", "saved files", "bookmarked files", "open bookmarks",
-            "my bookmarks", "saved screen", "show bookmarked files"
-        )
-        if (navSavedPatterns.any { clean == it || clean.startsWith("$it ") }) {
-            return Pair(
-                VoiceCommandType.NAVIGATION_COMMAND,
-                VoiceIntentResult.Navigation(
-                    targetTab = BottomNavItem.SAVED,
-                    spokenConfirmation = "Opening your Saved files."
-                )
-            )
-        }
-
-        // AI Chat
-        val navAiPatterns = listOf(
-            "open ai chat", "go to ai", "go to ai chat", "open ai",
-            "chat with ai", "ai screen", "ai assistant", "start ai chat", "ask ai"
-        )
-        if (navAiPatterns.any { clean == it || clean.startsWith("$it ") }) {
-            return Pair(
-                VoiceCommandType.NAVIGATION_COMMAND,
-                VoiceIntentResult.Navigation(
-                    targetTab = BottomNavItem.AI,
-                    spokenConfirmation = "Opening AI Chat."
-                )
-            )
-        }
-
-        // Home
-        val navHomePatterns = listOf(
-            "go to home", "open home", "home screen", "go home", "main screen", "open home screen"
-        )
-        if (navHomePatterns.any { clean == it || clean.startsWith("$it ") }) {
-            return Pair(
-                VoiceCommandType.NAVIGATION_COMMAND,
-                VoiceIntentResult.Navigation(
-                    targetTab = BottomNavItem.HOME,
-                    spokenConfirmation = "Going to Home."
-                )
-            )
-        }
-
-        // Go Back
-        val navBackPatterns = listOf("go back", "back", "previous screen", "navigate back")
-        if (navBackPatterns.any { clean == it }) {
+        if (navBackExact.any { clean == it || clean.startsWith("$it ") }) {
             return Pair(
                 VoiceCommandType.NAVIGATION_COMMAND,
                 VoiceIntentResult.Navigation(
                     isBack = true,
-                    spokenConfirmation = "Going back."
+                    spokenConfirmation = "Navigating back."
                 )
             )
         }
 
-        // Recent Files Overlay
-        val navRecentPatterns = listOf("recent files", "show recent files", "open recent files", "recently opened")
-        if (navRecentPatterns.any { clean == it || clean.startsWith("$it ") }) {
+        // Command 1: Go to AI screen -> Open AI Chat Screen
+        val navAiExact = listOf(
+            "go to ai screen", "navigate to ai screen", "open ai screen", "ai screen",
+            "go to ai chat screen", "navigate to ai chat screen", "open ai chat screen",
+            "go to ai chat", "navigate to ai chat", "open ai chat", "ai chat",
+            "go to ai", "navigate to ai", "open ai", "show ai", "launch ai",
+            "chat with ai", "talk to ai", "ask ai", "start ai chat", "ai assistant",
+            "ai assistant screen", "chat screen", "open chat", "go to chat", "ai"
+        )
+        if (navAiExact.any { clean == it || clean.startsWith("$it ") } ||
+            (("ai" in words || "chat" in words) && ("screen" in words || "open" in words || clean.startsWith("go to") || clean.startsWith("navigate") || clean.startsWith("show")))) {
+            return Pair(
+                VoiceCommandType.NAVIGATION_COMMAND,
+                VoiceIntentResult.Navigation(
+                    targetTab = BottomNavItem.AI,
+                    spokenConfirmation = "Opening AI Chat Screen."
+                )
+            )
+        }
+
+        // Command 3: Go to saved screen -> Open Saved Files Screen (Checked BEFORE files so "saved files" goes to Saved)
+        val navSavedExact = listOf(
+            "go to saved screen", "navigate to saved screen", "open saved screen", "saved screen",
+            "go to saved files screen", "navigate to saved files screen", "open saved files screen", "saved files screen",
+            "go to saved files", "go to saved", "navigate to saved files", "navigate to saved",
+            "open saved files", "open saved", "show saved files", "show saved", "saved files",
+            "show bookmarks", "open bookmarks", "my bookmarks", "bookmarked files", "bookmarks screen", "bookmarks", "saved"
+        )
+        if (navSavedExact.any { clean == it || clean.startsWith("$it ") } ||
+            (("saved" in words || "bookmarks" in words || "bookmarked" in words) && ("screen" in words || "open" in words || clean.startsWith("go to") || clean.startsWith("navigate") || clean.startsWith("show") || "files" in words))) {
+            return Pair(
+                VoiceCommandType.NAVIGATION_COMMAND,
+                VoiceIntentResult.Navigation(
+                    targetTab = BottomNavItem.SAVED,
+                    spokenConfirmation = "Opening Saved Files Screen."
+                )
+            )
+        }
+
+        // Command 2: Go to file screen -> Open Files Screen
+        val navFilesExact = listOf(
+            "go to file screen", "go to files screen", "navigate to file screen", "navigate to files screen",
+            "open file screen", "open files screen", "file screen", "files screen",
+            "go to files", "go to file", "navigate to files", "navigate to file",
+            "open files", "open file", "open my files", "my files", "show files", "all files",
+            "browse files", "file manager", "files",
+            "go to documents", "show my documents", "open my documents", "documents", "document screen", "my documents", "documents screen"
+        )
+        if (navFilesExact.any { clean == it || clean.startsWith("$it ") } ||
+            (("file" in words || "files" in words || "documents" in words) && ("screen" in words || "open" in words || clean.startsWith("go to") || clean.startsWith("navigate") || clean.startsWith("show")) && "saved" !in words)) {
+            return Pair(
+                VoiceCommandType.NAVIGATION_COMMAND,
+                VoiceIntentResult.Navigation(
+                    targetTab = BottomNavItem.FILES,
+                    spokenConfirmation = "Opening Files Screen."
+                )
+            )
+        }
+
+        // Command 4: Go to profile screen -> Open Profile Screen
+        val navProfileExact = listOf(
+            "go to profile screen", "navigate to profile screen", "open profile screen", "profile screen",
+            "go to profile", "navigate to profile", "open profile", "open my profile", "my profile",
+            "show profile", "view profile", "user profile", "my account", "account screen", "open account", "profile"
+        )
+        if (navProfileExact.any { clean == it || clean.startsWith("$it ") } ||
+            (("profile" in words || "account" in words) && ("screen" in words || "open" in words || clean.startsWith("go to") || clean.startsWith("navigate") || clean.startsWith("show")))) {
+            return Pair(
+                VoiceCommandType.NAVIGATION_COMMAND,
+                VoiceIntentResult.Navigation(
+                    targetTab = BottomNavItem.PROFILE,
+                    spokenConfirmation = "Opening Profile Screen."
+                )
+            )
+        }
+
+        // Command 5: Go to home screen -> Open Home Screen
+        val navHomeExact = listOf(
+            "go to home screen", "navigate to home screen", "open home screen", "home screen",
+            "go to home", "navigate to home", "open home", "go home", "home",
+            "main screen", "dashboard", "go to dashboard", "open dashboard"
+        )
+        if (navHomeExact.any { clean == it || clean.startsWith("$it ") } ||
+            ("home" in words && ("screen" in words || "open" in words || clean.startsWith("go to") || clean.startsWith("navigate") || clean.startsWith("show")))) {
+            return Pair(
+                VoiceCommandType.NAVIGATION_COMMAND,
+                VoiceIntentResult.Navigation(
+                    targetTab = BottomNavItem.HOME,
+                    spokenConfirmation = "Opening Home Screen."
+                )
+            )
+        }
+
+        // Overlays: Recent Files
+        val navRecentExact = listOf(
+            "recent files", "show recent files", "open recent files", "recent files screen", "recently opened"
+        )
+        if (navRecentExact.any { clean == it || clean.startsWith("$it ") }) {
             return Pair(
                 VoiceCommandType.NAVIGATION_COMMAND,
                 VoiceIntentResult.Navigation(
@@ -171,9 +265,11 @@ object VoiceCommandProcessor {
             )
         }
 
-        // Notifications Overlay
-        val navNotifPatterns = listOf("notifications", "show notifications", "open notifications")
-        if (navNotifPatterns.any { clean == it || clean.startsWith("$it ") }) {
+        // Overlays: Notifications
+        val navNotifExact = listOf(
+            "notifications", "show notifications", "open notifications", "notifications screen"
+        )
+        if (navNotifExact.any { clean == it || clean.startsWith("$it ") }) {
             return Pair(
                 VoiceCommandType.NAVIGATION_COMMAND,
                 VoiceIntentResult.Navigation(
@@ -183,9 +279,11 @@ object VoiceCommandProcessor {
             )
         }
 
-        // Theme / Settings Overlay
-        val navThemePatterns = listOf("theme settings", "open settings", "theme", "dark mode", "light mode")
-        if (navThemePatterns.any { clean == it || clean.startsWith("$it ") }) {
+        // Overlays: Theme Settings
+        val navThemeExact = listOf(
+            "theme settings", "open settings", "settings", "theme", "dark mode", "light mode", "settings screen"
+        )
+        if (navThemeExact.any { clean == it || clean.startsWith("$it ") }) {
             return Pair(
                 VoiceCommandType.NAVIGATION_COMMAND,
                 VoiceIntentResult.Navigation(
@@ -195,9 +293,11 @@ object VoiceCommandProcessor {
             )
         }
 
-        // Help / Support
-        val navHelpPatterns = listOf("help", "support", "help and support", "contact support")
-        if (navHelpPatterns.any { clean == it || clean.startsWith("$it ") }) {
+        // Overlays: Help / Support
+        val navHelpExact = listOf(
+            "help", "support", "help and support", "contact support", "help screen"
+        )
+        if (navHelpExact.any { clean == it || clean.startsWith("$it ") }) {
             return Pair(
                 VoiceCommandType.NAVIGATION_COMMAND,
                 VoiceIntentResult.Navigation(
@@ -207,15 +307,25 @@ object VoiceCommandProcessor {
             )
         }
 
-        // AI History
-        val navHistoryPatterns = listOf("ai history", "chat history", "search history", "view history")
-        if (navHistoryPatterns.any { clean == it || clean.startsWith("$it ") }) {
+        // Overlays: AI History
+        val navHistoryExact = listOf(
+            "ai history", "chat history", "search history", "view history"
+        )
+        if (navHistoryExact.any { clean == it || clean.startsWith("$it ") }) {
             return Pair(
                 VoiceCommandType.NAVIGATION_COMMAND,
                 VoiceIntentResult.Navigation(
                     overlayKey = "ai_history",
                     spokenConfirmation = "Opening AI Chat History."
                 )
+            )
+        }
+
+        // Unrecognized navigation command attempt
+        if (clean.startsWith("go to ") || clean.startsWith("navigate to ") || clean.endsWith(" screen") || clean.startsWith("open screen")) {
+            return Pair(
+                VoiceCommandType.UNKNOWN_COMMAND,
+                VoiceIntentResult.Clarify("Screen not found. You can say 'Go to AI screen', 'Go to file screen', 'Go to saved screen', 'Go to profile screen', 'Go to home screen', or 'Go back'.")
             )
         }
 

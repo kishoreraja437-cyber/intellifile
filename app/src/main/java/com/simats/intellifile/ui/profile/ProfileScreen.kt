@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
@@ -73,7 +74,8 @@ fun ProfileScreen(
     onThemeClick: () -> Unit = {},
     onAboutClick: () -> Unit = {},
     onHelpSupportClick: () -> Unit = {},
-    onLogoutClick: () -> Unit = {}
+    onLogoutClick: () -> Unit = {},
+    onMicClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val uiState by profileViewModel.uiState.collectAsState()
@@ -236,6 +238,17 @@ fun ProfileScreen(
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+
+                IconButton(
+                    onClick = onMicClick,
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Mic,
+                        contentDescription = "Voice Assistant",
+                        tint = MaterialTheme.colorScheme.primary
                     )
                 }
             }

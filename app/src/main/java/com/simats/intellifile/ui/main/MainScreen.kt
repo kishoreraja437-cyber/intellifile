@@ -256,66 +256,79 @@ fun MainScreen(
 
 
 
+    val tabBackStack = remember { mutableStateListOf(BottomNavItem.HOME) }
+
+    fun navigateToTab(newTab: BottomNavItem) {
+        if (selectedTab != newTab) {
+            tabBackStack.remove(newTab)
+            tabBackStack.add(newTab)
+            selectedTab = newTab
+        }
+        isVoiceAssistantOpen = false
+        isRecentFilesOpen = false
+        isAiHistoryOpen = false
+        selectedDetailFile = null
+        isDocumentViewerOpen = false
+        isSetPriorityOpen = false
+        isFileSavedSuccessOpen = false
+        isShareOpen = false
+        isFilePermissionsOpen = false
+        isNotificationsOpen = false
+        isThemeOpen = false
+        isAboutOpen = false
+        isHelpSupportOpen = false
+        isContactSupportOpen = false
+        isContactSuccessOpen = false
+        isFeedbackOpen = false
+        isFeedbackSuccessOpen = false
+
+        if (newTab == BottomNavItem.SAVED) {
+            savedPriorityFilter = PriorityFilter.ALL
+        }
+    }
+
+    fun handleGoBack() {
+        isVoiceAssistantOpen = false
+        when {
+            isShareOpen -> isShareOpen = false
+            isFileSavedSuccessOpen -> isFileSavedSuccessOpen = false
+            isDocumentViewerOpen -> isDocumentViewerOpen = false
+            isFeedbackSuccessOpen -> isFeedbackSuccessOpen = false
+            isFeedbackOpen -> isFeedbackOpen = false
+            isContactSuccessOpen -> isContactSuccessOpen = false
+            isContactSupportOpen -> isContactSupportOpen = false
+            isHelpSupportOpen -> isHelpSupportOpen = false
+            isAboutOpen -> isAboutOpen = false
+            isThemeOpen -> isThemeOpen = false
+            isNotificationsOpen -> isNotificationsOpen = false
+            isFilePermissionsOpen -> isFilePermissionsOpen = false
+            isSetPriorityOpen -> isSetPriorityOpen = false
+            selectedDetailFile != null -> selectedDetailFile = null
+            isAiHistoryOpen -> isAiHistoryOpen = false
+            isRecentFilesOpen -> isRecentFilesOpen = false
+            tabBackStack.size > 1 -> {
+                tabBackStack.removeAt(tabBackStack.lastIndex)
+                selectedTab = tabBackStack.last()
+            }
+            selectedTab != BottomNavItem.HOME -> {
+                selectedTab = BottomNavItem.HOME
+                tabBackStack.clear()
+                tabBackStack.add(BottomNavItem.HOME)
+            }
+        }
+    }
+
     val isOverlayScreenOpen = isVoiceAssistantOpen || isRecentFilesOpen || isAiHistoryOpen || selectedDetailFile != null ||
-
             isDocumentViewerOpen || isSetPriorityOpen || isFileSavedSuccessOpen || isShareOpen || isFilePermissionsOpen ||
-
             isNotificationsOpen || isThemeOpen || isAboutOpen ||
-
             isHelpSupportOpen || isContactSupportOpen || isContactSuccessOpen ||
-
             isFeedbackOpen || isFeedbackSuccessOpen
 
-
-
     // System Back Press Handler
-
     BackHandler(
-
-        enabled = isOverlayScreenOpen || selectedTab != BottomNavItem.HOME
-
+        enabled = isOverlayScreenOpen || selectedTab != BottomNavItem.HOME || tabBackStack.size > 1
     ) {
-
-        when {
-            isVoiceAssistantOpen -> isVoiceAssistantOpen = false
-
-
-            isShareOpen -> isShareOpen = false
-
-            isFileSavedSuccessOpen -> isFileSavedSuccessOpen = false
-
-            isDocumentViewerOpen -> isDocumentViewerOpen = false
-
-            isFeedbackSuccessOpen -> isFeedbackSuccessOpen = false
-
-            isFeedbackOpen -> isFeedbackOpen = false
-
-            isContactSuccessOpen -> isContactSuccessOpen = false
-
-            isContactSupportOpen -> isContactSupportOpen = false
-
-            isHelpSupportOpen -> isHelpSupportOpen = false
-
-            isAboutOpen -> isAboutOpen = false
-
-            isThemeOpen -> isThemeOpen = false
-
-            isNotificationsOpen -> isNotificationsOpen = false
-
-            isFilePermissionsOpen -> isFilePermissionsOpen = false
-
-            isSetPriorityOpen -> isSetPriorityOpen = false
-
-            selectedDetailFile != null -> selectedDetailFile = null
-
-            isAiHistoryOpen -> isAiHistoryOpen = false
-
-            isRecentFilesOpen -> isRecentFilesOpen = false
-
-            selectedTab != BottomNavItem.HOME -> selectedTab = BottomNavItem.HOME
-
-        }
-
+        handleGoBack()
     }
 
 
@@ -327,59 +340,10 @@ fun MainScreen(
             if (!isOverlayScreenOpen) {
 
                 BottomNavigationBar(
-
                     selectedTab = selectedTab,
-
                     onTabSelected = { newTab ->
-
-                        // Reset all secondary overlay screen states when switching bottom tabs
-                        isVoiceAssistantOpen = false
-
-
-                        isRecentFilesOpen = false
-
-                        isAiHistoryOpen = false
-
-                        selectedDetailFile = null
-
-                        isDocumentViewerOpen = false
-
-                        isSetPriorityOpen = false
-
-                        isFileSavedSuccessOpen = false
-
-                        isShareOpen = false
-
-                        isFilePermissionsOpen = false
-
-                        isNotificationsOpen = false
-
-                        isThemeOpen = false
-
-                        isAboutOpen = false
-
-                        isHelpSupportOpen = false
-
-                        isContactSupportOpen = false
-
-                        isContactSuccessOpen = false
-
-                        isFeedbackOpen = false
-
-                        isFeedbackSuccessOpen = false
-
-
-
-                        if (newTab == BottomNavItem.SAVED) {
-
-                            savedPriorityFilter = PriorityFilter.ALL
-
-                        }
-
-                        selectedTab = newTab
-
+                        navigateToTab(newTab)
                     }
-
                 )
 
             }
@@ -495,7 +459,9 @@ fun MainScreen(
 
                     "recent_files" -> RecentFilesScreen(
 
-                        onBackClick = { isRecentFilesOpen = false },
+                        onBackClick = { handleGoBack() },
+
+                        onMicClick = { isVoiceAssistantOpen = true },
 
                         onFileClick = { file ->
 
@@ -1020,7 +986,9 @@ fun MainScreen(
 
                                 initialConversationId = activeAiConversationId,
 
-                                onBackClick = { selectedTab = BottomNavItem.HOME },
+                                onBackClick = { handleGoBack() },
+
+                                onMicClick = { isVoiceAssistantOpen = true },
 
                                 onOpenFile = { aiFile ->
                                     val localMatch = LocalFileManager.getDeviceFiles(context).firstOrNull {
@@ -1059,7 +1027,9 @@ fun MainScreen(
 
                             BottomNavItem.FILES -> MyFilesScreen(
 
-                                onBackClick = { selectedTab = BottomNavItem.HOME },
+                                onBackClick = { handleGoBack() },
+
+                                onMicClick = { isVoiceAssistantOpen = true },
 
                                 onQuickAccessClick = { priorityLevel ->
 
@@ -1089,7 +1059,9 @@ fun MainScreen(
 
                                 initialFilter = savedPriorityFilter,
 
-                                onBackClick = { selectedTab = BottomNavItem.HOME },
+                                onBackClick = { handleGoBack() },
+
+                                onMicClick = { isVoiceAssistantOpen = true },
 
                                 onOpenFile = { file ->
 
@@ -1161,7 +1133,9 @@ fun MainScreen(
 
                                 userEmail = sessionManager.getEmail(),
 
-                                onBackClick = { selectedTab = BottomNavItem.HOME },
+                                onBackClick = { handleGoBack() },
+
+                                onMicClick = { isVoiceAssistantOpen = true },
 
                                 onFilePermissionsClick = { isFilePermissionsOpen = true },
 
@@ -1193,15 +1167,7 @@ fun MainScreen(
             VoiceAssistantModal(
                 onDismiss = { isVoiceAssistantOpen = false },
                 onNavigateToTab = { tab ->
-                    isVoiceAssistantOpen = false
-                    isRecentFilesOpen = false
-                    isAiHistoryOpen = false
-                    selectedDetailFile = null
-                    isNotificationsOpen = false
-                    isThemeOpen = false
-                    isAboutOpen = false
-                    isHelpSupportOpen = false
-                    selectedTab = tab
+                    navigateToTab(tab)
                 },
                 onNavigateToOverlay = { overlayKey ->
                     isVoiceAssistantOpen = false
@@ -1215,28 +1181,15 @@ fun MainScreen(
                     }
                 },
                 onGoBack = {
-                    isVoiceAssistantOpen = false
-                    if (isOverlayScreenOpen) {
-                        isRecentFilesOpen = false
-                        isAiHistoryOpen = false
-                        selectedDetailFile = null
-                        isNotificationsOpen = false
-                        isThemeOpen = false
-                        isAboutOpen = false
-                        isHelpSupportOpen = false
-                    } else if (selectedTab != BottomNavItem.HOME) {
-                        selectedTab = BottomNavItem.HOME
-                    }
+                    handleGoBack()
                 },
                 onOpenInAiChat = { convId ->
-                    isVoiceAssistantOpen = false
                     activeAiConversationId = convId
-                    selectedTab = BottomNavItem.AI
+                    navigateToTab(BottomNavItem.AI)
                 },
                 onSearchHome = { query ->
                     homeVoiceSearchQuery = query
-                    isVoiceAssistantOpen = false
-                    selectedTab = BottomNavItem.HOME
+                    navigateToTab(BottomNavItem.HOME)
                 },
                 onOpenFile = { fileDetail ->
                     isVoiceAssistantOpen = false

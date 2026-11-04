@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -82,7 +83,8 @@ fun SavedScreen(
     onBackClick: () -> Unit = {},
     onOpenFile: (SavedFileItem) -> Unit = {},
     onShareFileClick: (SavedFileItem) -> Unit = {},
-    onMoreOptionsClick: (SavedFileItem) -> Unit = {}
+    onMoreOptionsClick: (SavedFileItem) -> Unit = {},
+    onMicClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -390,6 +392,14 @@ fun SavedScreen(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onMicClick) {
+                            Icon(
+                                imageVector = Icons.Default.Mic,
+                                contentDescription = "Voice Assistant",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
                         IconButton(onClick = { isMultiSelectMode = true }) {
                             Icon(
                                 imageVector = Icons.Default.Checklist,

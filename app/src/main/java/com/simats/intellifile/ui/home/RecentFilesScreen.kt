@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -69,7 +70,8 @@ fun RecentFilesScreen(
     onBackClick: () -> Unit = {},
     onFileClick: (RecentFile) -> Unit = {},
     onShareFileClick: (RecentFile) -> Unit = {},
-    onMoreOptionsClick: (RecentFile) -> Unit = {}
+    onMoreOptionsClick: (RecentFile) -> Unit = {},
+    onMicClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -375,6 +377,14 @@ fun RecentFilesScreen(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onMicClick) {
+                            Icon(
+                                imageVector = Icons.Default.Mic,
+                                contentDescription = "Voice Assistant",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
                         IconButton(onClick = { isMultiSelectMode = true }) {
                             Icon(
                                 imageVector = Icons.Default.Checklist,
