@@ -14,6 +14,14 @@ import android.speech.tts.UtteranceProgressListener
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.core.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
@@ -793,39 +801,58 @@ fun VoiceAssistantModal(
                         )
                     }
 
-                    // Status Indicator
+                    // Status Indicator with Smooth Animated Content
                     item {
-                        Text(
-                            text = statusMessage,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = when (voiceState) {
-                                AssistantVoiceState.LISTENING -> MaterialTheme.colorScheme.primary
-                                AssistantVoiceState.PROCESSING -> Color(0xFFE6A700)
-                                AssistantVoiceState.SPEAKING -> Color(0xFF00C2A8)
-                                AssistantVoiceState.ERROR -> MaterialTheme.colorScheme.error
-                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        AnimatedContent(
+                            targetState = statusMessage,
+                            transitionSpec = {
+                                (fadeIn(animationSpec = tween(260)) + slideInVertically(animationSpec = tween(260)) { -it / 3 })
+                                    .togetherWith(fadeOut(animationSpec = tween(180)) + slideOutVertically(animationSpec = tween(180)) { it / 3 })
                             },
-                            textAlign = TextAlign.Center
-                        )
-                    }
-
-                    // User Spoken Transcript
-                    if (userSpeechText.isNotBlank()) {
-                        item {
-                            UserSpeechCard(text = userSpeechText)
+                            label = "statusTransition"
+                        ) { msg ->
+                            Text(
+                                text = msg,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = when (voiceState) {
+                                    AssistantVoiceState.LISTENING -> MaterialTheme.colorScheme.primary
+                                    AssistantVoiceState.PROCESSING -> Color(0xFFE6A700)
+                                    AssistantVoiceState.SPEAKING -> Color(0xFF00C2A8)
+                                    AssistantVoiceState.ERROR -> MaterialTheme.colorScheme.error
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                textAlign = TextAlign.Center
+                            )
                         }
                     }
 
-                    // Assistant Answer Card
+                    // User Spoken Transcript with Smooth Entry
+                    if (userSpeechText.isNotBlank()) {
+                        item {
+                            AnimatedVisibility(
+                                visible = true,
+                                enter = fadeIn(tween(300)) + expandVertically(spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow))
+                            ) {
+                                UserSpeechCard(text = userSpeechText)
+                            }
+                        }
+                    }
+
+                    // Assistant Answer Card with Smooth Entry
                     if (assistantReplyText.isNotBlank()) {
                         item {
-                            AssistantAnswerCard(
-                                replyText = assistantReplyText,
-                                isSpeaking = voiceState == AssistantVoiceState.SPEAKING,
-                                onReplaySpeech = { speakAnswer(assistantReplyText) },
-                                onStopSpeech = { stopSpeaking() }
-                            )
+                            AnimatedVisibility(
+                                visible = true,
+                                enter = fadeIn(tween(320)) + expandVertically(spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow))
+                            ) {
+                                AssistantAnswerCard(
+                                    replyText = assistantReplyText,
+                                    isSpeaking = voiceState == AssistantVoiceState.SPEAKING,
+                                    onReplaySpeech = { speakAnswer(assistantReplyText) },
+                                    onStopSpeech = { stopSpeaking() }
+                                )
+                            }
                         }
                     }
 
@@ -1293,23 +1320,41 @@ fun VoiceWaveOrb(
         label = "animatedVoiceSurge"
     )
 
-    val auraColor = when (state) {
+    val targetAuraColor = when (state) {
         AssistantVoiceState.LISTENING -> Color(0xFF26E07F)
         AssistantVoiceState.PROCESSING -> Color(0xFF00E5FF)
         AssistantVoiceState.SPEAKING -> Color(0xFF00C2A8)
         AssistantVoiceState.ERROR -> Color(0xFFEF4444)
         else -> Color(0xFF55A9AF)
     }
+    val auraColor by animateColorAsState(
+        targetValue = targetAuraColor,
+        animationSpec = tween(400, easing = FastOutSlowInEasing),
+        label = "auraColor"
+    )
+
+    val targetOrbScale = when (state) {
+        AssistantVoiceState.LISTENING -> 1.05f
+        AssistantVoiceState.SPEAKING -> 1.03f
+        AssistantVoiceState.PROCESSING -> 0.97f
+        else -> 1.0f
+    }
+    val orbScale by animateFloatAsState(
+        targetValue = targetOrbScale,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "orbScale"
+    )
 
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        // Main Interactive Voice Visualizer (compact 130.dp size)
+        // Main Interactive Voice Visualizer (compact 130.dp size with smooth scale)
         Box(
             modifier = Modifier
                 .size(130.dp)
+                .graphicsLayer(scaleX = orbScale, scaleY = orbScale)
                 .clickable { onClick() },
             contentAlignment = Alignment.Center
         ) {

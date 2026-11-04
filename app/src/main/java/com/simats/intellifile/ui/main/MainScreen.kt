@@ -27,6 +27,10 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 
 import androidx.compose.foundation.Canvas
 
@@ -410,6 +414,9 @@ fun MainScreen(
                     val isInitialTab = initialState.startsWith("tab_")
                     val isTargetTab = targetState.startsWith("tab_")
 
+                    // Butter-smooth Material 3 Emphasized Decelerate motion curve
+                    val fluidEasing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+
                     if (isInitialTab && isTargetTab) {
                         val tabOrder = listOf("tab_HOME", "tab_AI", "tab_FILES", "tab_SAVED", "tab_PROFILE")
                         val initialIdx = tabOrder.indexOf(initialState).takeIf { it >= 0 } ?: 0
@@ -417,40 +424,44 @@ fun MainScreen(
                         val isForward = targetIdx > initialIdx
 
                         if (isForward) {
-                            (slideInHorizontally(animationSpec = tween(320, easing = FastOutSlowInEasing)) { fullWidth -> (fullWidth * 0.35f).toInt() } +
+                            (slideInHorizontally(animationSpec = tween(380, easing = fluidEasing)) { fullWidth -> (fullWidth * 0.28f).toInt() } +
+                                scaleIn(initialScale = 0.96f, animationSpec = tween(380, easing = fluidEasing)) +
                                 fadeIn(animationSpec = tween(280)))
                                 .togetherWith(
-                                    slideOutHorizontally(animationSpec = tween(280, easing = FastOutSlowInEasing)) { fullWidth -> -(fullWidth * 0.25f).toInt() } +
+                                    slideOutHorizontally(animationSpec = tween(340, easing = fluidEasing)) { fullWidth -> -(fullWidth * 0.20f).toInt() } +
+                                    scaleOut(targetScale = 0.96f, animationSpec = tween(340, easing = fluidEasing)) +
                                     fadeOut(animationSpec = tween(220))
                                 )
                         } else {
-                            (slideInHorizontally(animationSpec = tween(320, easing = FastOutSlowInEasing)) { fullWidth -> -(fullWidth * 0.35f).toInt() } +
+                            (slideInHorizontally(animationSpec = tween(380, easing = fluidEasing)) { fullWidth -> -(fullWidth * 0.28f).toInt() } +
+                                scaleIn(initialScale = 0.96f, animationSpec = tween(380, easing = fluidEasing)) +
                                 fadeIn(animationSpec = tween(280)))
                                 .togetherWith(
-                                    slideOutHorizontally(animationSpec = tween(280, easing = FastOutSlowInEasing)) { fullWidth -> (fullWidth * 0.25f).toInt() } +
+                                    slideOutHorizontally(animationSpec = tween(340, easing = fluidEasing)) { fullWidth -> (fullWidth * 0.20f).toInt() } +
+                                    scaleOut(targetScale = 0.96f, animationSpec = tween(340, easing = fluidEasing)) +
                                     fadeOut(animationSpec = tween(220))
                                 )
                         }
                     } else if (isTargetTab && !isInitialTab) {
-                        (slideInHorizontally(animationSpec = tween(340, easing = FastOutSlowInEasing)) { fullWidth -> -(fullWidth * 0.2f).toInt() } +
-                            fadeIn(animationSpec = tween(280)) +
-                            scaleIn(initialScale = 0.95f, animationSpec = tween(340, easing = FastOutSlowInEasing)))
+                        // Returning from Overlay back to Tab
+                        (scaleIn(initialScale = 0.94f, animationSpec = tween(360, easing = fluidEasing)) +
+                            fadeIn(animationSpec = tween(280)))
                             .togetherWith(
-                                slideOutHorizontally(animationSpec = tween(320, easing = FastOutSlowInEasing)) { fullWidth -> (fullWidth * 0.4f).toInt() } +
-                                fadeOut(animationSpec = tween(250))
+                                slideOutVertically(animationSpec = tween(320, easing = fluidEasing)) { fullHeight -> (fullHeight * 0.15f).toInt() } +
+                                scaleOut(targetScale = 0.92f, animationSpec = tween(320, easing = fluidEasing)) +
+                                fadeOut(animationSpec = tween(220))
                             )
                     } else {
-                        (slideInHorizontally(animationSpec = tween(360, easing = FastOutSlowInEasing)) { fullWidth -> (fullWidth * 0.4f).toInt() } +
-                            fadeIn(animationSpec = tween(280)) +
-                            scaleIn(initialScale = 0.96f, animationSpec = tween(360, easing = FastOutSlowInEasing)))
+                        // Entering an Overlay (Document Viewer, File Detail, etc.)
+                        (slideInVertically(animationSpec = tween(380, easing = fluidEasing)) { fullHeight -> (fullHeight * 0.12f).toInt() } +
+                            scaleIn(initialScale = 0.92f, animationSpec = tween(380, easing = fluidEasing)) +
+                            fadeIn(animationSpec = tween(300)))
                             .togetherWith(
-                                slideOutHorizontally(animationSpec = tween(300, easing = FastOutSlowInEasing)) { fullWidth -> -(fullWidth * 0.2f).toInt() } +
-                                fadeOut(animationSpec = tween(220)) +
-                                scaleOut(targetScale = 0.95f, animationSpec = tween(300, easing = FastOutSlowInEasing))
+                                scaleOut(targetScale = 0.95f, animationSpec = tween(300, easing = fluidEasing)) +
+                                fadeOut(animationSpec = tween(220))
                             )
                     }
                 },
-
                 label = "mainScreenTransition"
 
             ) { navKey ->
@@ -1279,19 +1290,27 @@ fun BottomNavigationBar(
 
 
                     val iconScale by animateFloatAsState(
-
-                        targetValue = if (isSelected) 1.12f else 1.0f,
-
+                        targetValue = if (isSelected) 1.14f else 1.0f,
                         animationSpec = spring(
-
                             dampingRatio = Spring.DampingRatioMediumBouncy,
-
                             stiffness = Spring.StiffnessMedium
-
                         ),
-
                         label = "iconScale"
+                    )
 
+                    val pillSize by animateDpAsState(
+                        targetValue = if (isSelected) 38.dp else 30.dp,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
+                        label = "pillSize"
+                    )
+
+                    val iconTint by animateColorAsState(
+                        targetValue = if (isSelected) Color.White else Color(0xFF64748B),
+                        animationSpec = tween(220),
+                        label = "iconTint"
                     )
 
 
@@ -1324,7 +1343,7 @@ fun BottomNavigationBar(
 
                                 modifier = Modifier
 
-                                    .size(if (isSelected) 38.dp else 30.dp)
+                                    .size(pillSize)
 
                                     .clip(CircleShape)
 
@@ -1362,7 +1381,7 @@ fun BottomNavigationBar(
 
                                     contentDescription = item.title,
 
-                                    tint = if (isSelected) Color.White else Color(0xFF64748B),
+                                    tint = iconTint,
 
                                     modifier = Modifier
 

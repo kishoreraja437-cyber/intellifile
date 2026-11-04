@@ -793,11 +793,21 @@ fun MyFilesScreen(
                     ) {
                         // Device Files Tab
                         val isDeviceSelected = selectedSource == StorageSourceTab.DEVICE_FILES
+                        val deviceTabBg by animateColorAsState(
+                            targetValue = if (isDeviceSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            animationSpec = tween(260),
+                            label = "deviceTabBg"
+                        )
+                        val deviceTextColor by animateColorAsState(
+                            targetValue = if (isDeviceSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            animationSpec = tween(260),
+                            label = "deviceTextColor"
+                        )
                         Box(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (isDeviceSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                .background(deviceTabBg)
                                 .clickable { selectedSource = StorageSourceTab.DEVICE_FILES }
                                 .padding(vertical = 10.dp),
                             contentAlignment = Alignment.Center
@@ -806,7 +816,7 @@ fun MyFilesScreen(
                                 Icon(
                                     imageVector = Icons.Default.PhoneAndroid,
                                     contentDescription = null,
-                                    tint = if (isDeviceSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = deviceTextColor,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -814,18 +824,28 @@ fun MyFilesScreen(
                                     text = "Device Files ($totalFiles)",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (isDeviceSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = deviceTextColor
                                 )
                             }
                         }
 
                         // AI Vault Tab
                         val isVaultSelected = selectedSource == StorageSourceTab.AI_VAULT
+                        val vaultTabBg by animateColorAsState(
+                            targetValue = if (isVaultSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            animationSpec = tween(260),
+                            label = "vaultTabBg"
+                        )
+                        val vaultTextColor by animateColorAsState(
+                            targetValue = if (isVaultSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            animationSpec = tween(260),
+                            label = "vaultTextColor"
+                        )
                         Box(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (isVaultSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                .background(vaultTabBg)
                                 .clickable { selectedSource = StorageSourceTab.AI_VAULT }
                                 .padding(vertical = 10.dp),
                             contentAlignment = Alignment.Center
@@ -834,7 +854,7 @@ fun MyFilesScreen(
                                 Icon(
                                     imageVector = Icons.Default.CloudDone,
                                     contentDescription = null,
-                                    tint = if (isVaultSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = vaultTextColor,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -842,7 +862,7 @@ fun MyFilesScreen(
                                     text = "AI Vault ($vaultFilesCount)",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (isVaultSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = vaultTextColor
                                 )
                             }
                         }
