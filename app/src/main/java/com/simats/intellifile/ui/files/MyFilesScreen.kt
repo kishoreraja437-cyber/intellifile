@@ -171,38 +171,59 @@ fun MyFilesScreen(
         }
     }
 
-    // SAF Document Picker to upload directly to AI Vault
+    // SAF Document Picker to upload directly to AI Vault (supports multi-selection of 2+ files)
+    var uploadProgressMessage by remember { mutableStateOf("") }
     val uploadDocLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            var fileName = "Document"
-            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                if (nameIndex != -1 && cursor.moveToFirst()) {
-                    fileName = cursor.getString(nameIndex) ?: "Document"
-                }
-            }
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
             isUploadingToVault = true
+            uploadProgressMessage = "Moving ${uris.size} document${if (uris.size > 1) "s" else ""} to AI Vault..."
             coroutineScope.launch {
-                val result = docRepo.uploadToVault(
-                    filePath = "",
-                    uriString = uri.toString(),
-                    fileName = fileName
-                )
+                var successCount = 0
+                var lastError: String? = null
+                uris.forEachIndexed { index, uri ->
+                    var fileName = "Document_${index + 1}"
+                    try {
+                        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                            val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                            if (nameIndex != -1 && cursor.moveToFirst()) {
+                                fileName = cursor.getString(nameIndex) ?: fileName
+                            }
+                        }
+                    } catch (_: Exception) {}
+
+                    uploadProgressMessage = "Moving file ${index + 1} of ${uris.size}: $fileName..."
+
+                    val result = docRepo.uploadToVault(
+                        filePath = "",
+                        uriString = uri.toString(),
+                        fileName = fileName
+                    )
+                    result.onSuccess {
+                        dbHelper.setVaultStatus(uri.toString(), fileName, true)
+                        successCount++
+                    }.onFailure { ex ->
+                        lastError = ex.message
+                    }
+                }
                 isUploadingToVault = false
-                result.onSuccess {
-                    dbHelper.setVaultStatus(uri.toString(), fileName, true)
-                    Toast.makeText(context, "\"$fileName\" added to AI Vault successfully!", Toast.LENGTH_SHORT).show()
+                uploadProgressMessage = ""
+                if (successCount > 0) {
+                    val msg = if (successCount == 1) {
+                        "1 document moved to AI Vault successfully!"
+                    } else {
+                        "$successCount documents moved to AI Vault successfully!"
+                    }
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                     loadVault()
                     refreshTrigger++
-                }.onFailure { ex ->
-                    Toast.makeText(context, "Upload failed: ${ex.message}", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(context, "Upload failed: ${lastError ?: "Unknown error"}", Toast.LENGTH_LONG).show()
                 }
             }
         }
     }
-
     val totalFiles = realFiles.size
     val importantCount = remember(realFiles) { realFiles.count { it.priority == PriorityLevel.IMPORTANT } }
     val normalCount = remember(realFiles) { realFiles.count { it.priority == PriorityLevel.NORMAL } }
@@ -1044,7 +1065,8 @@ fun MyFilesScreen(
                                             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                             "application/vnd.ms-excel",
                                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                            "text/plain"
+                                            "text/plain",
+                                            "text/csv"
                                         )
                                     )
                                 },
@@ -1064,7 +1086,7 @@ fun MyFilesScreen(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = if (isUploadingToVault) "Uploading & Extracting..." else "Upload Document to AI Vault",
+                                        text = if (isUploadingToVault) "Uploading & Extracting..." else if (isUploadingToVault) uploadProgressMessage.ifBlank { "Moving to AI Vault..." } else "Select & Move Documents to AI Vault",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.sp
                                     )
