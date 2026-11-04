@@ -49,7 +49,6 @@ class SavedViewModel(application: Application) : AndroidViewModel(application) {
                     PriorityFilter.IMPORTANT -> item.priority == PriorityLevel.IMPORTANT
                     PriorityFilter.NORMAL -> item.priority == PriorityLevel.NORMAL
                     PriorityFilter.LOW -> item.priority == PriorityLevel.LOW
-                    PriorityFilter.BOOKMARKED -> item.isBookmarked
                 }
             }
 
@@ -57,7 +56,7 @@ class SavedViewModel(application: Application) : AndroidViewModel(application) {
 
             // Server saved files
             val priorityStr = when (filter) {
-                PriorityFilter.ALL, PriorityFilter.BOOKMARKED -> "ALL"
+                PriorityFilter.ALL -> "ALL"
                 PriorityFilter.IMPORTANT -> "IMPORTANT"
                 PriorityFilter.NORMAL -> "NORMAL"
                 PriorityFilter.LOW -> "LOW"

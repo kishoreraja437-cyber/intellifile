@@ -72,8 +72,7 @@ enum class PriorityFilter(val label: String, val level: PriorityLevel?) {
     ALL("All", null),
     IMPORTANT("Important", PriorityLevel.IMPORTANT),
     NORMAL("Normal", PriorityLevel.NORMAL),
-    LOW("Low", PriorityLevel.LOW),
-    BOOKMARKED("Bookmarked", null)
+    LOW("Low", PriorityLevel.LOW)
 }
 
 @Composable
@@ -133,7 +132,6 @@ fun SavedScreen(
             val matchesSearch = file.title.contains(searchQuery, ignoreCase = true)
             val matchesPriority = when (selectedFilter) {
                 PriorityFilter.ALL -> true
-                PriorityFilter.BOOKMARKED -> file.isBookmarked
                 else -> file.priority == selectedFilter.level
             }
             matchesSearch && matchesPriority
@@ -502,7 +500,7 @@ fun SavedScreen(
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Bookmark a document or set its priority to view it here.",
+                                text = "Assign a priority to a document to view it here.",
                                 fontSize = 13.sp,
                                 color = Color(0xFF6B7280),
                                 textAlign = TextAlign.Center
@@ -615,14 +613,14 @@ fun FilterChip(
         label = "chipScale"
     )
     val backgroundColor = when (filter) {
-        PriorityFilter.ALL, PriorityFilter.BOOKMARKED -> if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+        PriorityFilter.ALL -> if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
         PriorityFilter.IMPORTANT -> Color(0xFFFFEAEE)
         PriorityFilter.NORMAL -> Color(0xFFFFF6D8)
         PriorityFilter.LOW -> Color(0xFFE2F7ED)
     }
 
     val textColor = when (filter) {
-        PriorityFilter.ALL, PriorityFilter.BOOKMARKED -> if (isSelected) Color.White else Color(0xFF4B5563)
+        PriorityFilter.ALL -> if (isSelected) Color.White else Color(0xFF4B5563)
         PriorityFilter.IMPORTANT -> Color(0xFFEF4444)
         PriorityFilter.NORMAL -> Color(0xFFD97706)
         PriorityFilter.LOW -> Color(0xFF10B981)
