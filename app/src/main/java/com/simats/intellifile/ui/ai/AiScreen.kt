@@ -15,6 +15,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.simats.intellifile.ui.common.DraggableScrollbar
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -119,6 +121,7 @@ fun AiScreen(
     var isThinking by remember { mutableStateOf(false) }
     var isLoadingConversation by remember { mutableStateOf(false) }
 
+    val listState = rememberLazyListState()
     val chatMessages = remember {
         mutableStateListOf<ChatMessage>(defaultGreeting)
     }
@@ -211,45 +214,57 @@ fun AiScreen(
             )
 
             // Chat Messages List
-            LazyColumn(
+            Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(top = 12.dp, bottom = 16.dp)
             ) {
-                if (isLoadingConversation) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 40.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(36.dp)
-                            )
-                        }
-                    }
-                } else {
-                    items(chatMessages) { message ->
-                        when (message) {
-                            is ChatMessage.User -> {
-                                UserMessageBubble(text = message.text)
-                            }
-                            is ChatMessage.Ai -> {
-                                AiMessageBubble(
-                                    text = message.text,
-                                    files = message.files,
-                                    isLoading = message.isLoading,
-                                    onOpenFile = onOpenFile
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    if (isLoadingConversation) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 40.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(36.dp)
                                 )
+                            }
+                        }
+                    } else {
+                        items(chatMessages) { message ->
+                            when (message) {
+                                is ChatMessage.User -> {
+                                    UserMessageBubble(text = message.text)
+                                }
+                                is ChatMessage.Ai -> {
+                                    AiMessageBubble(
+                                        text = message.text,
+                                        files = message.files,
+                                        isLoading = message.isLoading,
+                                        onOpenFile = onOpenFile
+                                    )
+                                }
                             }
                         }
                     }
                 }
+
+                DraggableScrollbar(
+                    state = listState,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .padding(top = 8.dp, bottom = 8.dp)
+                )
             }
 
             // Bottom Prompt Bar

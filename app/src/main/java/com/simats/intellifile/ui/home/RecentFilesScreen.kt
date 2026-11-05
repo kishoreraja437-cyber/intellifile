@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.simats.intellifile.ui.common.DraggableScrollbar
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -78,6 +80,7 @@ fun RecentFilesScreen(
     val docRepo = remember { DocumentRepository(context) }
     val dbHelper = remember { LocalFileDatabaseHelper.getInstance(context) }
 
+    val listState = rememberLazyListState()
     var searchQuery by remember { mutableStateOf("") }
     var selectedFormatFilter by remember { mutableStateOf(FileFormatFilter.ALL) }
     var refreshTrigger by remember { mutableIntStateOf(0) }
@@ -405,13 +408,17 @@ fun RecentFilesScreen(
             }
 
             // Search Bar & Filter Chips
-            LazyColumn(
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(bottom = if (isMultiSelectMode && selectedFiles.isNotEmpty()) 90.dp else 24.dp)
+                    .fillMaxWidth()
+                    .weight(1f)
             ) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = if (isMultiSelectMode && selectedFiles.isNotEmpty()) 90.dp else 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
                 item {
                     // Search Input Box
                     Row(
@@ -529,6 +536,15 @@ fun RecentFilesScreen(
                     )
                 }
             }
+
+            DraggableScrollbar(
+                state = listState,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .padding(top = 8.dp, bottom = 8.dp)
+            )
+        }
         }
 
         // Floating Bottom Action Bar for Multi-selection & Move to AI Vault

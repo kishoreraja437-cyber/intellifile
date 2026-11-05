@@ -38,6 +38,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.foundation.Canvas
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -634,47 +647,129 @@ fun SelectablePriorityCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val cardScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.94f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "selectableCardScale"
+    )
+
     val borderModifier = if (isSelected) {
         Modifier.border(
-            width = 1.5.dp,
+            width = 2.dp,
             color = priority.textColor,
-            shape = RoundedCornerShape(20.dp)
+            shape = RoundedCornerShape(22.dp)
         )
-    } else Modifier
+    } else {
+        Modifier.border(
+            width = 1.2.dp,
+            color = priority.borderColor.copy(alpha = 0.7f),
+            shape = RoundedCornerShape(22.dp)
+        )
+    }
 
-    Column(
+    Box(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(priority.backgroundColor)
+            .graphicsLayer {
+                scaleX = cardScale
+                scaleY = cardScale
+            }
+            .shadow(
+                elevation = if (isSelected) 8.dp else 3.dp,
+                shape = RoundedCornerShape(22.dp),
+                ambientColor = if (isSelected) priority.glowColor else Color.Black.copy(alpha = 0.05f),
+                spotColor = if (isSelected) priority.glowColor else Color.Black.copy(alpha = 0.05f),
+                clip = false
+            )
+            .clip(RoundedCornerShape(22.dp))
+            .background(brush = Brush.verticalGradient(priority.gradientColors))
             .then(borderModifier)
-            .clickable { onClick() }
-            .padding(vertical = 16.dp, horizontal = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .clickable(interactionSource = interactionSource, indication = null) { onClick() }
     ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(priority.iconBackgroundColor),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = priority.icon,
-                contentDescription = priority.title,
-                tint = Color.White,
-                modifier = Modifier.size(18.dp)
+        // Specular 3D Glass Arc Highlight
+        Canvas(modifier = Modifier.matchParentSize()) {
+            val cornerRadius = 22.dp.toPx()
+            val highlightWidth = size.width * 0.44f
+            val highlightHeight = size.height * 0.32f
+
+            drawOval(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.80f),
+                        Color.White.copy(alpha = 0.30f),
+                        Color.Transparent
+                    ),
+                    center = Offset(cornerRadius * 0.85f, cornerRadius * 0.80f),
+                    radius = cornerRadius * 1.3f
+                ),
+                topLeft = Offset(6.dp.toPx(), 5.dp.toPx()),
+                size = Size(highlightWidth, highlightHeight)
+            )
+
+            drawLine(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.85f),
+                        Color.White.copy(alpha = 0.40f),
+                        Color.Transparent
+                    ),
+                    startX = cornerRadius * 0.7f,
+                    endX = size.width * 0.65f
+                ),
+                start = Offset(cornerRadius * 0.7f, 2.5.dp.toPx()),
+                end = Offset(size.width * 0.65f, 2.5.dp.toPx()),
+                strokeWidth = 2.dp.toPx(),
+                cap = StrokeCap.Round
             )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        // Selected checkmark indicator on top-right
+        if (isSelected) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .size(18.dp)
+                    .clip(CircleShape)
+                    .background(priority.textColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "Selected",
+                    tint = Color.White,
+                    modifier = Modifier.size(12.dp)
+                )
+            }
+        }
 
-        Text(
-            text = priority.title,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = priority.textColor
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 14.dp, horizontal = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Image(
+                painter = painterResource(id = priority.badgeResId),
+                contentDescription = priority.title,
+                modifier = Modifier.size(44.dp)
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = priority.title,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = priority.textColor,
+                maxLines = 1
+            )
+        }
     }
 }
 

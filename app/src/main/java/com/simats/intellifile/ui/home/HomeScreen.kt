@@ -58,6 +58,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.simats.intellifile.ui.common.DraggableScrollbar
 
 import androidx.compose.foundation.shape.CircleShape
 
@@ -127,6 +129,8 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.Path
 
 import androidx.compose.ui.unit.dp
@@ -146,104 +150,54 @@ import kotlinx.coroutines.launch
 
 
 enum class PriorityLevel(
-
     val title: String,
-
     val count: Int,
-
     val backgroundColor: Color,
-
     val iconBackgroundColor: Color,
-
     val textColor: Color,
-
     val icon: ImageVector,
-
     val badgeResId: Int = R.drawable.priority_badge_important,
-
-    val borderColor: Color = Color(0xFFFFA8B6),
-
-    val glowColor: Color = Color(0xFFFF8DA1),
-
-    val gradientColors: List<Color> = listOf(Color(0xFFFFF5F7), Color(0xFFFFE6EB))
-
+    val borderColor: Color = Color(0xFFFFA0B4),
+    val glowColor: Color = Color(0xFFFF6B8B),
+    val gradientColors: List<Color> = listOf(Color(0xFFFFF0F4), Color(0xFFFFE2EA))
 ) {
-
     IMPORTANT(
-
         title = "Important",
-
         count = 0,
-
         backgroundColor = Color(0xFFFFF0F3),
-
         iconBackgroundColor = Color(0xFFE11D48),
-
         textColor = Color(0xFFE11D48),
-
         icon = Icons.Default.PriorityHigh,
-
         badgeResId = R.drawable.priority_badge_important,
-
-        borderColor = Color(0xFFFFA8B6),
-
-        glowColor = Color(0xFFFF8DA1).copy(alpha = 0.28f),
-
-        gradientColors = listOf(Color(0xFFFFF5F7), Color(0xFFFFE6EB))
-
+        borderColor = Color(0xFFFFA0B4),
+        glowColor = Color(0xFFFF6B8B).copy(alpha = 0.35f),
+        gradientColors = listOf(Color(0xFFFFF0F4), Color(0xFFFFE2EA))
     ),
-
     NORMAL(
-
         title = "Normal",
-
         count = 0,
-
         backgroundColor = Color(0xFFFFFBF0),
-
         iconBackgroundColor = Color(0xFFF59E0B),
-
         textColor = Color(0xFFD97706),
-
         icon = Icons.Default.Remove,
-
         badgeResId = R.drawable.priority_badge_normal,
-
-        borderColor = Color(0xFFFBD38D),
-
-        glowColor = Color(0xFFF59E0B).copy(alpha = 0.28f),
-
-        gradientColors = listOf(Color(0xFFFFFBF0), Color(0xFFFFF0D4))
-
+        borderColor = Color(0xFFF6C768),
+        glowColor = Color(0xFFF59E0B).copy(alpha = 0.35f),
+        gradientColors = listOf(Color(0xFFFFFDF5), Color(0xFFFFF2D6))
     ),
-
     LOW(
-
         title = "Low",
-
         count = 0,
-
         backgroundColor = Color(0xFFF0FDF4),
-
         iconBackgroundColor = Color(0xFF10B981),
-
         textColor = Color(0xFF059669),
-
         icon = Icons.Default.Check,
-
         badgeResId = R.drawable.priority_badge_low,
-
-        borderColor = Color(0xFF9AE6B4),
-
-        glowColor = Color(0xFF10B981).copy(alpha = 0.28f),
-
-        gradientColors = listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7))
-
+        borderColor = Color(0xFF86EFAC),
+        glowColor = Color(0xFF10B981).copy(alpha = 0.35f),
+        gradientColors = listOf(Color(0xFFF0FDF5), Color(0xFFDCFCE7))
     )
-
 }
-
-
 
 data class RecentFile(
 
@@ -303,6 +257,7 @@ fun HomeScreen(
 
     }
 
+    val listState = rememberLazyListState()
     var refreshTrigger by remember { mutableIntStateOf(0) }
     val refreshRotation = remember { Animatable(0f) }
     LaunchedEffect(refreshTrigger) {
@@ -536,13 +491,11 @@ fun HomeScreen(
 
         LazyColumn(
 
-            modifier = Modifier
+            state = listState,
 
-                .fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
 
-                .padding(horizontal = 20.dp),
-
-            contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp),
 
             verticalArrangement = Arrangement.spacedBy(20.dp)
 
@@ -1008,6 +961,13 @@ fun HomeScreen(
 
         }
 
+        DraggableScrollbar(
+            state = listState,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .padding(top = 16.dp, bottom = 16.dp)
+        )
     }
 
 }
@@ -1259,6 +1219,7 @@ fun SearchBar(
 
         }
 
+
     }
 
 }
@@ -1266,19 +1227,12 @@ fun SearchBar(
 
 
 @Composable
-
 fun PrioritySummaryCard(
-
     priority: PriorityLevel,
-
     count: Int? = null,
-
     modifier: Modifier = Modifier,
-
     onClick: () -> Unit = {}
-
 ) {
-
     val interactionSource = remember { MutableInteractionSource() }
     val isCardPressed by interactionSource.collectIsPressedAsState()
     val cardScale by animateFloatAsState(
@@ -1297,20 +1251,20 @@ fun PrioritySummaryCard(
                 scaleY = cardScale
             }
             .shadow(
-                elevation = 6.dp,
-                shape = RoundedCornerShape(22.dp),
+                elevation = 8.dp,
+                shape = RoundedCornerShape(24.dp),
                 ambientColor = priority.glowColor,
                 spotColor = priority.glowColor,
                 clip = false
             )
-            .clip(RoundedCornerShape(22.dp))
+            .clip(RoundedCornerShape(24.dp))
             .background(
                 brush = Brush.verticalGradient(priority.gradientColors)
             )
             .border(
-                width = 1.5.dp,
+                width = 1.8.dp,
                 color = priority.borderColor,
-                shape = RoundedCornerShape(22.dp)
+                shape = RoundedCornerShape(24.dp)
             )
             .clickable(
                 interactionSource = interactionSource,
@@ -1319,48 +1273,55 @@ fun PrioritySummaryCard(
     ) {
         // Specular 3D Glass Arc Highlight in top-left corner
         Canvas(modifier = Modifier.matchParentSize()) {
-            val shineBrush = Brush.linearGradient(
-                colors = listOf(
-                    Color.White.copy(alpha = 0.85f),
-                    Color.White.copy(alpha = 0.30f),
-                    Color.Transparent
+            val cornerRadius = 24.dp.toPx()
+            val highlightWidth = size.width * 0.44f
+            val highlightHeight = size.height * 0.32f
+
+            // Soft specular gleam oval in top-left curve
+            drawOval(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.85f),
+                        Color.White.copy(alpha = 0.35f),
+                        Color.Transparent
+                    ),
+                    center = Offset(cornerRadius * 0.85f, cornerRadius * 0.80f),
+                    radius = cornerRadius * 1.3f
                 ),
-                start = Offset(0f, 0f),
-                end = Offset(size.width * 0.70f, size.height * 0.45f)
+                topLeft = Offset(7.dp.toPx(), 6.dp.toPx()),
+                size = Size(highlightWidth, highlightHeight)
             )
-            val cornerR = 20.dp.toPx()
-            val strokeW = 2.5.dp.toPx()
-            val path = Path().apply {
-                moveTo(cornerR, strokeW)
-                lineTo(size.width * 0.65f, strokeW)
-                quadraticTo(
-                    size.width * 0.35f, size.height * 0.30f,
-                    strokeW, size.height * 0.52f
-                )
-                lineTo(strokeW, cornerR)
-                arcTo(
-                    rect = Rect(strokeW, strokeW, cornerR * 2, cornerR * 2),
-                    startAngleDegrees = 180f,
-                    sweepAngleDegrees = 90f,
-                    forceMoveTo = false
-                )
-                close()
-            }
-            drawPath(path = path, brush = shineBrush)
+
+            // Inner glass rim line along top edge
+            drawLine(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.90f),
+                        Color.White.copy(alpha = 0.45f),
+                        Color.Transparent
+                    ),
+                    startX = cornerRadius * 0.7f,
+                    endX = size.width * 0.65f
+                ),
+                start = Offset(cornerRadius * 0.7f, 2.5.dp.toPx()),
+                end = Offset(size.width * 0.65f, 2.5.dp.toPx()),
+                strokeWidth = 2.dp.toPx(),
+                cap = StrokeCap.Round
+            )
         }
 
         // Card Content: 3D Badge, Title, Dynamic Count
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 16.dp, horizontal = 10.dp),
+                .padding(top = 16.dp, bottom = 18.dp, start = 8.dp, end = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Image(
                 painter = painterResource(id = priority.badgeResId),
                 contentDescription = priority.title,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(46.dp)
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -1377,17 +1338,14 @@ fun PrioritySummaryCard(
 
             Text(
                 text = (count ?: priority.count).toString(),
-                fontSize = 26.sp,
+                fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF0F172A),
                 maxLines = 1
             )
         }
     }
-
 }
-
-
 
 @Composable
 

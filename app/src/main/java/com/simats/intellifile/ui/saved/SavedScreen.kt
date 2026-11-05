@@ -19,6 +19,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.simats.intellifile.ui.common.DraggableScrollbar
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -91,6 +93,7 @@ fun SavedScreen(
     val docRepo = remember { DocumentRepository(context) }
     val dbHelper = remember { LocalFileDatabaseHelper.getInstance(context) }
 
+    val listState = rememberLazyListState()
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember(initialFilter) { mutableStateOf(initialFilter) }
     LaunchedEffect(initialFilter) {
@@ -420,13 +423,17 @@ fun SavedScreen(
             }
 
             // Search Bar & Filter Chips
-            LazyColumn(
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(bottom = if (isMultiSelectMode && selectedFiles.isNotEmpty()) 90.dp else 24.dp)
+                    .fillMaxWidth()
+                    .weight(1f)
             ) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = if (isMultiSelectMode && selectedFiles.isNotEmpty()) 90.dp else 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
                 item {
                     // Search Input Box
                     Row(
@@ -544,6 +551,15 @@ fun SavedScreen(
                     )
                 }
             }
+
+            DraggableScrollbar(
+                state = listState,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .padding(top = 8.dp, bottom = 8.dp)
+            )
+        }
         }
 
         // Floating Bottom Action Bar for Multi-selection & Move to AI Vault
@@ -624,16 +640,23 @@ fun FilterChip(
     )
     val backgroundColor = when (filter) {
         PriorityFilter.ALL -> if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-        PriorityFilter.IMPORTANT -> Color(0xFFFFEAEE)
-        PriorityFilter.NORMAL -> Color(0xFFFFF6D8)
-        PriorityFilter.LOW -> Color(0xFFE2F7ED)
+        PriorityFilter.IMPORTANT -> if (isSelected) Color(0xFFFFE2EA) else Color(0xFFFFF0F3)
+        PriorityFilter.NORMAL -> if (isSelected) Color(0xFFFFF2D6) else Color(0xFFFFFDF5)
+        PriorityFilter.LOW -> if (isSelected) Color(0xFFDCFCE7) else Color(0xFFF0FDF5)
     }
 
     val textColor = when (filter) {
         PriorityFilter.ALL -> if (isSelected) Color.White else Color(0xFF4B5563)
-        PriorityFilter.IMPORTANT -> Color(0xFFEF4444)
+        PriorityFilter.IMPORTANT -> Color(0xFFE11D48)
         PriorityFilter.NORMAL -> Color(0xFFD97706)
-        PriorityFilter.LOW -> Color(0xFF10B981)
+        PriorityFilter.LOW -> Color(0xFF059669)
+    }
+
+    val borderColor = when (filter) {
+        PriorityFilter.ALL -> Color.Transparent
+        PriorityFilter.IMPORTANT -> if (isSelected) Color(0xFFFFA0B4) else Color(0xFFFFA0B4).copy(alpha = 0.5f)
+        PriorityFilter.NORMAL -> if (isSelected) Color(0xFFF6C768) else Color(0xFFF6C768).copy(alpha = 0.5f)
+        PriorityFilter.LOW -> if (isSelected) Color(0xFF86EFAC) else Color(0xFF86EFAC).copy(alpha = 0.5f)
     }
 
     Box(
@@ -641,20 +664,33 @@ fun FilterChip(
             .graphicsLayer(scaleX = chipScale, scaleY = chipScale)
             .clip(CircleShape)
             .background(backgroundColor)
+            .border(width = 1.dp, color = borderColor, shape = CircleShape)
             .clickable { onClick() }
             .padding(vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = filter.label,
-            fontSize = 12.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            color = textColor
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            if (filter.level != null) {
+                Image(
+                    painter = painterResource(id = filter.level.badgeResId),
+                    contentDescription = filter.label,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(5.dp))
+            }
+            Text(
+                text = filter.label,
+                fontSize = 12.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = textColor
+            )
+        }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SavedFileCard(
     file: SavedFileItem,

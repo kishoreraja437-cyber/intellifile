@@ -7,6 +7,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -71,6 +78,8 @@ import com.simats.intellifile.data.repository.AiRepository
 
 import com.simats.intellifile.ui.home.PriorityLevel
 import com.simats.intellifile.ui.home.PrioritySummaryCard
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.simats.intellifile.ui.common.DraggableScrollbar
 import kotlinx.coroutines.launch
 
 enum class StorageSourceTab {
@@ -94,6 +103,7 @@ fun MyFilesScreen(
     val dbHelper = remember { LocalFileDatabaseHelper.getInstance(context) }
 
     var selectedSource by remember { mutableStateOf(StorageSourceTab.DEVICE_FILES) }
+    val listState = rememberLazyListState()
     var refreshTrigger by remember { mutableIntStateOf(0) }
     var realFiles by remember { mutableStateOf<List<LocalFileItem>>(emptyList()) }
     var isLoadingDeviceFiles by remember { mutableStateOf(true) }
@@ -752,13 +762,17 @@ fun MyFilesScreen(
                 }
             }
 
-            LazyColumn(
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
-                contentPadding = PaddingValues(bottom = 28.dp)
+                    .fillMaxWidth()
+                    .weight(1f)
             ) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
                 // Page Title
                 item {
                     Row(
@@ -1058,23 +1072,20 @@ fun MyFilesScreen(
                             )
 
                             QuickAccessCard(
-                                label = "Important Files ($importantCount)",
-                                badgeColor = Color(0xFFEF4444),
-                                ringColor = Color(0xFFFFEAEE),
+                                priority = PriorityLevel.IMPORTANT,
+                                count = importantCount,
                                 onClick = { onQuickAccessClick(PriorityLevel.IMPORTANT) }
                             )
 
                             QuickAccessCard(
-                                label = "Normal Files ($normalCount)",
-                                badgeColor = Color(0xFFD97706),
-                                ringColor = Color(0xFFFFF6D8),
+                                priority = PriorityLevel.NORMAL,
+                                count = normalCount,
                                 onClick = { onQuickAccessClick(PriorityLevel.NORMAL) }
                             )
 
                             QuickAccessCard(
-                                label = "Low Priority Files ($lowCount)",
-                                badgeColor = Color(0xFF10B981),
-                                ringColor = Color(0xFFE2F7ED),
+                                priority = PriorityLevel.LOW,
+                                count = lowCount,
                                 onClick = { onQuickAccessClick(PriorityLevel.LOW) }
                             )
                         }
@@ -1355,6 +1366,15 @@ fun MyFilesScreen(
                     }
                 }
             }
+
+            DraggableScrollbar(
+                state = listState,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .padding(top = 8.dp, bottom = 8.dp)
+            )
+        }
         }
     }
 }
@@ -1632,6 +1652,85 @@ fun DistributionLegendRow(
 
 @Composable
 fun QuickAccessCard(
+    priority: PriorityLevel,
+    count: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val cardScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.97f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "qaCardScale"
+    )
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = cardScale
+                scaleY = cardScale
+            }
+            .shadow(
+                elevation = 2.dp,
+                shape = RoundedCornerShape(18.dp),
+                ambientColor = priority.glowColor,
+                spotColor = priority.glowColor
+            )
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color.White)
+            .border(
+                width = 1.dp,
+                color = priority.borderColor.copy(alpha = 0.6f),
+                shape = RoundedCornerShape(18.dp)
+            )
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Image(
+                painter = painterResource(id = priority.badgeResId),
+                contentDescription = priority.title,
+                modifier = Modifier.size(36.dp)
+            )
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column {
+                Text(
+                    text = "${priority.title} Files",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF111827)
+                )
+                Text(
+                    text = "$count file${if (count == 1) "" else "s"}",
+                    fontSize = 12.sp,
+                    color = Color(0xFF6B7280)
+                )
+            }
+        }
+
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = "Open",
+            tint = Color(0xFF9CA3AF),
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+// Backward-compatible overload
+@Composable
+fun QuickAccessCard(
     label: String,
     badgeColor: Color,
     ringColor: Color,
@@ -1678,15 +1777,11 @@ fun QuickAccessCard(
 
         Icon(
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = "Navigate",
+            contentDescription = "Open",
             tint = Color(0xFF9CA3AF),
             modifier = Modifier.size(20.dp)
         )
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-fun MyFilesScreenPreview() {
-    MyFilesScreen()
-}
+
