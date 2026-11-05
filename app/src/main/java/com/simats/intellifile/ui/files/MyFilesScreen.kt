@@ -53,6 +53,15 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -946,116 +955,14 @@ fun MyFilesScreen(
                         }
                     }
 
-                    // Priority Distribution Donut Chart Section
+                    // Priority Distribution Donut Chart Section (Glass Light Animated Card)
                     item {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            Text(
-                                text = "Priority Distribution",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF111827)
-                            )
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(Color.White)
-                                    .padding(20.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Dynamic Donut Chart
-                                Box(
-                                    modifier = Modifier.size(130.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Canvas(modifier = Modifier.fillMaxSize()) {
-                                        val strokeWidth = 22.dp.toPx()
-                                        val startAngleOffset = -90f
-
-                                        if (totalPrioritized == 0) {
-                                            drawArc(
-                                                color = Color(0xFFE5E7EB),
-                                                startAngle = 0f,
-                                                sweepAngle = 360f,
-                                                useCenter = false,
-                                                style = Stroke(width = strokeWidth)
-                                            )
-                                        } else {
-                                            if (animImportantSweep > 0) {
-                                                drawArc(
-                                                    color = Color(0xFFEF4444),
-                                                    startAngle = startAngleOffset,
-                                                    sweepAngle = animImportantSweep,
-                                                    useCenter = false,
-                                                    style = Stroke(width = strokeWidth)
-                                                )
-                                            }
-                                            if (animNormalSweep > 0) {
-                                                drawArc(
-                                                    color = Color(0xFFF59E0B),
-                                                    startAngle = startAngleOffset + animImportantSweep,
-                                                    sweepAngle = animNormalSweep,
-                                                    useCenter = false,
-                                                    style = Stroke(width = strokeWidth)
-                                                )
-                                            }
-                                            if (animLowSweep > 0) {
-                                                drawArc(
-                                                    color = Color(0xFF10B981),
-                                                    startAngle = startAngleOffset + animImportantSweep + animNormalSweep,
-                                                    sweepAngle = animLowSweep,
-                                                    useCenter = false,
-                                                    style = Stroke(width = strokeWidth)
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Text(
-                                            text = totalPrioritized.toString(),
-                                            fontSize = 22.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF111827)
-                                        )
-                                        Text(
-                                            text = "Marked",
-                                            fontSize = 12.sp,
-                                            color = Color(0xFF6B7280)
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.width(20.dp))
-
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    DistributionLegendRow(
-                                        dotColor = Color(0xFFEF4444),
-                                        label = "Important",
-                                        countText = "$importantCount files"
-                                    )
-                                    DistributionLegendRow(
-                                        dotColor = Color(0xFFF59E0B),
-                                        label = "Normal",
-                                        countText = "$normalCount files"
-                                    )
-                                    DistributionLegendRow(
-                                        dotColor = Color(0xFF10B981),
-                                        label = "Low",
-                                        countText = "$lowCount files"
-                                    )
-                                }
-                            }
-                        }
+                        PriorityDistributionCard(
+                            importantCount = importantCount,
+                            normalCount = normalCount,
+                            lowCount = lowCount,
+                            onPriorityClick = { priority -> onQuickAccessClick(priority) }
+                        )
                     }
 
                     // Quick Access Section
@@ -1613,14 +1520,303 @@ fun VaultBenefitItem(title: String, desc: String) {
 }
 
 @Composable
+fun PriorityDistributionCard(
+    importantCount: Int,
+    normalCount: Int,
+    lowCount: Int,
+    onPriorityClick: (PriorityLevel) -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    val totalPrioritized = importantCount + normalCount + lowCount
+
+    // Smooth sweeping progress animation
+    var animationPlayed by remember { mutableStateOf(false) }
+    val animProgress by animateFloatAsState(
+        targetValue = if (animationPlayed) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = 1200,
+            easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
+        ),
+        label = "animProgress"
+    )
+
+    LaunchedEffect(totalPrioritized, importantCount, normalCount, lowCount) {
+        animationPlayed = true
+    }
+
+    // Ambient breathing neon glow pulse
+    val infiniteTransition = rememberInfiniteTransition(label = "infiniteCardAura")
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.26f,
+        targetValue = 0.46f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glowAlpha"
+    )
+
+    // Specular glass light gleam shimmer
+    val shimmerProgress by infiniteTransition.animateFloat(
+        initialValue = -0.3f,
+        targetValue = 1.3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(4000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmerProgress"
+    )
+
+    // Center count scale spring
+    val centerScale by animateFloatAsState(
+        targetValue = if (animationPlayed) 1f else 0.75f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "centerScale"
+    )
+
+    // Calculate slice sweeps
+    val importantSweep = if (totalPrioritized > 0) (importantCount.toFloat() / totalPrioritized) * 360f else 0f
+    val normalSweep = if (totalPrioritized > 0) (normalCount.toFloat() / totalPrioritized) * 360f else 0f
+    val lowSweep = if (totalPrioritized > 0) (lowCount.toFloat() / totalPrioritized) * 360f else 0f
+
+    val currentImpSweep = importantSweep * animProgress
+    val currentNorSweep = normalSweep * animProgress
+    val currentLowSweep = lowSweep * animProgress
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 8.dp,
+                shape = RoundedCornerShape(26.dp),
+                ambientColor = Color(0xFF64748B).copy(alpha = 0.08f),
+                spotColor = Color(0xFF64748B).copy(alpha = 0.12f),
+                clip = false
+            )
+            .clip(RoundedCornerShape(26.dp))
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color(0xFFFFFFFF),
+                        Color(0xFFF8FAFC)
+                    )
+                )
+            )
+            .border(
+                width = 1.5.dp,
+                color = Color.White.copy(alpha = 0.9f),
+                shape = RoundedCornerShape(26.dp)
+            )
+    ) {
+        // Specular 3D Glass Light Sheen
+        Canvas(modifier = Modifier.matchParentSize()) {
+            val sheenBrush = Brush.radialGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.65f),
+                    Color.White.copy(alpha = 0.15f),
+                    Color.Transparent
+                ),
+                center = Offset(size.width * 0.85f, size.height * 0.15f),
+                radius = size.width * 0.5f
+            )
+            drawRect(brush = sheenBrush)
+
+            val sweepX = size.width * shimmerProgress
+            val sweepBrush = Brush.linearGradient(
+                colors = listOf(
+                    Color.Transparent,
+                    Color.White.copy(alpha = 0.35f),
+                    Color.Transparent
+                ),
+                start = Offset(sweepX - 70.dp.toPx(), 0f),
+                end = Offset(sweepX + 70.dp.toPx(), size.height * 0.6f)
+            )
+            drawRect(brush = sweepBrush)
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(22.dp)
+        ) {
+            Text(
+                text = "Priority Distribution",
+                fontSize = 19.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF0F172A)
+            )
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Donut Chart with Neon Glow
+                Box(
+                    modifier = Modifier.size(136.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val strokeWidth = 18.dp.toPx()
+                        val glowStrokeWidth = 26.dp.toPx()
+                        val startAngleOffset = -90f
+
+                        if (totalPrioritized == 0) {
+                            drawArc(
+                                color = Color(0xFFE2E8F0),
+                                startAngle = 0f,
+                                sweepAngle = 360f,
+                                useCenter = false,
+                                style = Stroke(width = strokeWidth)
+                            )
+                        } else {
+                            // 1. Neon Radiant Bloom Layer (Outer soft glowing strokes)
+                            if (currentImpSweep > 0f) {
+                                drawArc(
+                                    color = Color(0xFFEF4444).copy(alpha = glowAlpha),
+                                    startAngle = startAngleOffset,
+                                    sweepAngle = currentImpSweep,
+                                    useCenter = false,
+                                    style = Stroke(width = glowStrokeWidth)
+                                )
+                            }
+                            if (currentNorSweep > 0f) {
+                                drawArc(
+                                    color = Color(0xFFF59E0B).copy(alpha = glowAlpha),
+                                    startAngle = startAngleOffset + currentImpSweep,
+                                    sweepAngle = currentNorSweep,
+                                    useCenter = false,
+                                    style = Stroke(width = glowStrokeWidth)
+                                )
+                            }
+                            if (currentLowSweep > 0f) {
+                                drawArc(
+                                    color = Color(0xFF10B981).copy(alpha = glowAlpha),
+                                    startAngle = startAngleOffset + currentImpSweep + currentNorSweep,
+                                    sweepAngle = currentLowSweep,
+                                    useCenter = false,
+                                    style = Stroke(width = glowStrokeWidth)
+                                )
+                            }
+
+                            // 2. Crisp Solid Segments
+                            if (currentImpSweep > 0f) {
+                                drawArc(
+                                    color = Color(0xFFEF4444),
+                                    startAngle = startAngleOffset,
+                                    sweepAngle = currentImpSweep,
+                                    useCenter = false,
+                                    style = Stroke(width = strokeWidth)
+                                )
+                            }
+                            if (currentNorSweep > 0f) {
+                                drawArc(
+                                    color = Color(0xFFF59E0B),
+                                    startAngle = startAngleOffset + currentImpSweep,
+                                    sweepAngle = currentNorSweep,
+                                    useCenter = false,
+                                    style = Stroke(width = strokeWidth)
+                                )
+                            }
+                            if (currentLowSweep > 0f) {
+                                drawArc(
+                                    color = Color(0xFF10B981),
+                                    startAngle = startAngleOffset + currentImpSweep + currentNorSweep,
+                                    sweepAngle = currentLowSweep,
+                                    useCenter = false,
+                                    style = Stroke(width = strokeWidth)
+                                )
+                            }
+                        }
+                    }
+
+                    // Center Marked Count
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.graphicsLayer {
+                            scaleX = centerScale
+                            scaleY = centerScale
+                        }
+                    ) {
+                        Text(
+                            text = totalPrioritized.toString(),
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0F172A)
+                        )
+                        Text(
+                            text = "Marked",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF64748B)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(22.dp))
+
+                // Legend List Matching Reference Design
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    DistributionLegendRow(
+                        dotColor = Color(0xFFEF4444),
+                        label = "Important",
+                        countText = "$importantCount files",
+                        onClick = { onPriorityClick(PriorityLevel.IMPORTANT) }
+                    )
+                    DistributionLegendRow(
+                        dotColor = Color(0xFFF59E0B),
+                        label = "Normal",
+                        countText = "$normalCount files",
+                        onClick = { onPriorityClick(PriorityLevel.NORMAL) }
+                    )
+                    DistributionLegendRow(
+                        dotColor = Color(0xFF10B981),
+                        label = "Low",
+                        countText = "$lowCount files",
+                        onClick = { onPriorityClick(PriorityLevel.LOW) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun DistributionLegendRow(
     dotColor: Color,
     label: String,
     countText: String,
+    onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "legendScale"
+    )
+
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -1629,23 +1825,30 @@ fun DistributionLegendRow(
         ) {
             Box(
                 modifier = Modifier
-                    .size(10.dp)
+                    .size(13.dp)
+                    .shadow(
+                        elevation = 3.dp,
+                        shape = CircleShape,
+                        ambientColor = dotColor.copy(alpha = 0.5f),
+                        spotColor = dotColor.copy(alpha = 0.5f)
+                    )
                     .clip(CircleShape)
                     .background(dotColor)
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = label,
-                fontSize = 13.sp,
-                color = Color(0xFF4B5563)
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF0F172A)
             )
         }
 
         Text(
             text = countText,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF111827)
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF0F172A)
         )
     }
 }

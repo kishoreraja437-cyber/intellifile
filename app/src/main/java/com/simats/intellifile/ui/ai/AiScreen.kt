@@ -47,6 +47,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -111,7 +112,7 @@ fun AiScreen(
 
     val defaultGreeting = remember {
         ChatMessage.Ai(
-            text = "Hello! I am your IntelliFile AI Assistant powered by RAG and Small Language Models.\n\nAsk me anything about your uploaded documents, search for files, request summaries, or ask general questions.",
+            text = "I am IntelliFile AI and I help to find the files",
             files = emptyList()
         )
     }
@@ -204,11 +205,13 @@ fun AiScreen(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
+            val hasActiveConversation = currentConversationId != null || chatMessages.any { it is ChatMessage.User }
+
             // Header with Back Button and Robot Avatar
             AiHeader(
                 onBackClick = onBackClick,
                 onViewSearchHistoryClick = onViewSearchHistoryClick,
-                hasActiveConversation = currentConversationId != null,
+                hasActiveConversation = hasActiveConversation,
                 onNewChatClick = handleStartNewChat,
                 onMicClick = onMicClick
             )
@@ -680,12 +683,33 @@ fun AiHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            IconButton(onClick = onBackClick) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = MaterialTheme.colorScheme.onBackground
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBackClick) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+
+                if (hasActiveConversation) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    AiFluidOrbAvatar(size = 36.dp, iconSize = 20.dp)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "IntelliFile AI",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Text(
+                            text = "I help to find the files",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                        )
+                    }
+                }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -725,36 +749,39 @@ fun AiHeader(
             }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        if (!hasActiveConversation) {
+            Spacer(modifier = Modifier.height(4.dp))
 
-        AiFluidOrbAvatar(
-            size = 90.dp,
-            iconSize = 48.dp
-        )
+            AiFluidOrbAvatar(
+                size = 90.dp,
+                iconSize = 48.dp
+            )
 
-        Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-        Text(
-            text = "IntelliFile AI",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
+            Text(
+                text = "IntelliFile AI",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
 
-        Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-        Text(
-            text = "Find your files with natural language",
-            fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-        )
+            Text(
+                text = "I am IntelliFile AI and I help to find the files",
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center
+            )
 
-        Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-        ViewSearchHistoryButton(
-            onClick = onViewSearchHistoryClick,
-            modifier = Modifier.padding(horizontal = 20.dp)
-        )
+            ViewSearchHistoryButton(
+                onClick = onViewSearchHistoryClick,
+                modifier = Modifier.padding(horizontal = 20.dp)
+            )
+        }
     }
 }
 
