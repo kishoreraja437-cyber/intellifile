@@ -58,6 +58,18 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -154,6 +166,18 @@ fun AiScreen(
         mutableStateListOf<ChatMessage>(defaultGreeting)
     }
 
+    // Keyboard (IME) Visibility & WindowInsets Detection
+    val density = LocalDensity.current
+    val imeBottom = WindowInsets.ime.getBottom(density)
+    val isKeyboardOpen = imeBottom > 0
+
+    // Automatically scroll to the latest chat message when new messages arrive or when keyboard opens
+    LaunchedEffect(chatMessages.size, isKeyboardOpen) {
+        if (chatMessages.isNotEmpty()) {
+            listState.animateScrollToItem(chatMessages.size - 1)
+        }
+    }
+
     // Load conversation when an initialConversationId is provided or changes
     LaunchedEffect(initialConversationId) {
         currentConversationId = initialConversationId
@@ -230,7 +254,10 @@ fun AiScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
+                .then(if (!isKeyboardOpen) Modifier.navigationBarsPadding() else Modifier)
         ) {
             val hasActiveConversation = currentConversationId != null || chatMessages.any { it is ChatMessage.User }
 
@@ -1302,6 +1329,8 @@ fun AiBottomInputBar(
     onMicClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val focusRequester = remember { FocusRequester() }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1309,6 +1338,12 @@ fun AiBottomInputBar(
             .height(56.dp)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                focusRequester.requestFocus()
+            }
             .padding(horizontal = 14.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1328,7 +1363,26 @@ fun AiBottomInputBar(
                 onValueChange = onQueryChange,
                 singleLine = true,
                 enabled = !isThinking,
-                modifier = Modifier.fillMaxWidth()
+                textStyle = TextStyle(
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Send,
+                    capitalization = KeyboardCapitalization.Sentences
+                ),
+                keyboardActions = KeyboardActions(
+                    onSend = {
+                        if (query.isNotBlank() && !isThinking) {
+                            onSendClick()
+                        }
+                    }
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester)
             )
         }
 
