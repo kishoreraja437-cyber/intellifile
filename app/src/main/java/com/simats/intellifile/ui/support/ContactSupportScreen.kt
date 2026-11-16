@@ -153,6 +153,7 @@ fun ContactSupportScreen(
                 badgeColor = Color(0xFFEF4444),
                 title = "Report a Problem",
                 subtitle = "Let us know about any bugs\nor issues you face.",
+                showArrow = false,
                 onClick = {
                     selectedSubject = "Bug Report / Issue"
                 }
@@ -166,6 +167,7 @@ fun ContactSupportScreen(
                 badgeColor = Color(0xFF3B82F6),
                 title = "FAQs & Help Center",
                 subtitle = "Find answers to common questions.",
+                showArrow = false,
                 onClick = onFaqClick
             )
 
@@ -364,6 +366,7 @@ fun SupportChannelCard(
     title: String,
     subtitle: String,
     onClick: () -> Unit,
+    showArrow: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -413,14 +416,16 @@ fun SupportChannelCard(
             )
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
+        if (showArrow) {
+            Spacer(modifier = Modifier.width(8.dp))
 
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = "Open",
-            tint = Color(0xFF9CA3AF),
-            modifier = Modifier.size(18.dp)
-        )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "Open",
+                tint = Color(0xFF9CA3AF),
+                modifier = Modifier.size(18.dp)
+            )
+        }
     }
 }
 

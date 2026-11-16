@@ -22,6 +22,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,14 +36,26 @@ import androidx.compose.ui.unit.sp
 
 data class FaqItem(
     val question: String,
-    val answer: String = "You can select files or folders directly during onboarding or from the file manager."
+    val answer: String
 )
 
 val faqList = listOf(
-    FaqItem("How do I select files or folders?"),
-    FaqItem("How are AI priorities determined?"),
-    FaqItem("Where are my saved documents?"),
-    FaqItem("How does IntelliFile protect my privacy?")
+    FaqItem(
+        question = "How do I select files or folders?",
+        answer = "You can browse and select files directly from the My Files screen under the Device Files tab or AI Vault tab. You can also grant storage access to choose specific folders, or use the in-app document picker to view, filter, and organize your files."
+    ),
+    FaqItem(
+        question = "How are AI priorities determined?",
+        answer = "IntelliFile automatically classifies documents into Important, Normal, or Low priority using our hybrid AI system, which analyzes document content, filenames, and deadlines. You can also manually customize or change any file's priority at any time from the File Details or Set Priority screen."
+    ),
+    FaqItem(
+        question = "Where are my saved documents?",
+        answer = "All bookmarked files and documents with assigned priorities can be found in the Saved screen, accessible via the bottom navigation bar. You can easily filter them by priority (Important, Normal, Low) or search through them instantly."
+    ),
+    FaqItem(
+        question = "How does IntelliFile protect my privacy?",
+        answer = "IntelliFile processes your local files securely on-device and uses end-to-end encrypted connections when syncing with the cloud AI Vault. Your personal documents are never shared with third parties or used to train public AI models."
+    )
 )
 
 @Composable
@@ -260,11 +274,16 @@ fun FaqCardItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 90f else 0f,
+        label = "faqArrowRotation"
+    )
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(16.dp))
+            .border(1.dp, if (isExpanded) Color(0xFF6C5CE7).copy(alpha = 0.5f) else Color(0xFFE5E7EB), RoundedCornerShape(16.dp))
             .background(Color.White)
             .clickable { onClick() }
             .padding(16.dp)
@@ -286,9 +305,13 @@ fun FaqCardItem(
 
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = "Expand",
+                contentDescription = if (isExpanded) "Collapse" else "Expand",
                 tint = Color(0xFF6C5CE7),
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier
+                    .size(18.dp)
+                    .graphicsLayer {
+                        rotationZ = arrowRotation
+                    }
             )
         }
 
@@ -297,8 +320,8 @@ fun FaqCardItem(
             Text(
                 text = faq.answer,
                 fontSize = 13.sp,
-                color = Color(0xFF6B7280),
-                lineHeight = 18.sp
+                color = Color(0xFF4B5563),
+                lineHeight = 19.sp
             )
         }
     }
