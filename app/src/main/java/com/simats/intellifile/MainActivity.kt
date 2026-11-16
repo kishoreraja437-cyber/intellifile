@@ -1,5 +1,14 @@
 package com.simats.intellifile
 
+import android.content.ContentResolver
+import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.util.Log
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import com.simats.intellifile.ui.viewer.DocumentViewerScreen
+
 import android.Manifest
 import android.app.Application
 import android.content.pm.PackageManager
@@ -152,7 +161,142 @@ class AppNavigationViewModel(application: Application) : AndroidViewModel(applic
     }
 }
 
+data class ExternalDocument(
+    val uri: Uri,
+    val fileName: String,
+    val fileSize: String,
+    val fileFormat: String,
+    val mimeType: String
+)
+
 class MainActivity : ComponentActivity() {
+
+    private val externalDocumentState = MutableStateFlow<ExternalDocument?>(null)
+    private var isOpenedFromExternalIntent = false
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingIntent(intent, isInitial = false)
+    }
+
+    private fun handleIncomingIntent(intent: Intent?, isInitial: Boolean) {
+        if (intent == null) return
+        val action = intent.action
+        val uri = intent.data
+
+        if ((action == Intent.ACTION_VIEW || action == Intent.ACTION_EDIT) && uri != null) {
+            try {
+                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (ignored: Exception) {}
+
+            val resolved = resolveExternalDocument(uri, intent.type)
+            if (resolved != null) {
+                if (isInitial) {
+                    isOpenedFromExternalIntent = true
+                }
+                externalDocumentState.value = resolved
+            }
+        }
+    }
+
+    private fun resolveExternalDocument(uri: Uri, incomingMime: String?): ExternalDocument {
+        var name: String? = null
+        var sizeBytes: Long = -1L
+
+        // Query OpenableColumns via ContentResolver
+        if (uri.scheme?.equals(ContentResolver.SCHEME_CONTENT, ignoreCase = true) == true) {
+            try {
+                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex != -1 && !cursor.isNull(nameIndex)) {
+                            name = cursor.getString(nameIndex)
+                        }
+                        val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                        if (sizeIndex != -1 && !cursor.isNull(sizeIndex)) {
+                            sizeBytes = cursor.getLong(sizeIndex)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("MainActivity", "Failed querying OpenableColumns for " + uri + ": " + e.message)
+            }
+        }
+
+        // Check file scheme fallback
+        if (name.isNullOrBlank() && uri.scheme?.equals(ContentResolver.SCHEME_FILE, ignoreCase = true) == true) {
+            try {
+                val file = java.io.File(uri.path ?: "")
+                name = file.name
+                if (file.exists()) {
+                    sizeBytes = file.length()
+                }
+            } catch (ignored: Exception) {}
+        }
+
+        // Fallback to URI last path segment
+        if (name.isNullOrBlank()) {
+            name = uri.lastPathSegment?.substringAfterLast('/')
+        }
+
+        // Resolve MIME type
+        val resolvedMime = incomingMime ?: try {
+            contentResolver.getType(uri)
+        } catch (ignored: Exception) {
+            null
+        } ?: ""
+
+        // Resolve extension and format
+        var ext = name?.substringAfterLast('.', "")?.uppercase()?.trim() ?: ""
+        if (ext.isBlank() || ext.length > 5) {
+            ext = when {
+                resolvedMime.contains("pdf", ignoreCase = true) -> "PDF"
+                resolvedMime.contains("word", ignoreCase = true) || resolvedMime.contains("msword", ignoreCase = true) -> "DOCX"
+                resolvedMime.contains("excel", ignoreCase = true) || resolvedMime.contains("spreadsheet", ignoreCase = true) -> "XLSX"
+                resolvedMime.contains("powerpoint", ignoreCase = true) || resolvedMime.contains("presentation", ignoreCase = true) -> "PPTX"
+                resolvedMime.contains("csv", ignoreCase = true) -> "CSV"
+                resolvedMime.contains("text", ignoreCase = true) -> "TXT"
+                else -> "PDF"
+            }
+        }
+
+        val effectiveFileName = when {
+            name.isNullOrBlank() -> "Document." + ext
+            !name!!.contains('.') -> name + "." + ext
+            else -> name!!
+        }
+
+        val formattedSize = if (sizeBytes > 0) {
+            android.text.format.Formatter.formatFileSize(this, sizeBytes)
+        } else {
+            "Unknown size"
+        }
+
+        val effectiveMime = resolvedMime.ifBlank {
+            when (ext) {
+                "PDF" -> "application/pdf"
+                "DOCX" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                "DOC" -> "application/msword"
+                "XLSX" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                "XLS" -> "application/vnd.ms-excel"
+                "PPTX" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                "PPT" -> "application/vnd.ms-powerpoint"
+                "CSV" -> "text/csv"
+                "TXT" -> "text/plain"
+                else -> "application/octet-stream"
+            }
+        }
+
+        return ExternalDocument(
+            uri = uri,
+            fileName = effectiveFileName,
+            fileSize = formattedSize,
+            fileFormat = ext,
+            mimeType = effectiveMime
+        )
+    }
+
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -167,6 +311,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleIncomingIntent(intent, isInitial = true)
         enableEdgeToEdge()
 
         // Ensure status bar is always shown and configured
@@ -204,7 +349,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-        } catch (_: Exception) {}
+        } catch (ignored: Exception) {}
 
         setContent {
             val appNavViewModel: AppNavigationViewModel = viewModel()
@@ -254,6 +399,47 @@ class MainActivity : ComponentActivity() {
                             .fillMaxSize()
                             .statusBarsPadding()
                     ) {
+                        val externalDoc by externalDocumentState.collectAsState()
+
+                        if (externalDoc != null) {
+                            val doc = externalDoc!!
+                            BackHandler {
+                                val shouldFinish = isOpenedFromExternalIntent && isTaskRoot
+                                externalDocumentState.value = null
+                                isOpenedFromExternalIntent = false
+                                if (shouldFinish) {
+                                    finish()
+                                }
+                            }
+
+                            DocumentViewerScreen(
+                                fileName = doc.fileName,
+                                filePath = if (doc.uri.scheme?.equals(ContentResolver.SCHEME_FILE, ignoreCase = true) == true) doc.uri.path ?: "" else "",
+                                fileUriString = doc.uri.toString(),
+                                fileFormat = doc.fileFormat,
+                                totalPages = 1,
+                                onBackClick = {
+                                    val shouldFinish = isOpenedFromExternalIntent && isTaskRoot
+                                    externalDocumentState.value = null
+                                    isOpenedFromExternalIntent = false
+                                    if (shouldFinish) {
+                                        finish()
+                                    }
+                                },
+                                onShareClick = {
+                                    try {
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = doc.mimeType.ifBlank { "application/octet-stream" }
+                                            putExtra(Intent.EXTRA_STREAM, doc.uri)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        startActivity(Intent.createChooser(shareIntent, "Share " + doc.fileName))
+                                    } catch (e: Exception) {
+                                        Toast.makeText(this@MainActivity, "Failed to share document", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            )
+                        } else {
                     AnimatedContent(
                         targetState = currentScreen,
                         transitionSpec = {
@@ -326,6 +512,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
+                        }
                     }
                 }
             }

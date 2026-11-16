@@ -142,9 +142,47 @@ fun DocumentViewerScreen(
         if (isPdf) {
             withContext(Dispatchers.IO) {
                 try {
-                    val pfd = LocalFileManager.getFileDescriptor(context, fileUriString, filePath)
+                    var pfd = LocalFileManager.getFileDescriptor(context, fileUriString, filePath)
+                    var renderer: PdfRenderer? = null
                     if (pfd != null) {
-                        val renderer = PdfRenderer(pfd)
+                        try {
+                            renderer = PdfRenderer(pfd)
+                        } catch (seekEx: Exception) {
+                            // Direct descriptor was not seekable (e.g. pipe from WhatsApp/Gmail/Drive).
+                            // Fallback: create seekable cache copy.
+                            try { pfd.close() } catch (ignored: Exception) {}
+                            pfd = null
+
+                            val tempFile = java.io.File(context.cacheDir, "temp_view_${System.currentTimeMillis()}.pdf")
+                            LocalFileManager.openInputStream(context, fileUriString, filePath)?.use { input ->
+                                tempFile.outputStream().use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                            if (tempFile.exists() && tempFile.length() > 0) {
+                                val fallbackPfd = ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)
+                                renderer = PdfRenderer(fallbackPfd)
+                                pfd = fallbackPfd
+                            } else {
+                                throw seekEx
+                            }
+                        }
+                    } else {
+                        // Stream copy fallback if pfd was null initially
+                        val tempFile = java.io.File(context.cacheDir, "temp_view_${System.currentTimeMillis()}.pdf")
+                        LocalFileManager.openInputStream(context, fileUriString, filePath)?.use { input ->
+                            tempFile.outputStream().use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                        if (tempFile.exists() && tempFile.length() > 0) {
+                            val fallbackPfd = ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)
+                            renderer = PdfRenderer(fallbackPfd)
+                            pfd = fallbackPfd
+                        }
+                    }
+
+                    if (renderer != null && pfd != null) {
                         parcelFileDescriptor = pfd
                         pdfRenderer = renderer
                         totalUnitsCount = renderer.pageCount.coerceAtLeast(1)
