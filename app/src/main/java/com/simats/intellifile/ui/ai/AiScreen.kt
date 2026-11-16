@@ -36,6 +36,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -121,6 +130,11 @@ fun AiScreen(
     var currentConversationId by remember { mutableStateOf(initialConversationId) }
     var isThinking by remember { mutableStateOf(false) }
     var isLoadingConversation by remember { mutableStateOf(false) }
+
+    val clipboardManager = LocalClipboardManager.current
+    var editingMessageIndex by remember { mutableStateOf<Int?>(null) }
+    var editingMessageText by remember { mutableStateOf("") }
+    var isEditingUserMessage by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
     val chatMessages = remember {
@@ -243,17 +257,37 @@ fun AiScreen(
                             }
                         }
                     } else {
-                        items(chatMessages) { message ->
+                        itemsIndexed(chatMessages) { index, message ->
                             when (message) {
                                 is ChatMessage.User -> {
-                                    UserMessageBubble(text = message.text)
+                                    UserMessageBubble(
+                                        text = message.text,
+                                        onCopy = {
+                                            clipboardManager.setText(AnnotatedString(message.text))
+                                            Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                                        },
+                                        onEdit = {
+                                            editingMessageIndex = index
+                                            editingMessageText = message.text
+                                            isEditingUserMessage = true
+                                        }
+                                    )
                                 }
                                 is ChatMessage.Ai -> {
                                     AiMessageBubble(
                                         text = message.text,
                                         files = message.files,
                                         isLoading = message.isLoading,
-                                        onOpenFile = onOpenFile
+                                        onOpenFile = onOpenFile,
+                                        onCopy = {
+                                            clipboardManager.setText(AnnotatedString(message.text))
+                                            Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                                        },
+                                        onEdit = {
+                                            editingMessageIndex = index
+                                            editingMessageText = message.text
+                                            isEditingUserMessage = false
+                                        }
                                     )
                                 }
                             }
@@ -269,6 +303,98 @@ fun AiScreen(
                         .padding(top = 8.dp, bottom = 8.dp)
                 )
             }
+
+        // Edit Message Dialog
+        if (editingMessageIndex != null) {
+            AlertDialog(
+                onDismissRequest = { editingMessageIndex = null },
+                title = {
+                    Text(
+                        text = if (isEditingUserMessage) "Edit Message" else "Edit AI Response",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = editingMessageText,
+                            onValueChange = { editingMessageText = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 100.dp, max = 220.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            placeholder = { Text("Enter message text...") }
+                        )
+
+                        if (isEditingUserMessage) {
+                            TextButton(
+                                onClick = {
+                                    promptInput = editingMessageText
+                                    editingMessageIndex = null
+                                    Toast.makeText(context, "Loaded into input bar", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.align(Alignment.End)
+                            ) {
+                                Text("Copy to Input Bar", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (isEditingUserMessage) {
+                            Button(
+                                onClick = {
+                                    val idx = editingMessageIndex ?: return@Button
+                                    val newText = editingMessageText.trim()
+                                    if (newText.isNotBlank()) {
+                                        chatMessages[idx] = ChatMessage.User(newText)
+                                        editingMessageIndex = null
+                                        promptInput = newText
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Save & Ask AI", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        TextButton(
+                            onClick = {
+                                val idx = editingMessageIndex ?: return@TextButton
+                                val newText = editingMessageText.trim()
+                                if (newText.isNotBlank()) {
+                                    val msg = chatMessages[idx]
+                                    chatMessages[idx] = when (msg) {
+                                        is ChatMessage.User -> ChatMessage.User(newText)
+                                        is ChatMessage.Ai -> msg.copy(text = newText)
+                                    }
+                                }
+                                editingMessageIndex = null
+                                Toast.makeText(context, "Message updated", Toast.LENGTH_SHORT).show()
+                            }
+                        ) {
+                            Text("Save", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { editingMessageIndex = null }) {
+                        Text("Cancel", fontSize = 13.sp)
+                    }
+                },
+                shape = RoundedCornerShape(20.dp)
+            )
+        }
 
             // Bottom Prompt Bar
             AiBottomInputBar(
@@ -832,6 +958,8 @@ fun ViewSearchHistoryButton(
 @Composable
 fun UserMessageBubble(
     text: String,
+    onCopy: () -> Unit = {},
+    onEdit: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val enterAnim = remember { Animatable(0.92f) }
@@ -843,11 +971,11 @@ fun UserMessageBubble(
         alphaAnim.animateTo(1.0f, tween(200, easing = FastOutSlowInEasing))
     }
 
-    Row(
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .graphicsLayer(scaleX = enterAnim.value, scaleY = enterAnim.value, alpha = alphaAnim.value),
-        horizontalArrangement = Arrangement.End
+        horizontalAlignment = Alignment.End
     ) {
         Box(
             modifier = Modifier
@@ -869,6 +997,25 @@ fun UserMessageBubble(
                 fontWeight = FontWeight.Medium
             )
         }
+
+        // Action Options: Copy & Edit
+        Row(
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(top = 4.dp, end = 4.dp)
+        ) {
+            MessageActionButton(
+                icon = Icons.Outlined.ContentCopy,
+                label = "Copy",
+                onClick = onCopy
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            MessageActionButton(
+                icon = Icons.Outlined.Edit,
+                label = "Edit",
+                onClick = onEdit
+            )
+        }
     }
 }
 
@@ -878,6 +1025,8 @@ fun AiMessageBubble(
     files: List<AiFileResult>,
     isLoading: Boolean = false,
     onOpenFile: (AiFileResult) -> Unit,
+    onCopy: () -> Unit = {},
+    onEdit: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val enterAnim = remember { Animatable(0.92f) }
@@ -904,7 +1053,8 @@ fun AiMessageBubble(
         modifier = modifier
             .fillMaxWidth()
             .graphicsLayer(scaleX = enterAnim.value, scaleY = enterAnim.value, alpha = alphaAnim.value),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.Start
     ) {
         Box(
             modifier = Modifier
@@ -951,6 +1101,57 @@ fun AiMessageBubble(
                 AiFileCard(file = file, onOpenClick = { onOpenFile(file) })
             }
         }
+
+        // Action Options: Copy & Edit (only when response is ready)
+        if (!isLoading) {
+            Row(
+                horizontalArrangement = Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 2.dp, start = 4.dp)
+            ) {
+                MessageActionButton(
+                    icon = Icons.Outlined.ContentCopy,
+                    label = "Copy",
+                    onClick = onCopy
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                MessageActionButton(
+                    icon = Icons.Outlined.Edit,
+                    label = "Edit",
+                    onClick = onEdit
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MessageActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+            modifier = Modifier.size(13.dp)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
+        )
     }
 }
 
