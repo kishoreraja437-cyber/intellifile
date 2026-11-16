@@ -1017,8 +1017,21 @@ fun AiMessageBubble(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         horizontalAlignment = Alignment.Start
     ) {
+        // Dusky Aqua AI Response Bubble
         Box(
             modifier = Modifier
+                .shadow(
+                    elevation = 3.dp,
+                    shape = RoundedCornerShape(
+                        topStart = 20.dp,
+                        topEnd = 20.dp,
+                        bottomStart = 4.dp,
+                        bottomEnd = 20.dp
+                    ),
+                    ambientColor = Color(0xFF207583).copy(alpha = 0.15f),
+                    spotColor = Color(0xFF207583).copy(alpha = 0.22f),
+                    clip = false
+                )
                 .clip(
                     RoundedCornerShape(
                         topStart = 20.dp,
@@ -1027,7 +1040,24 @@ fun AiMessageBubble(
                         bottomEnd = 20.dp
                     )
                 )
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFE6F5F5), // Soft Dusky Aqua Light
+                            Color(0xFFD6EFEF)  // Dusky Aqua Surface
+                        )
+                    )
+                )
+                .border(
+                    width = 1.2.dp,
+                    color = Color(0xFFA4D8DD).copy(alpha = 0.85f),
+                    shape = RoundedCornerShape(
+                        topStart = 20.dp,
+                        topEnd = 20.dp,
+                        bottomStart = 4.dp,
+                        bottomEnd = 20.dp
+                    )
+                )
                 .padding(horizontal = 18.dp, vertical = 12.dp)
         ) {
             if (isLoading) {
@@ -1038,21 +1068,22 @@ fun AiMessageBubble(
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.primary
+                        color = Color(0xFF207583)
                     )
                     Text(
                         text = text,
                         fontSize = 13.sp,
                         fontStyle = FontStyle.Italic,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = thinkingAlpha)
+                        color = Color(0xFF207583).copy(alpha = thinkingAlpha)
                     )
                 }
             } else {
                 Text(
                     text = text,
                     fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontWeight = FontWeight.Medium
+                    color = Color(0xFF0F3E46), // Deep Dusky Aqua for sharp, beautiful legibility
+                    fontWeight = FontWeight.Medium,
+                    lineHeight = 20.sp
                 )
             }
         }
@@ -1073,13 +1104,15 @@ fun AiMessageBubble(
                 MessageActionButton(
                     icon = Icons.Outlined.ContentCopy,
                     label = "Copy",
-                    onClick = onCopy
+                    onClick = onCopy,
+                    tintColor = Color(0xFF207583) // Dusky Aqua
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 MessageActionButton(
                     icon = Icons.Outlined.Edit,
                     label = "Edit",
-                    onClick = onEdit
+                    onClick = onEdit,
+                    tintColor = Color(0xFF207583) // Dusky Aqua
                 )
             }
         }
@@ -1091,8 +1124,10 @@ fun MessageActionButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    tintColor: Color? = null
 ) {
+    val activeColor = tintColor ?: MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
@@ -1103,7 +1138,7 @@ fun MessageActionButton(
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+            tint = activeColor.copy(alpha = 0.75f),
             modifier = Modifier.size(13.dp)
         )
         Spacer(modifier = Modifier.width(4.dp))
@@ -1111,7 +1146,7 @@ fun MessageActionButton(
             text = label,
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
+            color = activeColor
         )
     }
 }
@@ -1446,15 +1481,28 @@ fun AnimatedEditMessageDialog(
         label = "sparkleScale"
     )
 
+    // Dusky Aqua Dynamic Living Holographic Border
     val livingBorderBrush = Brush.linearGradient(
-        colors = listOf(
-            Color(0xFF6366F1), // Indigo
-            Color(0xFF8B5CF6), // Purple
-            Color(0xFFEC4899), // Pink
-            Color(0xFF06B6D4), // Cyan
-            Color(0xFF3B82F6), // Blue
-            Color(0xFF6366F1)  // Loop
-        ),
+        colors = if (!isUserMessage) {
+            listOf(
+                Color(0xFF134E57), // Deep Dusky Aqua
+                Color(0xFF207583), // Primary Dusky Aqua
+                Color(0xFF3293A0), // Medium Dusky Aqua
+                Color(0xFF5AB3BE), // Light Dusky Aqua
+                Color(0xFF7DD3DC), // Aqua Highlight
+                Color(0xFF207583), // Primary Dusky Aqua
+                Color(0xFF134E57)  // Loop
+            )
+        } else {
+            listOf(
+                Color(0xFF6366F1),
+                Color(0xFF8B5CF6),
+                Color(0xFFEC4899),
+                Color(0xFF06B6D4),
+                Color(0xFF3B82F6),
+                Color(0xFF6366F1)
+            )
+        },
         start = Offset(borderOffset, 0f),
         end = Offset(borderOffset + 450f, 650f)
     )
@@ -1493,8 +1541,8 @@ fun AnimatedEditMessageDialog(
                     .shadow(
                         elevation = 22.dp,
                         shape = RoundedCornerShape(26.dp),
-                        ambientColor = Color(0xFF8B5CF6).copy(alpha = glowAlpha),
-                        spotColor = Color(0xFF6366F1).copy(alpha = glowAlpha),
+                        ambientColor = if (!isUserMessage) Color(0xFF207583).copy(alpha = glowAlpha) else Color(0xFF8B5CF6).copy(alpha = glowAlpha),
+                        spotColor = if (!isUserMessage) Color(0xFF134E57).copy(alpha = glowAlpha) else Color(0xFF6366F1).copy(alpha = glowAlpha),
                         clip = false
                     )
                     .clip(RoundedCornerShape(26.dp))
@@ -1535,7 +1583,7 @@ fun AnimatedEditMessageDialog(
                     // Subtle radial specular gleam in top-left
                     val cornerGleam = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFC7D2FE).copy(alpha = 0.35f),
+                            (if (!isUserMessage) Color(0xFFA4D8DD) else Color(0xFFC7D2FE)).copy(alpha = 0.40f),
                             Color.Transparent
                         ),
                         center = Offset(30.dp.toPx(), 30.dp.toPx()),
@@ -1561,24 +1609,32 @@ fun AnimatedEditMessageDialog(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            // Pulsating AI 3D Orb Icon
+                            // Pulsating AI 3D Orb Icon with Dusky Aqua
                             Box(
                                 modifier = Modifier
                                     .size(44.dp)
                                     .shadow(
                                         elevation = 8.dp,
                                         shape = CircleShape,
-                                        ambientColor = Color(0xFF7C3AED).copy(alpha = 0.45f),
-                                        spotColor = Color(0xFF4F46E5).copy(alpha = 0.55f)
+                                        ambientColor = if (!isUserMessage) Color(0xFF207583).copy(alpha = 0.45f) else Color(0xFF7C3AED).copy(alpha = 0.45f),
+                                        spotColor = if (!isUserMessage) Color(0xFF134E57).copy(alpha = 0.55f) else Color(0xFF4F46E5).copy(alpha = 0.55f)
                                     )
                                     .clip(CircleShape)
                                     .background(
                                         brush = Brush.radialGradient(
-                                            colors = listOf(
-                                                Color(0xFF8B5CF6),
-                                                Color(0xFF6366F1),
-                                                Color(0xFF4F46E5)
-                                            )
+                                            colors = if (!isUserMessage) {
+                                                listOf(
+                                                    Color(0xFF459CA9), // Dusky Aqua light
+                                                    Color(0xFF207583), // Dusky Aqua primary
+                                                    Color(0xFF134E57)  // Dusky Aqua deep
+                                                )
+                                            } else {
+                                                listOf(
+                                                    Color(0xFF8B5CF6),
+                                                    Color(0xFF6366F1),
+                                                    Color(0xFF4F46E5)
+                                                )
+                                            }
                                         )
                                     )
                                     .border(1.5.dp, Color.White.copy(alpha = 0.75f), CircleShape),
@@ -1610,14 +1666,14 @@ fun AnimatedEditMessageDialog(
                                     Box(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(6.dp))
-                                            .background(Color(0xFFEEF2FF))
+                                            .background(if (!isUserMessage) Color(0xFFE0F4F4) else Color(0xFFEEF2FF))
                                             .padding(horizontal = 6.dp, vertical = 2.dp)
                                     ) {
                                         Text(
                                             text = if (isUserMessage) "User Query" else "AI Smart Edit",
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF4F46E5)
+                                            color = if (!isUserMessage) Color(0xFF134E57) else Color(0xFF4F46E5)
                                         )
                                     }
                                 }
@@ -1649,15 +1705,15 @@ fun AnimatedEditMessageDialog(
                         }
                     }
 
-                    // Text Editor Box with Modern Rounded Container
+                    // Text Editor Box with Dusky Aqua Styling
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFFF8FAFC))
+                            .background(if (!isUserMessage) Color(0xFFF0F9F9) else Color(0xFFF8FAFC))
                             .border(
                                 width = 1.2.dp,
-                                color = Color(0xFFCBD5E1),
+                                color = if (!isUserMessage) Color(0xFFA4D8DD) else Color(0xFFCBD5E1),
                                 shape = RoundedCornerShape(16.dp)
                             )
                             .padding(14.dp)
@@ -1677,11 +1733,11 @@ fun AnimatedEditMessageDialog(
                                 )
                             },
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color(0xFF6366F1),
-                                unfocusedBorderColor = Color(0xFFE2E8F0),
+                                focusedBorderColor = if (!isUserMessage) Color(0xFF207583) else Color(0xFF6366F1),
+                                unfocusedBorderColor = if (!isUserMessage) Color(0xFFBFE3E6) else Color(0xFFE2E8F0),
                                 focusedContainerColor = Color.White,
                                 unfocusedContainerColor = Color.White,
-                                cursorColor = Color(0xFF6366F1)
+                                cursorColor = if (!isUserMessage) Color(0xFF207583) else Color(0xFF6366F1)
                             )
                         )
 
@@ -1735,7 +1791,7 @@ fun AnimatedEditMessageDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFFEEF2FF))
+                                .background(if (!isUserMessage) Color(0xFFE0F4F4) else Color(0xFFEEF2FF))
                                 .clickable { onCopyToInputBar(currentText) }
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -1744,7 +1800,7 @@ fun AnimatedEditMessageDialog(
                             Icon(
                                 imageVector = Icons.Outlined.ContentCopy,
                                 contentDescription = null,
-                                tint = Color(0xFF4F46E5),
+                                tint = if (!isUserMessage) Color(0xFF207583) else Color(0xFF4F46E5),
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
@@ -1752,7 +1808,7 @@ fun AnimatedEditMessageDialog(
                                 text = "Copy text to input bar",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF4F46E5)
+                                color = if (!isUserMessage) Color(0xFF134E57) else Color(0xFF4F46E5)
                             )
                         }
                     }
@@ -1790,7 +1846,11 @@ fun AnimatedEditMessageDialog(
                             onClick = { onSave(currentText) },
                             modifier = Modifier.weight(1f),
                             isPrimary = true,
-                            gradientColors = listOf(Color(0xFF6366F1), Color(0xFF8B5CF6))
+                            gradientColors = if (!isUserMessage) {
+                                listOf(Color(0xFF207583), Color(0xFF134E57)) // Dusky Aqua Primary
+                            } else {
+                                listOf(Color(0xFF6366F1), Color(0xFF8B5CF6))
+                            }
                         )
                     }
                 }
