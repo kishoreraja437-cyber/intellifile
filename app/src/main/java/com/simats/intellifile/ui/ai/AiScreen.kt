@@ -45,6 +45,19 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -304,95 +317,43 @@ fun AiScreen(
                 )
             }
 
-        // Edit Message Dialog
+        // Animated Edit Message Dialog with Living AI Aura & Spring Physics
         if (editingMessageIndex != null) {
-            AlertDialog(
-                onDismissRequest = { editingMessageIndex = null },
-                title = {
-                    Text(
-                        text = if (isEditingUserMessage) "Edit Message" else "Edit AI Response",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+            val targetIdx = editingMessageIndex!!
+            AnimatedEditMessageDialog(
+                isOpen = true,
+                isUserMessage = isEditingUserMessage,
+                initialText = editingMessageText,
+                onDismiss = { editingMessageIndex = null },
+                onSave = { newText ->
+                    if (newText.isNotBlank()) {
+                        val msg = chatMessages[targetIdx]
+                        chatMessages[targetIdx] = when (msg) {
+                            is ChatMessage.User -> ChatMessage.User(newText)
+                            is ChatMessage.Ai -> msg.copy(text = newText)
+                        }
+                        Toast.makeText(
+                            context,
+                            if (isEditingUserMessage) "Message updated" else "AI response updated",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    editingMessageIndex = null
                 },
-                text = {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = editingMessageText,
-                            onValueChange = { editingMessageText = it },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 100.dp, max = 220.dp),
-                            shape = RoundedCornerShape(14.dp),
-                            placeholder = { Text("Enter message text...") }
-                        )
-
-                        if (isEditingUserMessage) {
-                            TextButton(
-                                onClick = {
-                                    promptInput = editingMessageText
-                                    editingMessageIndex = null
-                                    Toast.makeText(context, "Loaded into input bar", Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier.align(Alignment.End)
-                            ) {
-                                Text("Copy to Input Bar", fontSize = 12.sp)
-                            }
+                onSaveAndAskAi = if (isEditingUserMessage) {
+                    { newText ->
+                        if (newText.isNotBlank()) {
+                            chatMessages[targetIdx] = ChatMessage.User(newText)
+                            promptInput = newText
+                            editingMessageIndex = null
                         }
                     }
-                },
-                confirmButton = {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (isEditingUserMessage) {
-                            Button(
-                                onClick = {
-                                    val idx = editingMessageIndex ?: return@Button
-                                    val newText = editingMessageText.trim()
-                                    if (newText.isNotBlank()) {
-                                        chatMessages[idx] = ChatMessage.User(newText)
-                                        editingMessageIndex = null
-                                        promptInput = newText
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Text("Save & Ask AI", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        TextButton(
-                            onClick = {
-                                val idx = editingMessageIndex ?: return@TextButton
-                                val newText = editingMessageText.trim()
-                                if (newText.isNotBlank()) {
-                                    val msg = chatMessages[idx]
-                                    chatMessages[idx] = when (msg) {
-                                        is ChatMessage.User -> ChatMessage.User(newText)
-                                        is ChatMessage.Ai -> msg.copy(text = newText)
-                                    }
-                                }
-                                editingMessageIndex = null
-                                Toast.makeText(context, "Message updated", Toast.LENGTH_SHORT).show()
-                            }
-                        ) {
-                            Text("Save", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { editingMessageIndex = null }) {
-                        Text("Cancel", fontSize = 13.sp)
-                    }
-                },
-                shape = RoundedCornerShape(20.dp)
+                } else null,
+                onCopyToInputBar = { textToCopy ->
+                    promptInput = textToCopy
+                    editingMessageIndex = null
+                    Toast.makeText(context, "Loaded into input bar", Toast.LENGTH_SHORT).show()
+                }
             )
         }
 
@@ -1383,4 +1344,532 @@ fun AiBottomInputBar(
 @Composable
 fun AiScreenPreview() {
     AiScreen()
+}
+
+
+@Composable
+fun AnimatedEditMessageDialog(
+    isOpen: Boolean,
+    isUserMessage: Boolean,
+    initialText: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+    onSaveAndAskAi: ((String) -> Unit)? = null,
+    onCopyToInputBar: ((String) -> Unit)? = null
+) {
+    if (!isOpen) return
+
+    var currentText by remember(initialText) { mutableStateOf(initialText) }
+
+    // Spring Entrance Animation
+    val scaleAnim = remember { Animatable(0.72f) }
+    val alphaAnim = remember { Animatable(0f) }
+    val offsetYAnim = remember { Animatable(36f) }
+
+    LaunchedEffect(Unit) {
+        launch {
+            scaleAnim.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            )
+        }
+        launch {
+            alphaAnim.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+            )
+        }
+        launch {
+            offsetYAnim.animateTo(
+                targetValue = 0f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            )
+        }
+    }
+
+    // Ambient AI Living Glow & Shimmer Transitions
+    val infiniteTransition = rememberInfiniteTransition(label = "aiDialogPulse")
+
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.30f,
+        targetValue = 0.65f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glowAlpha"
+    )
+
+    val borderOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1200f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(4500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "borderOffset"
+    )
+
+    val shimmerProgress by infiniteTransition.animateFloat(
+        initialValue = -0.4f,
+        targetValue = 1.4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmerProgress"
+    )
+
+    val sparkleRotation by infiniteTransition.animateFloat(
+        initialValue = -14f,
+        targetValue = 14f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "sparkleRotation"
+    )
+
+    val sparkleScale by infiniteTransition.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.10f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1300, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "sparkleScale"
+    )
+
+    val livingBorderBrush = Brush.linearGradient(
+        colors = listOf(
+            Color(0xFF6366F1), // Indigo
+            Color(0xFF8B5CF6), // Purple
+            Color(0xFFEC4899), // Pink
+            Color(0xFF06B6D4), // Cyan
+            Color(0xFF3B82F6), // Blue
+            Color(0xFF6366F1)  // Loop
+        ),
+        start = Offset(borderOffset, 0f),
+        end = Offset(borderOffset + 450f, 650f)
+    )
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true
+        )
+    ) {
+        // Scrim with smooth fade
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.58f * alphaAnim.value))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss
+                )
+                .padding(horizontal = 20.dp, vertical = 28.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            // Main Animated Dialog Card
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        scaleX = scaleAnim.value
+                        scaleY = scaleAnim.value
+                        alpha = alphaAnim.value
+                        translationY = offsetYAnim.value
+                    }
+                    .shadow(
+                        elevation = 22.dp,
+                        shape = RoundedCornerShape(26.dp),
+                        ambientColor = Color(0xFF8B5CF6).copy(alpha = glowAlpha),
+                        spotColor = Color(0xFF6366F1).copy(alpha = glowAlpha),
+                        clip = false
+                    )
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFFFFFFFF),
+                                Color(0xFFFBFBFE),
+                                Color(0xFFF8FAFC)
+                            )
+                        )
+                    )
+                    .border(
+                        width = 2.dp,
+                        brush = livingBorderBrush,
+                        shape = RoundedCornerShape(26.dp)
+                    )
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {} // Consume click
+                    )
+            ) {
+                // Specular Light Sheen Overlay
+                Canvas(modifier = Modifier.matchParentSize()) {
+                    val sweepX = size.width * shimmerProgress
+                    val sweepBrush = Brush.linearGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.White.copy(alpha = 0.40f),
+                            Color.Transparent
+                        ),
+                        start = Offset(sweepX - 80.dp.toPx(), 0f),
+                        end = Offset(sweepX + 80.dp.toPx(), size.height * 0.7f)
+                    )
+                    drawRect(brush = sweepBrush)
+
+                    // Subtle radial specular gleam in top-left
+                    val cornerGleam = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFFC7D2FE).copy(alpha = 0.35f),
+                            Color.Transparent
+                        ),
+                        center = Offset(30.dp.toPx(), 30.dp.toPx()),
+                        radius = 130.dp.toPx()
+                    )
+                    drawRect(brush = cornerGleam)
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(22.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Header: Animated AI Sparkle Orb, Title, and Close Button
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            // Pulsating AI 3D Orb Icon
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .shadow(
+                                        elevation = 8.dp,
+                                        shape = CircleShape,
+                                        ambientColor = Color(0xFF7C3AED).copy(alpha = 0.45f),
+                                        spotColor = Color(0xFF4F46E5).copy(alpha = 0.55f)
+                                    )
+                                    .clip(CircleShape)
+                                    .background(
+                                        brush = Brush.radialGradient(
+                                            colors = listOf(
+                                                Color(0xFF8B5CF6),
+                                                Color(0xFF6366F1),
+                                                Color(0xFF4F46E5)
+                                            )
+                                        )
+                                    )
+                                    .border(1.5.dp, Color.White.copy(alpha = 0.75f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = "AI Sparkle",
+                                    tint = Color.White,
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .graphicsLayer {
+                                            rotationZ = sparkleRotation
+                                            scaleX = sparkleScale
+                                            scaleY = sparkleScale
+                                        }
+                                )
+                            }
+
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (isUserMessage) "Edit Prompt" else "Edit AI Response",
+                                        fontSize = 17.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF0F172A)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color(0xFFEEF2FF))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = if (isUserMessage) "User Query" else "AI Smart Edit",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF4F46E5)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = if (isUserMessage) "Refine your prompt to update search results" else "Personalize or fix this AI response in chat",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF64748B),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        // Close Button with smooth hover effect
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFF1F5F9))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = Color(0xFF64748B),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    // Text Editor Box with Modern Rounded Container
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFFF8FAFC))
+                            .border(
+                                width = 1.2.dp,
+                                color = Color(0xFFCBD5E1),
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                            .padding(14.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = currentText,
+                            onValueChange = { currentText = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 110.dp, max = 220.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            placeholder = {
+                                Text(
+                                    text = if (isUserMessage) "Type your prompt here..." else "Type or refine AI response text...",
+                                    color = Color(0xFF94A3B8),
+                                    fontSize = 14.sp
+                                )
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF6366F1),
+                                unfocusedBorderColor = Color(0xFFE2E8F0),
+                                focusedContainerColor = Color.White,
+                                unfocusedContainerColor = Color.White,
+                                cursorColor = Color(0xFF6366F1)
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Character & Word Counter Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val wordCount = remember(currentText) {
+                                currentText.trim().split(Regex("\\s+")).count { it.isNotBlank() }
+                            }
+                            Text(
+                                text = "${currentText.length} characters · $wordCount words",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF64748B)
+                            )
+
+                            if (currentText.isNotEmpty()) {
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable { currentText = "" }
+                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Clear,
+                                        contentDescription = "Clear",
+                                        tint = Color(0xFF94A3B8),
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "Clear",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF94A3B8)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Auxiliary Action: Copy to Input Bar
+                    if (onCopyToInputBar != null) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFFEEF2FF))
+                                .clickable { onCopyToInputBar(currentText) }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.ContentCopy,
+                                contentDescription = null,
+                                tint = Color(0xFF4F46E5),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Copy text to input bar",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF4F46E5)
+                            )
+                        }
+                    }
+
+                    // Action Buttons Row (Cancel, Save & Ask AI, Save)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Cancel Button
+                        DialogBouncyButton(
+                            text = "Cancel",
+                            onClick = onDismiss,
+                            modifier = Modifier.weight(0.85f),
+                            isPrimary = false
+                        )
+
+                        // Save & Ask AI (User prompt)
+                        if (isUserMessage && onSaveAndAskAi != null) {
+                            DialogBouncyButton(
+                                text = "Save & Ask",
+                                icon = Icons.Default.AutoAwesome,
+                                onClick = { onSaveAndAskAi(currentText) },
+                                modifier = Modifier.weight(1.15f),
+                                isPrimary = true,
+                                gradientColors = listOf(Color(0xFF2563EB), Color(0xFF4F46E5))
+                            )
+                        }
+
+                        // Save Button
+                        DialogBouncyButton(
+                            text = "Save",
+                            icon = Icons.Default.Check,
+                            onClick = { onSave(currentText) },
+                            modifier = Modifier.weight(1f),
+                            isPrimary = true,
+                            gradientColors = listOf(Color(0xFF6366F1), Color(0xFF8B5CF6))
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DialogBouncyButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    isPrimary: Boolean = false,
+    gradientColors: List<Color> = listOf(Color(0xFF6366F1), Color(0xFF8B5CF6))
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.93f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "btnScale"
+    )
+
+    Box(
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(RoundedCornerShape(12.dp))
+            .then(
+                if (isPrimary) {
+                    Modifier
+                        .shadow(
+                            elevation = 6.dp,
+                            shape = RoundedCornerShape(12.dp),
+                            ambientColor = gradientColors.first().copy(alpha = 0.4f),
+                            spotColor = gradientColors.last().copy(alpha = 0.5f)
+                        )
+                        .background(brush = Brush.horizontalGradient(gradientColors))
+                } else {
+                    Modifier
+                        .background(Color(0xFFF1F5F9))
+                        .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
+                }
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+            .padding(vertical = 12.dp, horizontal = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (isPrimary) Color.White else Color(0xFF475569),
+                    modifier = Modifier.size(15.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+            Text(
+                text = text,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isPrimary) Color.White else Color(0xFF475569),
+                maxLines = 1
+            )
+        }
+    }
 }
