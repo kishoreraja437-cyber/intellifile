@@ -464,17 +464,16 @@ fun HomeScreen(
 
 
     val filteredFiles = remember(searchQuery, allRecentFiles) {
-
         if (searchQuery.isBlank()) {
-
             allRecentFiles.take(10)
-
         } else {
-
-            allRecentFiles.filter { it.title.contains(searchQuery, ignoreCase = true) }
-
+            val q = searchQuery.trim()
+            val isPptQuery = q.equals("ppt", ignoreCase = true) || q.equals("pptx", ignoreCase = true) || q.equals("powerpoint", ignoreCase = true) || q.equals("presentation", ignoreCase = true)
+            allRecentFiles.filter {
+                it.title.contains(q, ignoreCase = true) ||
+                (isPptQuery && (it.format.equals("PPT", ignoreCase = true) || it.format.equals("PPTX", ignoreCase = true)))
+            }
         }
-
     }
 
 
@@ -832,81 +831,47 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
-
-                            text = "IntelliFile reads document files (PDF, Word, Excel, Text) locally on your phone.",
-
+                            text = "IntelliFile reads document files (PDF, Word, PowerPoint, Excel, Text) locally on your phone.",
                             fontSize = 13.sp,
-
                             color = Color(0xFF6B7280),
-
                             textAlign = TextAlign.Center
-
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
 
                         if (!hasStoragePermission) {
-
                             Button(
-
                                 onClick = { requestStoragePermission() },
-
                                 shape = RoundedCornerShape(12.dp),
-
                                 colors = ButtonDefaults.buttonColors(
-
                                     containerColor = Color(0xFF55A9AF)
-
                                 )
-
                             ) {
-
                                 Icon(
-
                                     imageVector = Icons.Default.Folder,
-
                                     contentDescription = null,
-
                                     modifier = Modifier.size(18.dp)
-
                                 )
-
                                 Spacer(modifier = Modifier.width(6.dp))
-
                                 Text("Grant Document Access", fontSize = 14.sp)
-
                             }
-
                         } else {
-
                             Button(
-
                                 onClick = {
-
                                     openDocLauncher.launch(
-
                                         arrayOf(
-
                                             "application/pdf",
-
                                             "application/msword",
-
                                             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-
                                             "application/vnd.ms-excel",
-
                                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-
+                                            "application/vnd.ms-powerpoint",
+                                            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
                                             "text/plain",
-
                                             "text/csv"
-
                                         )
-
                                     )
-
                                 },
-
                                 shape = RoundedCornerShape(12.dp),
 
                                 colors = ButtonDefaults.buttonColors(

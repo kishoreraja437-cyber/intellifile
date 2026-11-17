@@ -1,6 +1,7 @@
 package com.simats.intellifile.data.manager
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import java.io.ByteArrayInputStream
@@ -44,13 +45,50 @@ sealed class ParsedDocumentContent {
     ) : ParsedDocumentContent()
 }
 
+data class SlideImage(
+    val fileName: String,
+    val bytes: ByteArray,
+    val title: String = ""
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as SlideImage
+        if (fileName != other.fileName) return false
+        if (!bytes.contentEquals(other.bytes)) return false
+        return title == other.title
+    }
+
+    override fun hashCode(): Int {
+        var result = fileName.hashCode()
+        result = 31 * result + bytes.contentHashCode()
+        result = 31 * result + title.hashCode()
+        return result
+    }
+}
+
+data class SlideTable(
+    val rows: List<List<String>>
+)
+
+data class SlideSection(
+    val heading: String = "",
+    val content: String = "",
+    val items: List<String> = emptyList(),
+    val isCallout: Boolean = false
+)
+
 data class SlideData(
     val slideNumber: Int,
     val title: String,
-    val points: List<String>,
+    val subtitle: String = "",
+    val points: List<String> = emptyList(),
+    val tables: List<SlideTable> = emptyList(),
+    val images: List<SlideImage> = emptyList(),
+    val sections: List<SlideSection> = emptyList(),
     val rawContent: String = "",
     val notes: String = "",
-    val imageBytes: ByteArray? = null
+    val imageBytes: ByteArray? = images.firstOrNull()?.bytes
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -58,23 +96,26 @@ data class SlideData(
         other as SlideData
         if (slideNumber != other.slideNumber) return false
         if (title != other.title) return false
+        if (subtitle != other.subtitle) return false
         if (points != other.points) return false
+        if (tables != other.tables) return false
+        if (images != other.images) return false
+        if (sections != other.sections) return false
         if (rawContent != other.rawContent) return false
         if (notes != other.notes) return false
-        if (imageBytes != null) {
-            if (other.imageBytes == null) return false
-            if (!imageBytes.contentEquals(other.imageBytes)) return false
-        } else if (other.imageBytes != null) return false
         return true
     }
 
     override fun hashCode(): Int {
         var result = slideNumber
         result = 31 * result + title.hashCode()
+        result = 31 * result + subtitle.hashCode()
         result = 31 * result + points.hashCode()
+        result = 31 * result + tables.hashCode()
+        result = 31 * result + images.hashCode()
+        result = 31 * result + sections.hashCode()
         result = 31 * result + rawContent.hashCode()
         result = 31 * result + notes.hashCode()
-        result = 31 * result + (imageBytes?.contentHashCode() ?: 0)
         return result
     }
 }
@@ -368,7 +409,6 @@ object DocumentContentParser {
         val slideNumRegex = Regex("(?i)slide([0-9]+)\\.xml$")
         val notesNumRegex = Regex("(?i)notesSlide([0-9]+)\\.xml$")
         val relsNumRegex = Regex("(?i)slide([0-9]+)\\.xml\\.rels$")
-        val relsTargetRegex = Regex("(?i)Target=\"(?:\\.\\./)?media/([^\"]+)\"")
 
         val slideXmlMap = mutableMapOf<Int, String>()
         val slideNotesMap = mutableMapOf<Int, String>()
@@ -386,7 +426,10 @@ object DocumentContentParser {
             val isSlide = lowerName.contains("slides/") && lowerName.endsWith(".xml") && !lowerName.contains("_rels")
             val isNotes = lowerName.contains("notesslides/") && lowerName.endsWith(".xml") && !lowerName.contains("_rels")
             val isRels = lowerName.contains("slides/_rels/") && lowerName.endsWith(".xml.rels")
-            val isMedia = lowerName.contains("ppt/media/") || lowerName.contains("media/")
+            val isMedia = lowerName.contains("ppt/media/") || lowerName.contains("media/") ||
+                    lowerName.endsWith(".png") || lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") ||
+                    lowerName.endsWith(".webp") || lowerName.endsWith(".gif") || lowerName.endsWith(".bmp") ||
+                    lowerName.endsWith(".svg")
 
             if (isSlide || isNotes || isRels || isMedia) {
                 val out = ByteArrayOutputStream()
@@ -423,37 +466,165 @@ object DocumentContentParser {
                 } else if (isMedia) {
                     val simpleName = entryName.substringAfterLast('/').lowercase()
                     mediaMap[simpleName] = entryBytes
+                    mediaMap[lowerName] = entryBytes
                 }
             }
             entry = zip.nextEntry
         }
 
-        val orderedXmls = mutableListOf<String>()
+        val orderedSlideEntries = mutableListOf<Pair<Int, String>>()
         if (slideXmlMap.isNotEmpty()) {
             val sortedKeys = slideXmlMap.keys.sorted()
             for (k in sortedKeys) {
-                orderedXmls.add(slideXmlMap[k]!!)
+                orderedSlideEntries.add(Pair(k, slideXmlMap[k]!!))
             }
         }
-        orderedXmls.addAll(unnumberedSlides)
+        for (un in unnumberedSlides) {
+            orderedSlideEntries.add(Pair(-1, un))
+        }
 
-        if (orderedXmls.isEmpty()) {
+        if (orderedSlideEntries.isEmpty()) {
             return null
         }
 
         val slides = mutableListOf<SlideData>()
-        for ((index, xml) in orderedXmls.withIndex()) {
+        for ((index, pair) in orderedSlideEntries.withIndex()) {
             val slideNumber = index + 1
-            val relsXml = slideRelsMap[slideNumber]
-            var slideImageBytes: ByteArray? = null
+            val origNum = pair.first
+            val xml = pair.second
+            val relsXml = if (origNum != -1) slideRelsMap[origNum] else slideRelsMap[slideNumber]
+
+            // 1. Extract ALL slide relationships mapping rId -> media file name
+            val relsTargetMap = mutableMapOf<String, String>()
             if (relsXml != null) {
-                val targetMatch = relsTargetRegex.find(relsXml)
-                if (targetMatch != null) {
-                    val imgFileName = targetMatch.groupValues[1].substringAfterLast('/').lowercase()
-                    slideImageBytes = mediaMap[imgFileName]
+                val relItemRegex = Regex("<Relationship\\s+([^>]+)/>", RegexOption.DOT_MATCHES_ALL)
+                val idAttrRegex = Regex("Id=\"([^\"]+)\"")
+                val targetAttrRegex = Regex("Target=\"([^\"]+)\"")
+                val typeAttrRegex = Regex("Type=\"([^\"]+)\"")
+
+                for (relItem in relItemRegex.findAll(relsXml)) {
+                    val attrs = relItem.groupValues[1]
+                    val rId = idAttrRegex.find(attrs)?.groupValues?.get(1)
+                    val target = targetAttrRegex.find(attrs)?.groupValues?.get(1)
+                    val type = typeAttrRegex.find(attrs)?.groupValues?.get(1)?.lowercase() ?: ""
+
+                    if (rId != null && target != null) {
+                        val fileName = target.substringAfterLast('/').lowercase()
+                        val isImageOrDiagram = type.contains("image") ||
+                                type.contains("diagram") ||
+                                type.contains("chart") ||
+                                target.contains("media/") ||
+                                fileName.endsWith(".png") ||
+                                fileName.endsWith(".jpg") ||
+                                fileName.endsWith(".jpeg") ||
+                                fileName.endsWith(".webp") ||
+                                fileName.endsWith(".gif") ||
+                                fileName.endsWith(".bmp") ||
+                                fileName.endsWith(".svg")
+
+                        if (isImageOrDiagram) {
+                            relsTargetMap[rId] = fileName
+                        }
+                    }
                 }
             }
-            val slideData = parseSlideXml(xml, slideNumber, fileName, slideNotesMap[slideNumber], slideImageBytes)
+
+            // 2. Extract diagram/picture titles & descriptions from slide XML
+            val rIdToTitleMap = mutableMapOf<String, String>()
+            val picRegex = Regex("<p:pic[ >](.*?)</p:pic>", RegexOption.DOT_MATCHES_ALL)
+            val nameRegex = Regex("name=\"([^\"]+)\"")
+            val descrRegex = Regex("descr=\"([^\"]+)\"")
+            val blipRegex = Regex("<a:blip[^>]*r:embed=\"([^\"]+)\"")
+
+            for (picMatch in picRegex.findAll(xml)) {
+                val picXml = picMatch.value
+                val rId = blipRegex.find(picXml)?.groupValues?.get(1)
+                if (rId != null) {
+                    val name = nameRegex.find(picXml)?.groupValues?.get(1)?.trim() ?: ""
+                    val descr = descrRegex.find(picXml)?.groupValues?.get(1)?.trim() ?: ""
+                    val title = when {
+                        descr.isNotBlank() && name.isNotBlank() -> "$name - $descr"
+                        descr.isNotBlank() -> descr
+                        name.isNotBlank() && !name.startsWith("Picture ") -> name
+                        else -> ""
+                    }
+                    if (title.isNotBlank()) rIdToTitleMap[rId] = title
+                }
+            }
+
+            val gfRegex = Regex("<p:graphicFrame[ >](.*?)</p:graphicFrame>", RegexOption.DOT_MATCHES_ALL)
+            for (gfMatch in gfRegex.findAll(xml)) {
+                val gfXml = gfMatch.value
+                val rId = blipRegex.find(gfXml)?.groupValues?.get(1)
+                if (rId != null) {
+                    val name = nameRegex.find(gfXml)?.groupValues?.get(1)?.trim() ?: ""
+                    val descr = descrRegex.find(gfXml)?.groupValues?.get(1)?.trim() ?: ""
+                    val title = when {
+                        descr.isNotBlank() -> descr
+                        name.isNotBlank() -> name
+                        else -> "Diagram"
+                    }
+                    rIdToTitleMap[rId] = title
+                }
+            }
+
+            // 3. Assemble ALL images and diagrams for this slide
+            val slideImages = mutableListOf<SlideImage>()
+            val addedFileNames = mutableSetOf<String>()
+
+            for (blipMatch in blipRegex.findAll(xml)) {
+                val rId = blipMatch.groupValues[1]
+                val imgFileName = relsTargetMap[rId]
+                if (imgFileName != null && mediaMap.containsKey(imgFileName) && !addedFileNames.contains(imgFileName)) {
+                    addedFileNames.add(imgFileName)
+                    val imgBytes = mediaMap[imgFileName]!!
+                    val customTitle = rIdToTitleMap[rId] ?: ""
+                    val isDiagram = imgFileName.contains("diagram") || imgFileName.contains("chart") || customTitle.contains("Diagram", ignoreCase = true)
+                    val defaultTitle = if (isDiagram) "Diagram ${slideImages.size + 1}" else "Visual ${slideImages.size + 1}"
+                    slideImages.add(
+                        SlideImage(
+                            fileName = imgFileName,
+                            bytes = imgBytes,
+                            title = if (customTitle.isNotBlank()) customTitle else defaultTitle
+                        )
+                    )
+                }
+            }
+
+            for ((rId, imgFileName) in relsTargetMap) {
+                if (mediaMap.containsKey(imgFileName) && !addedFileNames.contains(imgFileName)) {
+                    addedFileNames.add(imgFileName)
+                    val imgBytes = mediaMap[imgFileName]!!
+                    val customTitle = rIdToTitleMap[rId] ?: ""
+                    val isDiagram = imgFileName.contains("diagram") || imgFileName.contains("chart")
+                    val defaultTitle = if (isDiagram) "Diagram ${slideImages.size + 1}" else "Image ${slideImages.size + 1}"
+                    slideImages.add(
+                        SlideImage(
+                            fileName = imgFileName,
+                            bytes = imgBytes,
+                            title = if (customTitle.isNotBlank()) customTitle else defaultTitle
+                        )
+                    )
+                }
+            }
+
+            if (slideImages.isEmpty() && orderedSlideEntries.size == 1 && mediaMap.isNotEmpty()) {
+                for ((imgFileName, imgBytes) in mediaMap) {
+                    val simple = imgFileName.substringAfterLast('/')
+                    if (!addedFileNames.contains(simple)) {
+                        addedFileNames.add(simple)
+                        slideImages.add(
+                            SlideImage(
+                                fileName = simple,
+                                bytes = imgBytes,
+                                title = "Presentation Image ${slideImages.size + 1}"
+                            )
+                        )
+                    }
+                }
+            }
+
+            val slideData = parseSlideXml(xml, slideNumber, fileName, slideNotesMap[slideNumber], slideImages)
             slides.add(slideData)
         }
 
@@ -468,36 +639,66 @@ object DocumentContentParser {
         slideNumber: Int,
         defaultTitle: String,
         notesXml: String?,
-        imageBytes: ByteArray? = null
+        slideImages: List<SlideImage> = emptyList()
     ): SlideData {
-        val pRegex = Regex("<a:p[ >](.*?)</a:p>", RegexOption.DOT_MATCHES_ALL)
-        val tRegex = Regex("<a:t[^>]*>(.*?)</a:t>", RegexOption.DOT_MATCHES_ALL)
-        val brRegex = Regex("<a:br[^>]*/?>")
-        val titlePhRegex = Regex("<p:ph[^>]*type=\"(?:ctrTitle|title)\"|<p:ph[^>]*idx=\"0\"")
-        val spRegex = Regex("<p:sp[ >](.*?)</p:sp>", RegexOption.DOT_MATCHES_ALL)
+        // Broad namespace-tolerant regexes for OpenXML & DrawingML elements
+        val pRegex = Regex("<(?:[a-zA-Z0-9]+:)?p(?:\\s[^>]*)?>(.*?)</(?:[a-zA-Z0-9]+:)?p>", RegexOption.DOT_MATCHES_ALL)
+        val tRegex = Regex("<(?:[a-zA-Z0-9]+:)?t(?:\\s[^>]*)?>(.*?)</(?:[a-zA-Z0-9]+:)?t>", RegexOption.DOT_MATCHES_ALL)
+        val brRegex = Regex("<(?:[a-zA-Z0-9]+:)?br(?:\\s[^>]*)?/?>")
+        val titlePhRegex = Regex("<(?:[a-zA-Z0-9]+:)?ph[^>]*type=\"(?:ctrTitle|title)\"|<(?:[a-zA-Z0-9]+:)?ph[^>]*idx=\"0\"")
+        val subtitlePhRegex = Regex("<(?:[a-zA-Z0-9]+:)?ph[^>]*type=\"subTitle\"")
+        val spRegex = Regex("<(?:[a-zA-Z0-9]+:)?sp(?:\\s[^>]*)?>(.*?)</(?:[a-zA-Z0-9]+:)?sp>", RegexOption.DOT_MATCHES_ALL)
 
         val titleParagraphs = mutableListOf<String>()
+        val subtitleParagraphs = mutableListOf<String>()
         val allParagraphs = mutableListOf<String>()
+        val sections = mutableListOf<SlideSection>()
 
-        // 1. Scan for explicit title in title shape
+        // 1. Scan shapes for title, subtitle, and structured sections
         for (shapeMatch in spRegex.findAll(xml)) {
             val shapeXml = shapeMatch.value
             val isTitle = titlePhRegex.containsMatchIn(shapeXml)
-            if (isTitle) {
-                for (pMatch in pRegex.findAll(shapeXml)) {
-                    val withBreaks = brRegex.replace(pMatch.value, "\n")
-                    val text = tRegex.findAll(withBreaks).map { unescapeXml(it.groupValues[1]) }.joinToString("").trim()
-                    if (text.isNotBlank()) {
-                        text.split("\n").map { it.trim() }.filter { it.isNotBlank() }.forEach {
-                            titleParagraphs.add(it)
-                        }
+            val isSubtitle = subtitlePhRegex.containsMatchIn(shapeXml)
+
+            val shapeParas = mutableListOf<String>()
+            for (pMatch in pRegex.findAll(shapeXml)) {
+                val withBreaks = brRegex.replace(pMatch.value, "\n")
+                val text = tRegex.findAll(withBreaks).map { unescapeXml(it.groupValues[1]) }.joinToString("").trim()
+                if (text.isNotBlank()) {
+                    text.split("\n").map { it.trim() }.filter { it.isNotBlank() }.forEach {
+                        shapeParas.add(it)
                     }
+                }
+            }
+
+            if (isTitle) {
+                titleParagraphs.addAll(shapeParas)
+            } else if (isSubtitle) {
+                subtitleParagraphs.addAll(shapeParas)
+            } else if (shapeParas.isNotEmpty()) {
+                val nameMatch = Regex("name=\"([^\"]+)\"").find(shapeXml)?.groupValues?.get(1) ?: ""
+                val isCallout = nameMatch.contains("callout", ignoreCase = true) ||
+                        nameMatch.contains("card", ignoreCase = true) ||
+                        nameMatch.contains("quote", ignoreCase = true) ||
+                        nameMatch.contains("summary", ignoreCase = true) ||
+                        nameMatch.contains("highlight", ignoreCase = true)
+
+                if (isCallout) {
+                    val head = if (shapeParas.size > 1 && shapeParas.first().length <= 60) shapeParas.first() else ""
+                    val bodyItems = if (head.isNotBlank()) shapeParas.drop(1) else shapeParas
+                    sections.add(
+                        SlideSection(
+                            heading = head,
+                            content = bodyItems.joinToString("\n"),
+                            items = bodyItems,
+                            isCallout = true
+                        )
+                    )
                 }
             }
         }
 
         // 2. Scan ALL DrawingML paragraphs across the entire slide XML
-        // This captures text in shapes, text boxes, graphic frames, tables, group shapes, SmartArt
         for (pMatch in pRegex.findAll(xml)) {
             val withBreaks = brRegex.replace(pMatch.value, "\n")
             val text = tRegex.findAll(withBreaks).map { unescapeXml(it.groupValues[1]) }.joinToString("").trim()
@@ -508,54 +709,66 @@ object DocumentContentParser {
             }
         }
 
-        // 3. Scan for table rows if present
-        val trRegex = Regex("<a:tr[ >](.*?)</a:tr>", RegexOption.DOT_MATCHES_ALL)
-        val tcRegex = Regex("<a:tc[ >](.*?)</a:tc>", RegexOption.DOT_MATCHES_ALL)
-        val tableRows = mutableListOf<String>()
-        for (tr in trRegex.findAll(xml)) {
-            val cellTexts = tcRegex.findAll(tr.value).map { tc ->
-                tRegex.findAll(tc.value).map { unescapeXml(it.groupValues[1]) }.joinToString("").trim()
-            }.filter { it.isNotBlank() }.toList()
-
-            if (cellTexts.isNotEmpty()) {
-                tableRows.add(cellTexts.joinToString("  |  "))
+        // Fallback: If pRegex missed because of non-standard tags, scan direct <t> elements
+        if (allParagraphs.isEmpty()) {
+            for (tMatch in tRegex.findAll(xml)) {
+                val text = unescapeXml(tMatch.groupValues[1]).trim()
+                if (text.isNotBlank()) {
+                    allParagraphs.add(text)
+                }
             }
         }
 
-        // 4. Determine Title and Content Points
-        val title: String
+        // 3. Scan for structured tables
+        val trRegex = Regex("<(?:[a-zA-Z0-9]+:)?tr(?:\\s[^>]*)?>(.*?)</(?:[a-zA-Z0-9]+:)?tr>", RegexOption.DOT_MATCHES_ALL)
+        val tcRegex = Regex("<(?:[a-zA-Z0-9]+:)?tc(?:\\s[^>]*)?>(.*?)</(?:[a-zA-Z0-9]+:)?tc>", RegexOption.DOT_MATCHES_ALL)
+        val tblRegex = Regex("<(?:[a-zA-Z0-9]+:)?tbl(?:\\s[^>]*)?>(.*?)</(?:[a-zA-Z0-9]+:)?tbl>", RegexOption.DOT_MATCHES_ALL)
+        val tables = mutableListOf<SlideTable>()
+        for (tbl in tblRegex.findAll(xml)) {
+            val tblRows = mutableListOf<List<String>>()
+            for (tr in trRegex.findAll(tbl.value)) {
+                val cellTexts = tcRegex.findAll(tr.value).map { tc ->
+                    tRegex.findAll(tc.value).map { unescapeXml(it.groupValues[1]) }.joinToString(" ").trim()
+                }.toList()
+                if (cellTexts.any { it.isNotBlank() }) {
+                    tblRows.add(cellTexts)
+                }
+            }
+            if (tblRows.isNotEmpty()) {
+                tables.add(SlideTable(rows = tblRows))
+            }
+        }
+
+        // 4. Determine Title, Subtitle, and Content Points
+        val title = when {
+            titleParagraphs.isNotEmpty() -> titleParagraphs.first()
+            allParagraphs.isNotEmpty() -> allParagraphs.first()
+            else -> "Slide $slideNumber"
+        }
+
+        val subtitle = when {
+            subtitleParagraphs.isNotEmpty() -> subtitleParagraphs.joinToString(" • ")
+            titleParagraphs.size > 1 -> titleParagraphs.drop(1).first()
+            else -> ""
+        }
+
         val points = mutableListOf<String>()
-
-        if (titleParagraphs.isNotEmpty()) {
-            title = titleParagraphs.first()
-            if (titleParagraphs.size > 1) {
-                points.addAll(titleParagraphs.drop(1))
-            }
-            var skippedTitle = false
-            for (p in allParagraphs) {
-                if (!skippedTitle && p == title) {
-                    skippedTitle = true
-                    continue
-                }
-                if (!points.contains(p)) {
-                    points.add(p)
-                }
-            }
-        } else if (allParagraphs.isNotEmpty()) {
-            title = allParagraphs.first()
-            if (allParagraphs.size > 1) {
-                points.addAll(allParagraphs.drop(1))
-            } else {
-                points.add(allParagraphs.first())
-            }
-        } else {
-            title = "Slide $slideNumber"
+        val skipItems = mutableSetOf(title)
+        if (subtitle.isNotBlank()) skipItems.add(subtitle)
+        sections.forEach { sec ->
+            if (sec.heading.isNotBlank()) skipItems.add(sec.heading)
+            skipItems.addAll(sec.items)
         }
 
-        for (tRow in tableRows) {
-            if (!points.contains(tRow)) {
-                points.add(tRow)
+        for (p in allParagraphs) {
+            if (!skipItems.contains(p) && !points.contains(p)) {
+                points.add(p)
             }
+        }
+
+        // If no points were extracted but allParagraphs has multiple items, ensure they are shown
+        if (points.isEmpty() && sections.isEmpty() && allParagraphs.size > 1) {
+            points.addAll(allParagraphs.drop(1))
         }
 
         // 5. Notes extraction
@@ -572,21 +785,25 @@ object DocumentContentParser {
             extractedNotes = notesParagraphs.joinToString("\n")
         }
 
-        val rawFullContent = (listOf(title) + points).distinct().joinToString("\n\n")
+        val rawFullContent = (listOf(title, subtitle) + points).filter { it.isNotBlank() }.distinct().joinToString("\n\n")
 
         return SlideData(
             slideNumber = slideNumber,
             title = title,
+            subtitle = subtitle,
             points = points,
+            tables = tables,
+            images = slideImages,
+            sections = sections,
             rawContent = rawFullContent,
-            notes = extractedNotes,
-            imageBytes = imageBytes
+            notes = extractedNotes
         )
     }
 
     fun parsePpt(bytes: ByteArray, fileName: String): ParsedDocumentContent.Presentation? {
         if (bytes.size < 32) return null
 
+        val extractedImages = extractImagesFromPptBinary(bytes)
         val slideChunks = mutableListOf<MutableList<String>>()
         var currentSlide = mutableListOf<String>()
 
@@ -658,35 +875,49 @@ object DocumentContentParser {
         val allScanned = scanTextFromBinary(bytes)
         val finalSlides = mutableListOf<SlideData>()
 
-        if (slideChunks.isNotEmpty() && slideChunks.any { it.isNotEmpty() }) {
-            slideChunks.filter { it.isNotEmpty() }.forEachIndexed { idx, chunk ->
+        val rawSlideSources = when {
+            slideChunks.isNotEmpty() && slideChunks.any { it.isNotEmpty() } -> slideChunks.filter { it.isNotEmpty() }
+            allScanned.isNotEmpty() -> allScanned.chunked(4)
+            else -> emptyList()
+        }
+
+        if (rawSlideSources.isNotEmpty()) {
+            val totalSlideCount = rawSlideSources.size
+            rawSlideSources.forEachIndexed { idx, chunk ->
                 val slideNum = idx + 1
                 val title = chunk.first()
                 val points = if (chunk.size > 1) chunk.drop(1) else listOf(chunk.first())
+                val slideImagesForThis = if (extractedImages.isNotEmpty()) {
+                    if (totalSlideCount == 1) {
+                        extractedImages
+                    } else {
+                        val sliceSize = (extractedImages.size + totalSlideCount - 1) / totalSlideCount
+                        val from = (idx * sliceSize).coerceAtMost(extractedImages.size)
+                        val to = ((idx + 1) * sliceSize).coerceAtMost(extractedImages.size)
+                        if (from < to) extractedImages.subList(from, to) else emptyList()
+                    }
+                } else emptyList()
+
                 finalSlides.add(
                     SlideData(
                         slideNumber = slideNum,
                         title = if (title.length > 80) title.take(80) + "..." else title,
                         points = points,
+                        images = slideImagesForThis,
                         rawContent = chunk.joinToString("\n\n")
                     )
                 )
             }
-        } else if (allScanned.isNotEmpty()) {
-            val chunks = allScanned.chunked(4)
-            chunks.forEachIndexed { idx, chunk ->
-                val slideNum = idx + 1
-                val title = chunk.first()
-                val points = if (chunk.size > 1) chunk.drop(1) else listOf(chunk.first())
-                finalSlides.add(
-                    SlideData(
-                        slideNumber = slideNum,
-                        title = if (title.length > 80) title.take(80) + "..." else title,
-                        points = points,
-                        rawContent = chunk.joinToString("\n\n")
-                    )
+        } else if (extractedImages.isNotEmpty()) {
+            finalSlides.add(
+                SlideData(
+                    slideNumber = 1,
+                    title = fileName.substringBeforeLast('.'),
+                    points = listOf("Presentation Diagrams and Graphics"),
+                    images = extractedImages,
+                    rawContent = "Presentation Visuals"
                 )
-            }
+            )
         } else {
             return null
         }
@@ -713,13 +944,17 @@ object DocumentContentParser {
     private fun parsePresentationFallback(bytes: ByteArray, fileName: String): ParsedDocumentContent.Presentation {
         val textScan = scanTextFromBinary(bytes)
         val defaultTitle = fileName.substringBeforeLast('.').ifBlank { "Presentation" }
+        val extractedImages = extractImagesFromPptBinary(bytes)
 
         if (textScan.isNotEmpty()) {
-            val slides = textScan.chunked(4).mapIndexed { idx, chunk ->
+            val chunks = textScan.chunked(4)
+            val slides = chunks.mapIndexed { idx, chunk ->
+                val slideImgs = if (idx == 0) extractedImages else emptyList()
                 SlideData(
                     slideNumber = idx + 1,
                     title = if (idx == 0) defaultTitle else chunk.first(),
                     points = if (idx == 0) chunk else chunk.drop(1).ifEmpty { listOf(chunk.first()) },
+                    images = slideImgs,
                     rawContent = chunk.joinToString("\n\n")
                 )
             }
@@ -736,10 +971,116 @@ object DocumentContentParser {
                     slideNumber = 1,
                     title = defaultTitle,
                     points = listOf("PowerPoint presentation loaded. Content ready to present."),
+                    images = extractedImages,
                     rawContent = "Presentation loaded: $fileName"
                 )
             )
         )
+    }
+
+    fun extractImagesFromPptBinary(bytes: ByteArray): List<SlideImage> {
+        val images = mutableListOf<SlideImage>()
+        if (bytes.size < 64) return images
+
+        val pngMagic = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+        val pngIend = byteArrayOf(0x49, 0x45, 0x4E, 0x44, 0xAE.toByte(), 0x42, 0x60, 0x82.toByte())
+
+        var offset = 0
+        var imgIdx = 1
+        while (offset < bytes.size - 16 && images.size < 40) {
+            val pngStart = findBytes(bytes, pngMagic, offset)
+            if (pngStart == -1) break
+
+            val iendPos = findBytes(bytes, pngIend, pngStart + 8)
+            if (iendPos != -1 && iendPos - pngStart in 64..12_000_000) {
+                val pngEnd = iendPos + 8
+                val imgBytes = bytes.copyOfRange(pngStart, pngEnd)
+                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(imgBytes, 0, imgBytes.size, opts)
+                if (opts.outWidth > 20 && opts.outHeight > 20) {
+                    images.add(
+                        SlideImage(
+                            fileName = "diagram_$imgIdx.png",
+                            bytes = imgBytes,
+                            title = "Diagram $imgIdx (${opts.outWidth}×${opts.outHeight})"
+                        )
+                    )
+                    imgIdx++
+                }
+                offset = pngEnd
+            } else {
+                offset = pngStart + 8
+            }
+        }
+
+        offset = 0
+        while (offset < bytes.size - 16 && images.size < 40) {
+            val jpegStart = findJpegStart(bytes, offset)
+            if (jpegStart == -1) break
+
+            val jpegEnd = findJpegEnd(bytes, jpegStart + 3)
+            if (jpegEnd != -1 && jpegEnd - jpegStart in 128..12_000_000) {
+                val imgBytes = bytes.copyOfRange(jpegStart, jpegEnd)
+                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(imgBytes, 0, imgBytes.size, opts)
+                if (opts.outWidth > 20 && opts.outHeight > 20) {
+                    images.add(
+                        SlideImage(
+                            fileName = "figure_$imgIdx.jpg",
+                            bytes = imgBytes,
+                            title = "Figure $imgIdx (${opts.outWidth}×${opts.outHeight})"
+                        )
+                    )
+                    imgIdx++
+                }
+                offset = jpegEnd
+            } else {
+                offset = jpegStart + 3
+            }
+        }
+
+        return images
+    }
+
+    private fun findBytes(source: ByteArray, target: ByteArray, start: Int): Int {
+        if (target.isEmpty() || source.size < target.size) return -1
+        val max = source.size - target.size
+        for (i in start..max) {
+            var found = true
+            for (j in target.indices) {
+                if (source[i + j] != target[j]) {
+                    found = false
+                    break
+                }
+            }
+            if (found) return i
+        }
+        return -1
+    }
+
+    private fun findJpegStart(source: ByteArray, start: Int): Int {
+        val max = source.size - 3
+        for (i in start..max) {
+            if ((source[i].toInt() and 0xFF) == 0xFF &&
+                (source[i + 1].toInt() and 0xFF) == 0xD8 &&
+                (source[i + 2].toInt() and 0xFF) == 0xFF
+            ) {
+                return i
+            }
+        }
+        return -1
+    }
+
+    private fun findJpegEnd(source: ByteArray, start: Int): Int {
+        val max = source.size - 2
+        for (i in start..max) {
+            if ((source[i].toInt() and 0xFF) == 0xFF &&
+                (source[i + 1].toInt() and 0xFF) == 0xD9
+            ) {
+                return i + 2
+            }
+        }
+        return -1
     }
 
     // ==========================================

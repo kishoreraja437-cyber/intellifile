@@ -431,7 +431,16 @@ fun AiScreen(
                                                 .filter { it.length >= 2 && !setOf("the", "my", "all", "file", "files", "document", "documents", "notes", "for", "with", "about").contains(it) }
 
                                             allLocal.filter { f ->
-                                                val matchesFormat = formatFilter == null || f.format.equals(formatFilter, ignoreCase = true)
+                                                val matchesFormat = when {
+                                                    formatFilter == null -> true
+                                                    formatFilter.equals("PPT", ignoreCase = true) || formatFilter.equals("PPTX", ignoreCase = true) ->
+                                                        f.format.equals("PPT", ignoreCase = true) || f.format.equals("PPTX", ignoreCase = true)
+                                                    formatFilter.equals("DOC", ignoreCase = true) || formatFilter.equals("DOCX", ignoreCase = true) ->
+                                                        f.format.equals("DOC", ignoreCase = true) || f.format.equals("DOCX", ignoreCase = true)
+                                                    formatFilter.equals("XLS", ignoreCase = true) || formatFilter.equals("XLSX", ignoreCase = true) ->
+                                                        f.format.equals("XLS", ignoreCase = true) || f.format.equals("XLSX", ignoreCase = true)
+                                                    else -> f.format.equals(formatFilter, ignoreCase = true)
+                                                }
                                                 if (!matchesFormat) return@filter false
 
                                                 if (intent is AiUserIntent.FileTypeFilter) {
@@ -458,7 +467,7 @@ fun AiScreen(
                                                 }
 
                                                 // Local content search for text-based files (< 500KB)
-                                                if (f.sizeBytes in 1..500_000L && setOf("TXT", "CSV", "JSON", "MD", "DOCX", "PPTX").contains(f.format.uppercase())) {
+                                                if (f.sizeBytes in 1..500_000L && setOf("TXT", "CSV", "JSON", "MD", "DOCX", "PPTX", "PPT").contains(f.format.uppercase())) {
                                                     try {
                                                         val textContent = LocalFileManager.readTextContent(context, f.uri.toString(), f.path, f.format, 10000)
                                                         if (textContent.contains(searchKeyword, ignoreCase = true)) {

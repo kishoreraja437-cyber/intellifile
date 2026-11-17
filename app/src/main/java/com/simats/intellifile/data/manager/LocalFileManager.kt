@@ -539,6 +539,18 @@ object LocalFileManager {
                 }
                 "DOCX" -> extractDocxText(stream, maxChars)
                 "PPTX" -> extractPptxText(stream, maxChars)
+                "PPT" -> {
+                    val bytes = stream.readBytes()
+                    val presentation = DocumentContentParser.parsePpt(bytes, "presentation.ppt")
+                    if (presentation != null && presentation.slides.isNotEmpty()) {
+                        presentation.slides.joinToString("\n\n") { slide ->
+                            val body = if (slide.points.isNotEmpty()) slide.points.joinToString("\n") else slide.rawContent
+                            "--- Slide ${slide.slideNumber} ---\n${slide.title}\n$body"
+                        }.take(maxChars)
+                    } else {
+                        "No readable text found in PowerPoint presentation."
+                    }
+                }
                 else -> {
                     try {
                         stream.bufferedReader().use { it.readText().take(maxChars) }
