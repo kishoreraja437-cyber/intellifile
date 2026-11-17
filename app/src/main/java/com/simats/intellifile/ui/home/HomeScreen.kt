@@ -765,7 +765,7 @@ fun HomeScreen(
 
                         fontWeight = FontWeight.SemiBold,
 
-                        color = Color(0xFF7C3AED),
+                        color = Color(0xFF55A9AF),
 
                         modifier = Modifier.clickable { onSeeAllClick() }
 
