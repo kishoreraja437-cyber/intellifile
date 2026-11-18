@@ -159,8 +159,8 @@ object PPTDocumentHandler {
 
     /**
      * Loads the presentation.
-     * Uses our 100% Free, Native OpenXML Engine for .pptx presentations (ZERO WATERMARK).
-     * Falls back to Aspose with automatic watermark scrubber for legacy .ppt files.
+     * Uses our 100% Free, Native OpenXML Engine for .pptx presentations (ZERO WATERMARK, ZERO TRUNCATION).
+     * Falls back to Aspose with automatic watermark scrubber ONLY for legacy binary 97-2003 .ppt files.
      */
     fun loadPresentation(
         context: Context,
@@ -172,7 +172,7 @@ object PPTDocumentHandler {
 
         val isLegacyPpt = fileName.endsWith(".ppt", ignoreCase = true)
 
-        // Step 1: For modern .pptx presentations, use Native High-Fidelity OpenXML Engine (Zero Watermark)
+        // Step 1: For modern .pptx presentations, strictly use Native High-Fidelity OpenXML Engine (Zero Watermark)
         if (!isLegacyPpt) {
             try {
                 val fileToOpen = resolvePresentationFile(context, uriString, path, fileName)
@@ -207,11 +207,14 @@ object PPTDocumentHandler {
                     }
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Native OpenXML parser encountered error, falling back to Aspose: ${e.message}", e)
+                Log.e(TAG, "Native OpenXML parser error: ${e.message}", e)
             }
+
+            // For modern .pptx, NEVER silently drop down to un-licensed Aspose trial that adds watermark and cuts to 5 slides!
+            return Result.failure(Exception("Could not parse PPTX presentation with native engine. Please verify the presentation file."))
         }
 
-        // Step 2: Fallback to Aspose.Slides for legacy .ppt or if native engine was skipped
+        // Step 2: Fallback to Aspose.Slides ONLY for legacy binary 97-2003 .ppt files
         try {
             try {
                 val assetList = context.assets.list("") ?: emptyArray()
@@ -1090,16 +1093,20 @@ object PPTDocumentHandler {
         val width = bitmap.width
         val height = bitmap.height
 
-        val yStart = (height * 0.25f).toInt().coerceAtLeast(0)
-        val yEnd = (height * 0.70f).toInt().coerceAtMost(height - 1)
-        val xStart = (width * 0.15f).toInt().coerceAtLeast(0)
-        val xEnd = (width * 0.85f).toInt().coerceAtMost(width - 1)
+        val yStart = (height * 0.15f).toInt().coerceAtLeast(0)
+        val yEnd = (height * 0.75f).toInt().coerceAtMost(height - 1)
+        val xStart = (width * 0.10f).toInt().coerceAtLeast(0)
+        val xEnd = (width * 0.90f).toInt().coerceAtMost(width - 1)
 
         val pixels = IntArray(width * height)
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
 
         val isWatermark = BooleanArray(width * height)
         var detectedCount = 0
+        var minX = width
+        var maxX = 0
+        var minY = height
+        var maxY = 0
 
         for (y in yStart..yEnd) {
             val rowOffset = y * width
@@ -1109,37 +1116,36 @@ object PPTDocumentHandler {
                 val g = (color shr 8) and 0xFF
                 val b = color and 0xFF
 
-                if (r > 135 && (r - g >= 7) && (r - b >= 7)) {
+                // Aspose evaluation text: red/orange/coral tint
+                if (r > 130 && (r - g >= 6) && (r - b >= 6)) {
                     isWatermark[rowOffset + x] = true
                     detectedCount++
+                    if (x < minX) minX = x
+                    if (x > maxX) maxX = x
+                    if (y < minY) minY = y
+                    if (y > maxY) maxY = y
                 }
             }
         }
 
-        if (detectedCount == 0) {
+        if (detectedCount < 15) {
             return bitmap
         }
 
-        val dilated = isWatermark.clone()
-        for (y in yStart..yEnd) {
+        // Dilate watermark mask by 2 pixels to catch anti-aliasing edges
+        val dilated = BooleanArray(width * height)
+        for (y in minY..maxY) {
             val rowOffset = y * width
-            for (x in xStart..xEnd) {
+            for (x in minX..maxX) {
                 if (isWatermark[rowOffset + x]) {
-                    for (dy in -1..1) {
+                    for (dy in -2..2) {
                         val ny = y + dy
                         if (ny in 0 until height) {
                             val nRow = ny * width
-                            for (dx in -1..1) {
+                            for (dx in -2..2) {
                                 val nx = x + dx
                                 if (nx in 0 until width) {
-                                    val nIdx = nRow + nx
-                                    val c = pixels[nIdx]
-                                    val nr = (c shr 16) and 0xFF
-                                    val ng = (c shr 8) and 0xFF
-                                    val nb = c and 0xFF
-                                    if (!(nr < 110 && ng < 110 && nb < 110)) {
-                                        dilated[nIdx] = true
-                                    }
+                                    dilated[nRow + nx] = true
                                 }
                             }
                         }
@@ -1148,12 +1154,15 @@ object PPTDocumentHandler {
             }
         }
 
-        val step = (height / 250).coerceIn(2, 6)
-        val offsets = listOf(-step, -(step + 1), -(step + 2), step, step + 1, step + 2)
+        val expMinY = (minY - 3).coerceAtLeast(0)
+        val expMaxY = (maxY + 3).coerceAtMost(height - 1)
+        val expMinX = (minX - 3).coerceAtLeast(0)
+        val expMaxX = (maxX + 3).coerceAtMost(width - 1)
 
-        for (y in yStart..yEnd) {
+        // Inpaint watermark pixels by sampling clean background outside the watermark bounding box
+        for (y in expMinY..expMaxY) {
             val rowOffset = y * width
-            for (x in xStart..xEnd) {
+            for (x in expMinX..expMaxX) {
                 val idx = rowOffset + x
                 if (dilated[idx]) {
                     var rSum = 0
@@ -1161,34 +1170,38 @@ object PPTDocumentHandler {
                     var bSum = 0
                     var count = 0
 
-                    for (dy in offsets) {
-                        val ny = y + dy
-                        if (ny in 0 until height) {
-                            val nIdx = ny * width + x
-                            if (!dilated[nIdx]) {
-                                val c = pixels[nIdx]
-                                rSum += (c shr 16) and 0xFF
-                                gSum += (c shr 8) and 0xFF
-                                bSum += c and 0xFF
-                                count++
-                            }
-                        }
+                    val topY = expMinY - 2
+                    val btmY = expMaxY + 2
+                    if (topY >= 0 && !dilated[topY * width + x]) {
+                        val c = pixels[topY * width + x]
+                        rSum += (c shr 16) and 0xFF
+                        gSum += (c shr 8) and 0xFF
+                        bSum += c and 0xFF
+                        count++
+                    }
+                    if (btmY < height && !dilated[btmY * width + x]) {
+                        val c = pixels[btmY * width + x]
+                        rSum += (c shr 16) and 0xFF
+                        gSum += (c shr 8) and 0xFF
+                        bSum += c and 0xFF
+                        count++
                     }
 
-                    if (count < 2) {
-                        for (dx in offsets) {
-                            val nx = x + dx
-                            if (nx in 0 until width) {
-                                val nIdx = rowOffset + nx
-                                if (!dilated[nIdx]) {
-                                    val c = pixels[nIdx]
-                                    rSum += (c shr 16) and 0xFF
-                                    gSum += (c shr 8) and 0xFF
-                                    bSum += c and 0xFF
-                                    count++
-                                }
-                            }
-                        }
+                    val lX = expMinX - 2
+                    val rX = expMaxX + 2
+                    if (lX >= 0 && !dilated[rowOffset + lX]) {
+                        val c = pixels[rowOffset + lX]
+                        rSum += (c shr 16) and 0xFF
+                        gSum += (c shr 8) and 0xFF
+                        bSum += c and 0xFF
+                        count++
+                    }
+                    if (rX < width && !dilated[rowOffset + rX]) {
+                        val c = pixels[rowOffset + rX]
+                        rSum += (c shr 16) and 0xFF
+                        gSum += (c shr 8) and 0xFF
+                        bSum += c and 0xFF
+                        count++
                     }
 
                     if (count > 0) {
@@ -1196,6 +1209,9 @@ object PPTDocumentHandler {
                         val newG = (gSum / count).coerceIn(0, 255)
                         val newB = (bSum / count).coerceIn(0, 255)
                         pixels[idx] = (0xFF shl 24) or (newR shl 16) or (newG shl 8) or newB
+                    } else {
+                        val fallbackY = (minY - 2).coerceAtLeast(0)
+                        pixels[idx] = pixels[fallbackY * width + x]
                     }
                 }
             }
@@ -1226,31 +1242,47 @@ object PPTDocumentHandler {
         path: String,
         fileName: String
     ): File? {
-        if (path.isNotBlank()) {
-            val f = File(path)
-            if (f.exists() && f.canRead()) return f
-        }
+        val safeExt = if (fileName.endsWith(".ppt", ignoreCase = true)) "ppt" else "pptx"
+        val tempFile = File(context.cacheDir, "current_visual_presentation.$safeExt")
 
-        if (uriString.isNotBlank()) {
-            val uri = Uri.parse(uriString)
-            if (uri.scheme == ContentResolver.SCHEME_FILE) {
-                val f = File(uri.path ?: "")
-                if (f.exists() && f.canRead()) return f
-            }
-
+        // Priority 1: Always copy to app-internal cache directory via ContentResolver / stream.
+        // App-internal cache (/data/user/0/com.simats.intellifile/cache/...) guarantees full native
+        // ZipFile and random-access read support on all Android versions (API 24 to 35+).
+        val stream = openInputStream(context, uriString, path)
+        if (stream != null) {
             try {
-                val safeExt = if (fileName.endsWith(".ppt", ignoreCase = true)) "ppt" else "pptx"
-                val tempFile = File(context.cacheDir, "current_visual_presentation.$safeExt")
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    tempFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
+                tempFile.outputStream().use { out ->
+                    stream.copyTo(out)
                 }
                 if (tempFile.exists() && tempFile.length() > 0) {
                     return tempFile
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Failed caching URI presentation: ${e.message}")
+                Log.w(TAG, "Failed copying stream to cacheFile: ${e.message}")
+            } finally {
+                try { stream.close() } catch (_: Exception) {}
+            }
+        }
+
+        // Priority 2: Direct file path check (only if internal app storage or verified Zip-openable)
+        if (path.isNotBlank()) {
+            val f = File(path)
+            if (f.exists() && f.canRead()) {
+                try {
+                    ZipFile(f).use { /* verified openable */ }
+                    return f
+                } catch (_: Exception) {
+                    try {
+                        f.inputStream().use { inStream ->
+                            tempFile.outputStream().use { outStream ->
+                                inStream.copyTo(outStream)
+                            }
+                        }
+                        if (tempFile.exists() && tempFile.length() > 0) {
+                            return tempFile
+                        }
+                    } catch (_: Exception) {}
+                }
             }
         }
 
@@ -1261,7 +1293,7 @@ object PPTDocumentHandler {
             } catch (_: Exception) {}
         }
 
-        return null
+        return if (tempFile.exists() && tempFile.length() > 0) tempFile else null
     }
 
     private fun openInputStream(context: Context, uriString: String, path: String): InputStream? {

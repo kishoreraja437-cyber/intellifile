@@ -614,11 +614,12 @@ object PdfWatermarkEngine {
             }
 
             val isScanned = analysisResult.isScannedPdf
+            val shouldInpaint = (isScanned && options.applyScannedInpainting) || options.customRegionRel != null
 
-            if (isScanned && options.applyScannedInpainting) {
-                // Scanned Document Inpainting Pipeline
+            if (shouldInpaint) {
+                // Adaptive Inpainting Pipeline (for scanned documents, stamps, or custom user-selected regions)
                 doc.close()
-                onProgress(0.15f, "Processing scanned pages with adaptive inpainting...")
+                onProgress(0.15f, "Processing pages with adaptive inpainting...")
                 return@withContext processScannedDocumentInpainting(
                     context = context,
                     sourceFile = pdfFile,
@@ -644,6 +645,9 @@ object PdfWatermarkEngine {
                     val filteredTokens = mutableListOf<Any>()
 
                     var isInsideArtifactToSkip = false
+                    var isInsideTextBlock = false
+                    val textBlockTokens = mutableListOf<Any>()
+                    val textBlockAccumulator = StringBuilder()
 
                     var idx = 0
                     while (idx < originalTokens.size) {
@@ -653,11 +657,43 @@ object PdfWatermarkEngine {
                             val opName = token.name
 
                             when (opName) {
+                                "BT" -> { // Begin Text Object
+                                    isInsideTextBlock = true
+                                    textBlockTokens.clear()
+                                    textBlockAccumulator.clear()
+                                    textBlockTokens.add(token)
+                                    idx++
+                                    continue
+                                }
+                                "ET" -> { // End Text Object
+                                    if (isInsideTextBlock) {
+                                        textBlockTokens.add(token)
+                                        val fullBlockText = textBlockAccumulator.toString().trim().uppercase()
+                                        val matchesTarget = fullBlockText.isNotBlank() && targetTexts.any { target ->
+                                            fullBlockText.contains(target) || (target.length in 3..fullBlockText.length && fullBlockText.contains(target))
+                                        }
+
+                                        if (matchesTarget || isInsideArtifactToSkip) {
+                                            removedObjectsCount++
+                                        } else {
+                                            filteredTokens.addAll(textBlockTokens)
+                                        }
+                                        isInsideTextBlock = false
+                                        textBlockTokens.clear()
+                                        textBlockAccumulator.clear()
+                                        idx++
+                                        continue
+                                    }
+                                }
                                 "BDC" -> {
-                                    val tag = filteredTokens.lastOrNull() as? COSName
+                                    val tag = (if (isInsideTextBlock) textBlockTokens.lastOrNull() else filteredTokens.lastOrNull()) as? COSName
                                     if (removeArtifactMarkedContent && (tag?.name.equals("Artifact", ignoreCase = true) || tag?.name.equals("Watermark", ignoreCase = true))) {
                                         isInsideArtifactToSkip = true
-                                        filteredTokens.removeAt(filteredTokens.lastIndex) // Drop tag
+                                        if (isInsideTextBlock && textBlockTokens.isNotEmpty()) {
+                                            textBlockTokens.removeAt(textBlockTokens.lastIndex)
+                                        } else if (filteredTokens.isNotEmpty()) {
+                                            filteredTokens.removeAt(filteredTokens.lastIndex)
+                                        }
                                         idx++
                                         continue
                                     }
@@ -671,16 +707,19 @@ object PdfWatermarkEngine {
                                     }
                                 }
                                 "Tj", "'", "\"" -> {
-                                    val operand = filteredTokens.lastOrNull() as? COSString
+                                    val operand = (if (isInsideTextBlock) textBlockTokens.lastOrNull() else filteredTokens.lastOrNull()) as? COSString
                                     val text = operand?.string?.trim() ?: ""
+                                    textBlockAccumulator.append(text).append(" ")
+
                                     val matchesTarget = text.isNotBlank() && targetTexts.any { target ->
                                         val u = text.uppercase()
                                         u.contains(target) || target.contains(u)
                                     }
 
                                     if (matchesTarget || isInsideArtifactToSkip) {
-                                        // Drop operand and operator
-                                        if (filteredTokens.isNotEmpty() && filteredTokens.last() is COSString) {
+                                        if (isInsideTextBlock && textBlockTokens.isNotEmpty() && textBlockTokens.last() is COSString) {
+                                            textBlockTokens.removeAt(textBlockTokens.lastIndex)
+                                        } else if (filteredTokens.isNotEmpty() && filteredTokens.last() is COSString) {
                                             filteredTokens.removeAt(filteredTokens.lastIndex)
                                         }
                                         removedObjectsCount++
@@ -689,7 +728,7 @@ object PdfWatermarkEngine {
                                     }
                                 }
                                 "TJ" -> {
-                                    val operand = filteredTokens.lastOrNull() as? COSArray
+                                    val operand = (if (isInsideTextBlock) textBlockTokens.lastOrNull() else filteredTokens.lastOrNull()) as? COSArray
                                     val fullText = buildString {
                                         if (operand != null) {
                                             for (elem in operand) {
@@ -697,6 +736,7 @@ object PdfWatermarkEngine {
                                             }
                                         }
                                     }.trim()
+                                    textBlockAccumulator.append(fullText).append(" ")
 
                                     val matchesTarget = fullText.isNotBlank() && targetTexts.any { target ->
                                         val u = fullText.uppercase()
@@ -704,7 +744,9 @@ object PdfWatermarkEngine {
                                     }
 
                                     if (matchesTarget || isInsideArtifactToSkip) {
-                                        if (filteredTokens.isNotEmpty() && filteredTokens.last() is COSArray) {
+                                        if (isInsideTextBlock && textBlockTokens.isNotEmpty() && textBlockTokens.last() is COSArray) {
+                                            textBlockTokens.removeAt(textBlockTokens.lastIndex)
+                                        } else if (filteredTokens.isNotEmpty() && filteredTokens.last() is COSArray) {
                                             filteredTokens.removeAt(filteredTokens.lastIndex)
                                         }
                                         removedObjectsCount++
@@ -713,10 +755,12 @@ object PdfWatermarkEngine {
                                     }
                                 }
                                 "Do" -> { // XObject Invocation
-                                    val operand = filteredTokens.lastOrNull() as? COSName
+                                    val operand = (if (isInsideTextBlock) textBlockTokens.lastOrNull() else filteredTokens.lastOrNull()) as? COSName
                                     val name = operand?.name ?: ""
                                     if (targetFormXObjects.contains(name) || targetImageXObjects.contains(name)) {
-                                        if (filteredTokens.isNotEmpty() && filteredTokens.last() is COSName) {
+                                        if (isInsideTextBlock && textBlockTokens.isNotEmpty() && textBlockTokens.last() is COSName) {
+                                            textBlockTokens.removeAt(textBlockTokens.lastIndex)
+                                        } else if (filteredTokens.isNotEmpty() && filteredTokens.last() is COSName) {
                                             filteredTokens.removeAt(filteredTokens.lastIndex)
                                         }
                                         removedObjectsCount++
@@ -728,9 +772,18 @@ object PdfWatermarkEngine {
                         }
 
                         if (!isInsideArtifactToSkip) {
-                            filteredTokens.add(token)
+                            if (isInsideTextBlock) {
+                                textBlockTokens.add(token)
+                            } else {
+                                filteredTokens.add(token)
+                            }
                         }
                         idx++
+                    }
+
+                    // Flush any remaining text block tokens
+                    if (isInsideTextBlock && textBlockTokens.isNotEmpty()) {
+                        filteredTokens.addAll(textBlockTokens)
                     }
 
                     // Write updated token stream back to page
