@@ -169,6 +169,7 @@ import com.simats.intellifile.ui.theme.AppThemeMode
 import com.simats.intellifile.ui.theme.ThemeSettingsScreen
 
 import com.simats.intellifile.ui.viewer.DocumentViewerScreen
+import com.simats.intellifile.ui.viewer.ppt.PPTViewerScreen
 
 
 
@@ -528,52 +529,55 @@ fun MainScreen(
 
 
 
-                    "document_viewer" -> DocumentViewerScreen(
+                    "document_viewer" -> {
+                        val format = selectedDetailFile?.fileType?.substringBefore(" ")?.uppercase() ?: "PDF"
+                        val name = selectedDetailFile?.fileName ?: "Document.pdf"
+                        val isPresentation = format in listOf("PPT", "PPTX", "PPS", "PPSX", "POT", "POTX") ||
+                                name.endsWith(".pptx", ignoreCase = true) ||
+                                name.endsWith(".ppt", ignoreCase = true)
 
-                        fileName = selectedDetailFile?.fileName ?: "Document.pdf",
-
-                        filePath = selectedDetailFile?.path ?: "",
-
-                        fileUriString = selectedDetailFile?.uriString ?: "",
-
-                        fileFormat = selectedDetailFile?.fileType?.substringBefore(" ") ?: "PDF",
-
-                        totalPages = 1,
-
-                        onBackClick = {
-                            isDocumentViewerOpen = false
-                            if (selectedTab == BottomNavItem.AI || selectedTab == BottomNavItem.FILES) {
-                                selectedDetailFile = null
-                            }
-                        },
-
-                        onShareClick = { isShareOpen = true },
-
-                        onMoreClick = {
-
-                            isDocumentViewerOpen = false
-
-                            isSetPriorityOpen = true
-
-                        },
-
-                        onSetPriorityClick = {
-
-                            isDocumentViewerOpen = false
-
-                            isSetPriorityOpen = true
-
-                        },
-
-                        onConfirmSave = {
-
-                            isDocumentViewerOpen = false
-
-                            isSetPriorityOpen = true
-
+                        if (isPresentation) {
+                            PPTViewerScreen(
+                                fileName = name,
+                                filePath = selectedDetailFile?.path ?: "",
+                                fileUriString = selectedDetailFile?.uriString ?: "",
+                                onBackClick = {
+                                    isDocumentViewerOpen = false
+                                    if (selectedTab == BottomNavItem.AI || selectedTab == BottomNavItem.FILES) {
+                                        selectedDetailFile = null
+                                    }
+                                },
+                                onShareClick = { isShareOpen = true }
+                            )
+                        } else {
+                            DocumentViewerScreen(
+                                fileName = selectedDetailFile?.fileName ?: "Document.pdf",
+                                filePath = selectedDetailFile?.path ?: "",
+                                fileUriString = selectedDetailFile?.uriString ?: "",
+                                fileFormat = selectedDetailFile?.fileType?.substringBefore(" ") ?: "PDF",
+                                totalPages = 1,
+                                onBackClick = {
+                                    isDocumentViewerOpen = false
+                                    if (selectedTab == BottomNavItem.AI || selectedTab == BottomNavItem.FILES) {
+                                        selectedDetailFile = null
+                                    }
+                                },
+                                onShareClick = { isShareOpen = true },
+                                onMoreClick = {
+                                    isDocumentViewerOpen = false
+                                    isSetPriorityOpen = true
+                                },
+                                onSetPriorityClick = {
+                                    isDocumentViewerOpen = false
+                                    isSetPriorityOpen = true
+                                },
+                                onConfirmSave = {
+                                    isDocumentViewerOpen = false
+                                    isSetPriorityOpen = true
+                                }
+                            )
                         }
-
-                    )
+                    }
 
 
 

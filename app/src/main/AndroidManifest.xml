@@ -117,6 +117,11 @@
                 <data android:scheme="file" />
                 <data android:mimeType="application/vnd.ms-powerpoint" />
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
+                <data android:mimeType="application/powerpoint" />
+                <data android:mimeType="application/mspowerpoint" />
+                <data android:mimeType="application/x-mspowerpoint" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.slideshow" />
+                <data android:mimeType="application/vnd.ms-powerpoint.presentation.macroEnabled.12" />
             </intent-filter>
 
             <!-- 6. Open With IntelliFile: Generic Extension Fallback for File Managers -->
@@ -141,6 +146,14 @@
                 <data android:pathPattern=".*\\.PPT" />
                 <data android:pathPattern=".*\\.pptx" />
                 <data android:pathPattern=".*\\.PPTX" />
+                <data android:pathPattern=".*\\.pps" />
+                <data android:pathPattern=".*\\.PPS" />
+                <data android:pathPattern=".*\\.ppsx" />
+                <data android:pathPattern=".*\\.PPSX" />
+                <data android:pathPattern=".*\\.pot" />
+                <data android:pathPattern=".*\\.POT" />
+                <data android:pathPattern=".*\\.potx" />
+                <data android:pathPattern=".*\\.POTX" />
                 <data android:pathPattern=".*\\.txt" />
                 <data android:pathPattern=".*\\.TXT" />
                 <data android:pathPattern=".*\\.csv" />

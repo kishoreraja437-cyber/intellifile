@@ -85,6 +85,7 @@ import com.simats.intellifile.data.manager.SlideTable
 import com.simats.intellifile.data.manager.SlideSection
 import com.simats.intellifile.data.model.LocalFileItem
 import com.simats.intellifile.ui.dialog.SaveConfirmationDialog
+import com.simats.intellifile.ui.viewer.ppt.PPTViewerScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -118,6 +119,25 @@ fun DocumentViewerScreen(
     }
 
     val isPdf = remember(effectiveFormat) { effectiveFormat == "PDF" }
+
+    val isPresentation = remember(effectiveFormat, fileName) {
+        effectiveFormat.uppercase() in listOf("PPT", "PPTX", "PPS", "PPSX", "POT", "POTX") ||
+                fileName.endsWith(".pptx", ignoreCase = true) ||
+                fileName.endsWith(".ppt", ignoreCase = true) ||
+                fileName.endsWith(".ppsx", ignoreCase = true) ||
+                fileName.endsWith(".pps", ignoreCase = true)
+    }
+
+    if (isPresentation) {
+        PPTViewerScreen(
+            fileName = fileName,
+            filePath = filePath,
+            fileUriString = fileUriString,
+            onBackClick = onBackClick,
+            onShareClick = onShareClick
+        )
+        return
+    }
 
     // Navigation and display states
     var currentPageIndex by remember { mutableIntStateOf(1) }

@@ -8,6 +8,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import com.simats.intellifile.ui.viewer.DocumentViewerScreen
+import com.simats.intellifile.ui.viewer.ppt.PPTViewerScreen
 
 import android.Manifest
 import android.app.Application
@@ -412,33 +413,65 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
 
-                            DocumentViewerScreen(
-                                fileName = doc.fileName,
-                                filePath = if (doc.uri.scheme?.equals(ContentResolver.SCHEME_FILE, ignoreCase = true) == true) doc.uri.path ?: "" else "",
-                                fileUriString = doc.uri.toString(),
-                                fileFormat = doc.fileFormat,
-                                totalPages = 1,
-                                onBackClick = {
-                                    val shouldFinish = isOpenedFromExternalIntent && isTaskRoot
-                                    externalDocumentState.value = null
-                                    isOpenedFromExternalIntent = false
-                                    if (shouldFinish) {
-                                        finish()
-                                    }
-                                },
-                                onShareClick = {
-                                    try {
-                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                            type = doc.mimeType.ifBlank { "application/octet-stream" }
-                                            putExtra(Intent.EXTRA_STREAM, doc.uri)
-                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            val isPpt = doc.fileFormat.uppercase() in listOf("PPT", "PPTX", "PPS", "PPSX", "POT", "POTX") ||
+                                    doc.fileName.endsWith(".pptx", ignoreCase = true) ||
+                                    doc.fileName.endsWith(".ppt", ignoreCase = true)
+
+                            if (isPpt) {
+                                PPTViewerScreen(
+                                    fileName = doc.fileName,
+                                    filePath = if (doc.uri.scheme?.equals(ContentResolver.SCHEME_FILE, ignoreCase = true) == true) doc.uri.path ?: "" else "",
+                                    fileUriString = doc.uri.toString(),
+                                    onBackClick = {
+                                        val shouldFinish = isOpenedFromExternalIntent && isTaskRoot
+                                        externalDocumentState.value = null
+                                        isOpenedFromExternalIntent = false
+                                        if (shouldFinish) {
+                                            finish()
                                         }
-                                        startActivity(Intent.createChooser(shareIntent, "Share " + doc.fileName))
-                                    } catch (e: Exception) {
-                                        Toast.makeText(this@MainActivity, "Failed to share document", Toast.LENGTH_SHORT).show()
+                                    },
+                                    onShareClick = {
+                                        try {
+                                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                                type = doc.mimeType.ifBlank { "application/vnd.openxmlformats-officedocument.presentationml.presentation" }
+                                                putExtra(Intent.EXTRA_STREAM, doc.uri)
+                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            }
+                                            startActivity(Intent.createChooser(shareIntent, "Share " + doc.fileName))
+                                        } catch (e: Exception) {
+                                            Toast.makeText(this@MainActivity, "Failed to share document", Toast.LENGTH_SHORT).show()
+                                        }
                                     }
-                                }
-                            )
+                                )
+                            } else {
+                                DocumentViewerScreen(
+                                    fileName = doc.fileName,
+                                    filePath = if (doc.uri.scheme?.equals(ContentResolver.SCHEME_FILE, ignoreCase = true) == true) doc.uri.path ?: "" else "",
+                                    fileUriString = doc.uri.toString(),
+                                    fileFormat = doc.fileFormat,
+                                    totalPages = 1,
+                                    onBackClick = {
+                                        val shouldFinish = isOpenedFromExternalIntent && isTaskRoot
+                                        externalDocumentState.value = null
+                                        isOpenedFromExternalIntent = false
+                                        if (shouldFinish) {
+                                            finish()
+                                        }
+                                    },
+                                    onShareClick = {
+                                        try {
+                                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                                type = doc.mimeType.ifBlank { "application/octet-stream" }
+                                                putExtra(Intent.EXTRA_STREAM, doc.uri)
+                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            }
+                                            startActivity(Intent.createChooser(shareIntent, "Share " + doc.fileName))
+                                        } catch (e: Exception) {
+                                            Toast.makeText(this@MainActivity, "Failed to share document", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                )
+                            }
                         } else {
                     AnimatedContent(
                         targetState = currentScreen,
