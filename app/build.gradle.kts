@@ -61,6 +61,12 @@ dependencies {
     // Genuine PowerPoint Visual Slide Rendering Engine
     implementation("com.aspose:aspose-slides:24.4:android.via.java")
 
+    // PDFBox for Android: Native PDF parsing, watermark detection & content manipulation
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+
+    // ML Kit Text Recognition for OCR-based scanned PDF watermark analysis
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

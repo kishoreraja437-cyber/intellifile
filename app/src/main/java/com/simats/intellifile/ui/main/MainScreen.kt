@@ -170,6 +170,7 @@ import com.simats.intellifile.ui.theme.ThemeSettingsScreen
 
 import com.simats.intellifile.ui.viewer.DocumentViewerScreen
 import com.simats.intellifile.ui.viewer.ppt.PPTViewerScreen
+import com.simats.intellifile.ui.tools.watermark.WatermarkRemoverScreen
 
 
 
@@ -235,6 +236,18 @@ fun MainScreen(
 
     var isDocumentViewerOpen by remember { mutableStateOf(false) }
 
+    var isWatermarkRemoverOpen by remember { mutableStateOf(false) }
+    var watermarkRemoverUri by remember { mutableStateOf<Uri?>(null) }
+    var watermarkRemoverPath by remember { mutableStateOf("") }
+    var watermarkRemoverFileName by remember { mutableStateOf("") }
+
+    fun openWatermarkRemover(uri: Uri? = null, path: String = "", fileName: String = "") {
+        watermarkRemoverUri = uri
+        watermarkRemoverPath = path
+        watermarkRemoverFileName = fileName
+        isWatermarkRemoverOpen = true
+    }
+
     var isSetPriorityOpen by remember { mutableStateOf(false) }
 
     var isFileSavedSuccessOpen by remember { mutableStateOf(false) }
@@ -286,6 +299,7 @@ fun MainScreen(
         isContactSuccessOpen = false
         isFeedbackOpen = false
         isFeedbackSuccessOpen = false
+        isWatermarkRemoverOpen = false
 
         if (newTab == BottomNavItem.SAVED) {
             savedPriorityFilter = PriorityFilter.ALL
@@ -295,6 +309,7 @@ fun MainScreen(
     fun handleGoBack() {
         isVoiceAssistantOpen = false
         when {
+            isWatermarkRemoverOpen -> isWatermarkRemoverOpen = false
             isShareOpen -> isShareOpen = false
             isFileSavedSuccessOpen -> isFileSavedSuccessOpen = false
             isDocumentViewerOpen -> isDocumentViewerOpen = false
@@ -323,7 +338,7 @@ fun MainScreen(
         }
     }
 
-    val isOverlayScreenOpen = isVoiceAssistantOpen || isRecentFilesOpen || isAiHistoryOpen || selectedDetailFile != null ||
+    val isOverlayScreenOpen = isWatermarkRemoverOpen || isVoiceAssistantOpen || isRecentFilesOpen || isAiHistoryOpen || selectedDetailFile != null ||
             isDocumentViewerOpen || isSetPriorityOpen || isFileSavedSuccessOpen || isShareOpen || isFilePermissionsOpen ||
             isNotificationsOpen || isThemeOpen || isAboutOpen ||
             isHelpSupportOpen || isContactSupportOpen || isContactSuccessOpen ||
@@ -358,6 +373,8 @@ fun MainScreen(
     ) { innerPadding ->
 
         val currentNavigationKey = when {
+
+            isWatermarkRemoverOpen -> "watermark_remover"
 
             isShareOpen -> "share"
 
@@ -529,6 +546,28 @@ fun MainScreen(
 
 
 
+                    "watermark_remover" -> {
+                        WatermarkRemoverScreen(
+                            initialUri = watermarkRemoverUri,
+                            initialFilePath = watermarkRemoverPath,
+                            initialFileName = watermarkRemoverFileName,
+                            onBackClick = { isWatermarkRemoverOpen = false },
+                            onOpenCleanedPdf = { cleanedFile ->
+                                isWatermarkRemoverOpen = false
+                                selectedDetailFile = FileDetailData(
+                                    fileName = cleanedFile.name,
+                                    fileSize = "${(cleanedFile.length() / 1024).coerceAtLeast(1L)} KB",
+                                    fileType = "PDF Document",
+                                    createdDate = "Just now",
+                                    modifiedDate = "Just now",
+                                    path = cleanedFile.absolutePath,
+                                    uriString = Uri.fromFile(cleanedFile).toString()
+                                )
+                                isDocumentViewerOpen = true
+                            }
+                        )
+                    }
+
                     "document_viewer" -> {
                         val format = selectedDetailFile?.fileType?.substringBefore(" ")?.uppercase() ?: "PDF"
                         val name = selectedDetailFile?.fileName ?: "Document.pdf"
@@ -574,6 +613,10 @@ fun MainScreen(
                                 onConfirmSave = {
                                     isDocumentViewerOpen = false
                                     isSetPriorityOpen = true
+                                },
+                                onWatermarkRemoverClick = {
+                                    val u = if (selectedDetailFile?.uriString?.isNotBlank() == true) Uri.parse(selectedDetailFile?.uriString) else null
+                                    openWatermarkRemover(u, selectedDetailFile?.path ?: "", selectedDetailFile?.fileName ?: "")
                                 }
                             )
                         }
@@ -909,6 +952,11 @@ fun MainScreen(
 
                                 selectedDetailFile = selectedDetailFile?.copy(priority = newPriority)
 
+                            },
+
+                            onWatermarkRemoverClick = {
+                                val u = if (selectedDetailFile?.uriString?.isNotBlank() == true) Uri.parse(selectedDetailFile?.uriString) else null
+                                openWatermarkRemover(u, selectedDetailFile?.path ?: "", selectedDetailFile?.fileName ?: "")
                             }
 
                         )
@@ -920,6 +968,7 @@ fun MainScreen(
                             BottomNavItem.HOME -> HomeScreen(
                                 externalSearchQuery = homeVoiceSearchQuery,
 
+                                onWatermarkRemoverClick = { openWatermarkRemover(null, "", "") },
 
                                 onSeeAllClick = { isRecentFilesOpen = true },
 
