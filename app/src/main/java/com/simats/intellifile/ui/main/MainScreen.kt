@@ -212,6 +212,7 @@ fun MainScreen(
     val context = LocalContext.current
 
     val sessionManager = remember { com.simats.intellifile.data.session.SessionManager(context) }
+    val chatViewModel: com.simats.intellifile.ui.ai.ChatViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 
     var selectedTab by remember { mutableStateOf(BottomNavItem.HOME) }
 
@@ -225,7 +226,7 @@ fun MainScreen(
 
     var isAiHistoryOpen by remember { mutableStateOf(false) }
 
-    var activeAiConversationId by remember { mutableStateOf<Int?>(null) }
+    var activeAiConversationId by remember { mutableStateOf<String?>(null) }
     var isVoiceAssistantOpen by remember { mutableStateOf(false) }
 
     var homeVoiceSearchQuery by remember { mutableStateOf("") }
@@ -620,7 +621,7 @@ fun MainScreen(
 
 
                     "ai_history" -> AiChatHistoryScreen(
-
+                        chatViewModel = chatViewModel,
                         onBackClick = { isAiHistoryOpen = false },
 
                         onClearHistoryClick = {
@@ -997,7 +998,7 @@ fun MainScreen(
                             )
 
                             BottomNavItem.AI -> AiScreen(
-
+                                chatViewModel = chatViewModel,
                                 initialConversationId = activeAiConversationId,
 
                                 onBackClick = { handleGoBack() },
@@ -1206,7 +1207,7 @@ fun MainScreen(
                     handleGoBack()
                 },
                 onOpenInAiChat = { convId ->
-                    activeAiConversationId = convId
+                    activeAiConversationId = convId?.toString()
                     navigateToTab(BottomNavItem.AI)
                 },
                 onSearchHome = { query ->

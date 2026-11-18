@@ -133,7 +133,8 @@ sealed class ChatMessage {
 @Composable
 fun AiScreen(
     modifier: Modifier = Modifier,
-    initialConversationId: Int? = null,
+    chatViewModel: ChatViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
+    initialConversationId: String? = null,
     onBackClick: () -> Unit = {},
     onOpenFile: (AiFileResult) -> Unit = {},
     onViewSearchHistoryClick: () -> Unit = {},
@@ -143,6 +144,7 @@ fun AiScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val aiRepository = remember { AiRepository(context) }
+    val uiState by chatViewModel.uiState.collectAsState()
 
     val defaultGreeting = remember {
         ChatMessage.Ai(
@@ -152,7 +154,7 @@ fun AiScreen(
     }
 
     var promptInput by remember { mutableStateOf("") }
-    var currentConversationId by remember { mutableStateOf(initialConversationId) }
+    var currentConversationId by remember { mutableStateOf(initialConversationId ?: uiState.currentConversationId) }
     var isThinking by remember { mutableStateOf(false) }
     var isLoadingConversation by remember { mutableStateOf(false) }
 
@@ -163,7 +165,21 @@ fun AiScreen(
 
     val listState = rememberLazyListState()
     val chatMessages = remember {
-        mutableStateListOf<ChatMessage>(defaultGreeting)
+        mutableStateListOf<ChatMessage>().apply {
+            if (uiState.messages.isNotEmpty()) addAll(uiState.messages) else add(defaultGreeting)
+        }
+    }
+
+    // Keep chatMessages in sync with ChatViewModel Room persistence
+    LaunchedEffect(uiState.messages) {
+        if (uiState.messages.isNotEmpty()) {
+            chatMessages.clear()
+            chatMessages.addAll(uiState.messages)
+        }
+    }
+
+    LaunchedEffect(uiState.isThinking) {
+        isThinking = uiState.isThinking
     }
 
     // Keyboard (IME) Visibility & WindowInsets Detection
@@ -180,65 +196,14 @@ fun AiScreen(
 
     // Load conversation when an initialConversationId is provided or changes
     LaunchedEffect(initialConversationId) {
-        currentConversationId = initialConversationId
-        if (initialConversationId != null && initialConversationId > 0) {
-            isLoadingConversation = true
-            val result = aiRepository.getConversationMessages(initialConversationId)
-            isLoadingConversation = false
-            result.onSuccess { msgs ->
-                chatMessages.clear()
-                if (msgs.isEmpty()) {
-                    chatMessages.add(ChatMessage.Ai(text = "This conversation has no messages yet."))
-                } else {
-                    msgs.forEach { m ->
-                        if (m.sender.equals("USER", ignoreCase = true)) {
-                            chatMessages.add(ChatMessage.User(m.text))
-                        } else {
-                            val rawFiles = m.files ?: m.related_files ?: emptyList()
-                            val mappedFiles = rawFiles.map { rf ->
-                                val prio = when (rf.priority?.uppercase()) {
-                                    "IMPORTANT" -> PriorityLevel.IMPORTANT
-                                    "NORMAL" -> PriorityLevel.NORMAL
-                                    "LOW" -> PriorityLevel.LOW
-                                    else -> null
-                                }
-                                val icon = getFormatIcon(rf.format)
-                                AiFileResult(
-                                    id = rf.id,
-                                    title = rf.title,
-                                    format = rf.format ?: "PDF",
-                                    size = rf.size ?: "1.0 MB",
-                                    dateText = rf.dateText ?: "Recent",
-                                    priority = prio,
-                                    iconResId = icon,
-                                    page = rf.page,
-                                    snippet = rf.snippet,
-                                    source = rf.source ?: "AI Vault",
-                                    uriString = rf.uri_string,
-                                    filePath = rf.file_path,
-                                    fileUrl = rf.file_url,
-                                    category = rf.category
-                                )
-                            }
-                            chatMessages.add(ChatMessage.Ai(text = m.text, files = mappedFiles))
-                        }
-                    }
-                }
-            }.onFailure { err ->
-                chatMessages.clear()
-                chatMessages.add(
-                    ChatMessage.Ai(
-                        text = "Failed to load conversation: ${err.localizedMessage}"
-                    )
-                )
-            }
-        } else if (initialConversationId == null && currentConversationId == null && chatMessages.size <= 1) {
-            chatMessages.clear()
-            chatMessages.add(defaultGreeting)
+        if (!initialConversationId.isNullOrBlank()) {
+            currentConversationId = initialConversationId
+            chatViewModel.loadConversation(initialConversationId)
         }
     }
 
     val handleStartNewChat: () -> Unit = {
+        chatViewModel.startNewChat()
         currentConversationId = null
         promptInput = ""
         isThinking = false
@@ -394,319 +359,7 @@ fun AiScreen(
                     if (promptInput.isNotBlank() && !isThinking) {
                         val userQuery = promptInput.trim()
                         promptInput = ""
-                        chatMessages.add(ChatMessage.User(userQuery))
-                        isThinking = true
-
-                        val loadingMsg = ChatMessage.Ai(
-                            text = "Searching files and analyzing context...",
-                            isLoading = true
-                        )
-                        chatMessages.add(loadingMsg)
-
-                        coroutineScope.launch {
-                            val intent = AiChatIntentDetector.detect(userQuery)
-
-                            when (intent) {
-                                                                is AiUserIntent.FileSearch,
-                                is AiUserIntent.FileTypeFilter,
-                                is AiUserIntent.FileOpen -> {
-                                    val searchKeyword = when (intent) {
-                                        is AiUserIntent.FileSearch -> intent.query
-                                        is AiUserIntent.FileOpen -> intent.targetName
-                                        is AiUserIntent.FileTypeFilter -> intent.format
-                                        else -> userQuery
-                                    }
-                                    val formatFilter = when (intent) {
-                                        is AiUserIntent.FileSearch -> intent.format
-                                        is AiUserIntent.FileTypeFilter -> intent.format
-                                        else -> null
-                                    }
-
-                                    // 1. Search Local Device Files in parallel (MediaStore + content inspection)
-                                    val localDeferred = async(Dispatchers.IO) {
-                                        try {
-                                            val allLocal = LocalFileManager.getDeviceFiles(context)
-                                            val searchTokens = searchKeyword.lowercase()
-                                                .split(Regex("[\\s_\\-,.]+"))
-                                                .filter { it.length >= 2 && !setOf("the", "my", "all", "file", "files", "document", "documents", "notes", "for", "with", "about").contains(it) }
-
-                                            allLocal.filter { f ->
-                                                val matchesFormat = when {
-                                                    formatFilter == null -> true
-                                                    formatFilter.equals("PPT", ignoreCase = true) || formatFilter.equals("PPTX", ignoreCase = true) ->
-                                                        f.format.equals("PPT", ignoreCase = true) || f.format.equals("PPTX", ignoreCase = true)
-                                                    formatFilter.equals("DOC", ignoreCase = true) || formatFilter.equals("DOCX", ignoreCase = true) ->
-                                                        f.format.equals("DOC", ignoreCase = true) || f.format.equals("DOCX", ignoreCase = true)
-                                                    formatFilter.equals("XLS", ignoreCase = true) || formatFilter.equals("XLSX", ignoreCase = true) ->
-                                                        f.format.equals("XLS", ignoreCase = true) || f.format.equals("XLSX", ignoreCase = true)
-                                                    else -> f.format.equals(formatFilter, ignoreCase = true)
-                                                }
-                                                if (!matchesFormat) return@filter false
-
-                                                if (intent is AiUserIntent.FileTypeFilter) {
-                                                    return@filter true
-                                                }
-
-                                                val titleLower = f.title.lowercase()
-                                                val pathLower = f.path.lowercase()
-                                                val baseName = f.title.substringBeforeLast('.').lowercase()
-
-                                                val directMatch = titleLower.contains(searchKeyword.lowercase()) ||
-                                                        baseName.contains(searchKeyword.lowercase()) ||
-                                                        pathLower.contains(searchKeyword.lowercase())
-
-                                                if (directMatch) return@filter true
-
-                                                if (searchTokens.isNotEmpty()) {
-                                                    val tokenOverlap = searchTokens.count { token ->
-                                                        titleLower.contains(token) || pathLower.contains(token)
-                                                    }
-                                                    if (tokenOverlap == searchTokens.size || (searchTokens.size >= 2 && tokenOverlap >= searchTokens.size - 1)) {
-                                                        return@filter true
-                                                    }
-                                                }
-
-                                                // Local content search for text-based files (< 500KB)
-                                                if (f.sizeBytes in 1..500_000L && setOf("TXT", "CSV", "JSON", "MD", "DOCX", "PPTX", "PPT").contains(f.format.uppercase())) {
-                                                    try {
-                                                        val textContent = LocalFileManager.readTextContent(context, f.uri.toString(), f.path, f.format, 10000)
-                                                        if (textContent.contains(searchKeyword, ignoreCase = true)) {
-                                                            return@filter true
-                                                        }
-                                                        if (searchTokens.isNotEmpty() && searchTokens.all { textContent.contains(it, ignoreCase = true) }) {
-                                                            return@filter true
-                                                        }
-                                                    } catch (_: Exception) {}
-                                                }
-
-                                                false
-                                            }.map { item ->
-                                                AiFileResult(
-                                                    id = item.id.toInt(),
-                                                    title = item.title,
-                                                    format = item.format,
-                                                    size = item.sizeFormatted,
-                                                    dateText = item.dateText,
-                                                    priority = item.priority,
-                                                    iconResId = getFormatIcon(item.format),
-                                                    source = "Device Files",
-                                                    uriString = item.uri.toString(),
-                                                    filePath = item.path,
-                                                    category = null
-                                                )
-                                            }
-                                        } catch (e: Exception) {
-                                            emptyList<AiFileResult>()
-                                        }
-                                    }
-
-                                    // 2. Search AI Vault via Backend API in parallel
-                                    val vaultDeferred = async(Dispatchers.IO) {
-                                        aiRepository.sendChatMessage(
-                                            message = userQuery,
-                                            conversationId = currentConversationId
-                                        )
-                                    }
-
-                                    val localMatches = localDeferred.await()
-                                    val vaultResult = vaultDeferred.await()
-
-                                    isThinking = false
-                                    chatMessages.remove(loadingMsg)
-
-                                    val vaultMatches = mutableListOf<AiFileResult>()
-                                    var backendExplanation: String? = null
-
-                                    vaultResult.onSuccess { response ->
-                                        currentConversationId = response.conversation_id
-                                        backendExplanation = response.message?.text ?: response.reply
-                                        val rawFiles = response.message?.files
-                                            ?: response.message?.related_files
-                                            ?: response.related_files
-                                            ?: emptyList()
-
-                                        val mapped = rawFiles.map { rf ->
-                                            val prio = when (rf.priority?.uppercase()) {
-                                                "IMPORTANT" -> PriorityLevel.IMPORTANT
-                                                "LOW" -> PriorityLevel.LOW
-                                                "NORMAL" -> PriorityLevel.NORMAL
-                                                else -> null
-                                            }
-                                            val icon = getFormatIcon(rf.format)
-                                            AiFileResult(
-                                                id = rf.id,
-                                                title = rf.title,
-                                                format = rf.format ?: "PDF",
-                                                size = rf.size ?: "1.0 MB",
-                                                dateText = rf.dateText ?: "Recent",
-                                                priority = prio,
-                                                iconResId = icon,
-                                                page = rf.page,
-                                                snippet = rf.snippet,
-                                                source = rf.source ?: "AI Vault",
-                                                uriString = rf.uri_string,
-                                                filePath = rf.file_path,
-                                                fileUrl = rf.file_url,
-                                                category = rf.category
-                                            )
-                                        }
-                                        vaultMatches.addAll(mapped)
-                                    }.onFailure { err ->
-                                        if (localMatches.isEmpty()) {
-                                            chatMessages.add(
-                                                ChatMessage.Ai(
-                                                    text = "Could not reach the AI service: ${err.localizedMessage}\nPlease make sure the backend is running."
-                                                )
-                                            )
-                                            return@launch
-                                        }
-                                    }
-
-                                    // 3. Merge & Deduplicate (Device Files + AI Vault Files)
-                                    val allMatches = mutableListOf<AiFileResult>()
-                                    allMatches.addAll(localMatches)
-                                    for (vf in vaultMatches) {
-                                        if (allMatches.none { it.title.equals(vf.title, ignoreCase = true) }) {
-                                            allMatches.add(vf)
-                                        }
-                                    }
-
-                                    // 4. Formulate Response & Display in Chat UI
-                                    if (allMatches.isEmpty()) {
-                                        val emptyMsg = "No matching files found for '$searchKeyword'. Try another filename or keyword."
-                                        chatMessages.add(ChatMessage.Ai(text = emptyMsg, files = emptyList()))
-                                    } else {
-                                        val reply = when (intent) {
-                                            is AiUserIntent.FileOpen -> {
-                                                if (allMatches.size == 1) {
-                                                    val singleDoc = allMatches.first()
-                                                    onOpenFile(singleDoc)
-                                                    "Opening '**${singleDoc.title}**'. Tap below to view if not automatically opened."
-                                                } else {
-                                                    "I found **${allMatches.size} files** matching '**$searchKeyword**'. Tap a file card below to open it:"
-                                                }
-                                            }
-                                            is AiUserIntent.FileTypeFilter -> {
-                                                val fmt = formatFilter ?: "matching"
-                                                "Here are your **${allMatches.size} ${fmt} file${if (allMatches.size > 1) "s" else ""}** found across Device Files and AI Vault:"
-                                            }
-                                            else -> {
-                                                if (vaultMatches.isNotEmpty() && !backendExplanation.isNullOrBlank() && !backendExplanation!!.contains("could not find information", ignoreCase = true) && !backendExplanation!!.contains("No matching files", ignoreCase = true)) {
-                                                    "I found **${allMatches.size} matching file${if (allMatches.size > 1) "s" else ""}** for '**$searchKeyword**' across Device Files and AI Vault:\n\n${backendExplanation}"
-                                                } else {
-                                                    "I found **${allMatches.size} matching file${if (allMatches.size > 1) "s" else ""}** for '**$searchKeyword**' across Device Files and AI Vault:"
-                                                }
-                                            }
-                                        }
-
-                                        chatMessages.add(
-                                            ChatMessage.Ai(
-                                                text = reply,
-                                                files = allMatches
-                                            )
-                                        )
-                                    }
-                                }
-                                else -> {
-                                    // GENERAL_QUERY, DOCUMENT_QUERY, or APP_DATA_QUERY
-                                    val result = aiRepository.sendChatMessage(
-                                        message = userQuery,
-                                        conversationId = currentConversationId
-                                    )
-                                    isThinking = false
-                                    chatMessages.remove(loadingMsg)
-
-                                    result.onSuccess { response ->
-                                        currentConversationId = response.conversation_id
-                                        val replyText = response.message?.text
-                                            ?: response.reply
-                                            ?: "I analyzed your documents."
-
-                                        val rawFiles = response.message?.files
-                                            ?: response.message?.related_files
-                                            ?: response.related_files
-                                            ?: emptyList()
-
-                                        val mappedFiles = rawFiles.map { rf ->
-                                            val prio = when (rf.priority?.uppercase()) {
-                                                "IMPORTANT" -> PriorityLevel.IMPORTANT
-                                                "LOW" -> PriorityLevel.LOW
-                                                else -> PriorityLevel.NORMAL
-                                            }
-                                            val icon = getFormatIcon(rf.format)
-                                            AiFileResult(
-                                                id = rf.id,
-                                                title = rf.title,
-                                                format = rf.format ?: "PDF",
-                                                size = rf.size ?: "1.0 MB",
-                                                dateText = rf.dateText ?: "Recent",
-                                                priority = prio,
-                                                iconResId = icon,
-                                                page = rf.page,
-                                                snippet = rf.snippet,
-                                                source = rf.source ?: "AI Vault",
-                                                uriString = rf.uri_string,
-                                                filePath = rf.file_path,
-                                                fileUrl = rf.file_url,
-                                                category = rf.category
-                                            )
-                                        }
-
-                                        val localFallback = if (mappedFiles.isEmpty()) {
-                                            try {
-                                                val allLocal = LocalFileManager.getDeviceFiles(context)
-                                                val queryTokens = userQuery.lowercase()
-                                                    .split(Regex("[\\s_\\-,.]+"))
-                                                    .filter { it.length >= 3 && !setOf("what", "when", "where", "which", "about", "show", "tell", "does", "have", "this", "that", "file", "document", "with", "from").contains(it) }
-
-                                                allLocal.filter { f ->
-                                                    val titleLower = f.title.lowercase()
-                                                    queryTokens.isNotEmpty() && queryTokens.any { titleLower.contains(it) }
-                                                }.take(5).map { item ->
-                                                    AiFileResult(
-                                                        id = item.id.toInt(),
-                                                        title = item.title,
-                                                        format = item.format,
-                                                        size = item.sizeFormatted,
-                                                        dateText = item.dateText,
-                                                        priority = item.priority,
-                                                        iconResId = getFormatIcon(item.format),
-                                                        source = "Device Files",
-                                                        uriString = item.uri.toString(),
-                                                        filePath = item.path,
-                                                        category = null
-                                                    )
-                                                }
-                                            } catch (_: Exception) {
-                                                emptyList<AiFileResult>()
-                                            }
-                                        } else {
-                                            emptyList()
-                                        }
-
-                                        val finalFiles = if (mappedFiles.isNotEmpty()) mappedFiles else localFallback
-                                        val finalReply = if (mappedFiles.isEmpty() && localFallback.isNotEmpty()) {
-                                            "I found **${localFallback.size} matching file(s)** on your mobile device for '**$userQuery**':"
-                                        } else {
-                                            replyText
-                                        }
-
-                                        chatMessages.add(
-                                            ChatMessage.Ai(
-                                                text = finalReply,
-                                                files = finalFiles
-                                            )
-                                        )
-                                    }.onFailure { err ->
-                                        chatMessages.add(
-                                            ChatMessage.Ai(
-                                                text = "Could not reach the AI service: ${err.localizedMessage}\nPlease make sure the Python AI microservice is running."
-                                            )
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                        chatViewModel.sendMessage(userQuery)
                     }
                 }
             )

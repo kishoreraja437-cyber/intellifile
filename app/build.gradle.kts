@@ -61,6 +61,12 @@ dependencies {
     // Genuine PowerPoint Visual Slide Rendering Engine
     implementation("com.aspose:aspose-slides:24.4:android.via.java")
 
+    // Room Database for AI Chat History & Session Persistence
+    val roomVersion = "2.6.1"
+    implementation("androidx.room:room-runtime:$roomVersion")
+    implementation("androidx.room:room-ktx:$roomVersion")
+    annotationProcessor("androidx.room:room-compiler:$roomVersion")
+
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

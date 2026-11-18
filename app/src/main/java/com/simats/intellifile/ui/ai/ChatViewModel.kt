@@ -1,0 +1,568 @@
+package com.simats.intellifile.ui.ai
+
+import android.app.Application
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Description
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.simats.intellifile.R
+import com.simats.intellifile.data.chat.ChatEntity
+import com.simats.intellifile.data.chat.ChatRepository
+import com.simats.intellifile.data.manager.LocalFileManager
+import com.simats.intellifile.data.repository.AiRepository
+import com.simats.intellifile.ui.home.PriorityLevel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
+
+data class ChatUiState(
+    val currentConversationId: String? = null,
+    val conversationTitle: String = "IntelliFile AI",
+    val messages: List<ChatMessage> = emptyList(),
+    val isThinking: Boolean = false,
+    val isLoadingConversation: Boolean = false,
+    val promptInput: String = "",
+    val editingMessageIndex: Int? = null,
+    val editingMessageText: String = "",
+    val isEditingUserMessage: Boolean = false,
+    val historyItems: List<ChatHistoryItem> = emptyList(),
+    val isLoadingHistory: Boolean = false,
+    val errorMessage: String? = null
+)
+
+class ChatViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val chatRepository = ChatRepository(application)
+    private val aiRepository = AiRepository(application)
+
+    private val defaultGreeting = ChatMessage.Ai(
+        text = "I am IntelliFile AI and I help to find the files",
+        files = emptyList()
+    )
+
+    private val _uiState = MutableStateFlow(
+        ChatUiState(
+            messages = listOf(defaultGreeting)
+        )
+    )
+    val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
+
+    init {
+        restoreLastActiveConversation()
+    }
+
+    /**
+     * Requirement 4: App Background and Restart Persistence
+     * On app launch or ViewModel creation, restores the last active conversation
+     * and displays all its existing messages so the user can seamlessly continue.
+     */
+    fun restoreLastActiveConversation() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingConversation = true) }
+            val activeChat = chatRepository.getActiveOrLatestConversation()
+            if (activeChat != null) {
+                val storedMessages = chatRepository.getMessagesForConversation(activeChat.conversationId)
+                val displayMessages = if (storedMessages.isEmpty()) {
+                    listOf(defaultGreeting)
+                } else {
+                    storedMessages
+                }
+
+                _uiState.update {
+                    it.copy(
+                        currentConversationId = activeChat.conversationId,
+                        conversationTitle = activeChat.title.ifBlank { "IntelliFile AI" },
+                        messages = displayMessages,
+                        isLoadingConversation = false
+                    )
+                }
+            } else {
+                // First time ever: initialize with a fresh conversation ID but do not force messages
+                val initialId = "conv_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}"
+                _uiState.update {
+                    it.copy(
+                        currentConversationId = initialId,
+                        conversationTitle = "IntelliFile AI",
+                        messages = listOf(defaultGreeting),
+                        isLoadingConversation = false
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Requirement 1: Chat History Restoration
+     * Loads the exact selected conversation from Room, restoring all user messages,
+     * AI responses, order, timestamps, title, and conversation context.
+     * Does NOT create a new conversation.
+     */
+    fun loadConversation(conversationId: String) {
+        if (conversationId.isBlank()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingConversation = true) }
+            chatRepository.setActiveConversation(conversationId)
+
+            val chat = chatRepository.getChatById(conversationId)
+            var storedMessages = chatRepository.getMessagesForConversation(conversationId)
+
+            // If empty locally and numeric, attempt to sync from remote backend
+            if (storedMessages.isEmpty()) {
+                conversationId.toIntOrNull()?.let { numId ->
+                    val remoteRes = aiRepository.getConversationMessages(numId)
+                    remoteRes.onSuccess { remoteMsgs ->
+                        remoteMsgs.forEach { rm ->
+                            if (rm.sender.equals("USER", ignoreCase = true)) {
+                                chatRepository.saveUserMessage(conversationId, rm.text)
+                            } else {
+                                val mappedFiles = (rm.files ?: rm.related_files ?: emptyList()).map { rf ->
+                                    val prio = when (rf.priority?.uppercase()) {
+                                        "IMPORTANT" -> PriorityLevel.IMPORTANT
+                                        "NORMAL" -> PriorityLevel.NORMAL
+                                        "LOW" -> PriorityLevel.LOW
+                                        else -> null
+                                    }
+                                    AiFileResult(
+                                        id = rf.id,
+                                        title = rf.title,
+                                        format = rf.format ?: "PDF",
+                                        size = rf.size ?: "1.0 MB",
+                                        dateText = rf.dateText ?: "Recent",
+                                        priority = prio,
+                                        iconResId = getFormatIcon(rf.format),
+                                        page = rf.page,
+                                        snippet = rf.snippet,
+                                        source = rf.source ?: "AI Vault",
+                                        uriString = rf.uri_string,
+                                        filePath = rf.file_path,
+                                        fileUrl = rf.file_url,
+                                        category = rf.category
+                                    )
+                                }
+                                chatRepository.saveAiMessage(conversationId, rm.text, mappedFiles)
+                            }
+                        }
+                        storedMessages = chatRepository.getMessagesForConversation(conversationId)
+                    }
+                }
+            }
+
+            val displayMessages = if (storedMessages.isEmpty()) {
+                listOf(ChatMessage.Ai(text = "This conversation has no messages yet."))
+            } else {
+                storedMessages
+            }
+
+            _uiState.update {
+                it.copy(
+                    currentConversationId = conversationId,
+                    conversationTitle = chat?.title ?: "IntelliFile AI",
+                    messages = displayMessages,
+                    isLoadingConversation = false,
+                    promptInput = ""
+                )
+            }
+        }
+    }
+
+    /**
+     * Requirement 2: Dedicated New Chat Button
+     * Creates a new conversation ONLY when explicitly triggered.
+     * Generates a unique conversation ID, clears current messages, and saves independently
+     * without deleting or overwriting previous conversations.
+     */
+    fun startNewChat() {
+        viewModelScope.launch {
+            val newChat = chatRepository.createNewConversation()
+            _uiState.update {
+                it.copy(
+                    currentConversationId = newChat.conversationId,
+                    conversationTitle = "New Chat",
+                    messages = listOf(defaultGreeting),
+                    isThinking = false,
+                    isLoadingConversation = false,
+                    promptInput = ""
+                )
+            }
+        }
+    }
+
+    fun onPromptInputChange(input: String) {
+        _uiState.update { it.copy(promptInput = input) }
+    }
+
+    /**
+     * Sends a user message, records it persistently in Room, triggers search/AI,
+     * and saves the AI response persistently in Room.
+     */
+    fun sendMessage(userPrompt: String) {
+        val trimmed = userPrompt.trim()
+        if (trimmed.isBlank() || _uiState.value.isThinking) return
+
+        val conversationId = _uiState.value.currentConversationId
+            ?: "conv_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}"
+
+        _uiState.update { state ->
+            state.copy(
+                currentConversationId = conversationId,
+                promptInput = "",
+                messages = state.messages.filterNot { it == defaultGreeting } + ChatMessage.User(trimmed),
+                isThinking = true
+            )
+        }
+
+        viewModelScope.launch {
+            // 1. Save user message to Room DB
+            chatRepository.saveUserMessage(conversationId, trimmed)
+
+            // 2. Add temporary loading message for UI responsiveness
+            val loadingMsg = ChatMessage.Ai(
+                text = "Searching files and analyzing context...",
+                isLoading = true
+            )
+            _uiState.update { it.copy(messages = it.messages + loadingMsg) }
+
+            val intent = AiChatIntentDetector.detect(trimmed)
+            val context = getApplication<Application>().applicationContext
+
+            when (intent) {
+                is AiUserIntent.FileSearch,
+                is AiUserIntent.FileTypeFilter,
+                is AiUserIntent.FileOpen -> {
+                    val searchKeyword = when (intent) {
+                        is AiUserIntent.FileSearch -> intent.query
+                        is AiUserIntent.FileOpen -> intent.targetName
+                        is AiUserIntent.FileTypeFilter -> intent.format
+                        else -> trimmed
+                    }
+                    val formatFilter = when (intent) {
+                        is AiUserIntent.FileSearch -> intent.format
+                        is AiUserIntent.FileTypeFilter -> intent.format
+                        else -> null
+                    }
+
+                    // A. Local Device Files Search
+                    val localDeferred = async(Dispatchers.IO) {
+                        try {
+                            val allLocal = LocalFileManager.getDeviceFiles(context)
+                            val searchTokens = searchKeyword.lowercase()
+                                .split(Regex("[\\s_\\-,.]+"))
+                                .filter { it.length >= 2 && !setOf("the", "my", "all", "file", "files", "document", "documents", "notes", "for", "with", "about").contains(it) }
+
+                            allLocal.filter { f ->
+                                val matchesFormat = when {
+                                    formatFilter == null -> true
+                                    formatFilter.equals("PPT", ignoreCase = true) || formatFilter.equals("PPTX", ignoreCase = true) ->
+                                        f.format.equals("PPT", ignoreCase = true) || f.format.equals("PPTX", ignoreCase = true)
+                                    formatFilter.equals("DOC", ignoreCase = true) || formatFilter.equals("DOCX", ignoreCase = true) ->
+                                        f.format.equals("DOC", ignoreCase = true) || f.format.equals("DOCX", ignoreCase = true)
+                                    formatFilter.equals("XLS", ignoreCase = true) || formatFilter.equals("XLSX", ignoreCase = true) ->
+                                        f.format.equals("XLS", ignoreCase = true) || f.format.equals("XLSX", ignoreCase = true)
+                                    else -> f.format.equals(formatFilter, ignoreCase = true)
+                                }
+                                if (!matchesFormat) return@filter false
+
+                                if (intent is AiUserIntent.FileTypeFilter) return@filter true
+
+                                val titleLower = f.title.lowercase()
+                                val pathLower = f.path.lowercase()
+                                val baseName = f.title.substringBeforeLast('.').lowercase()
+
+                                val directMatch = titleLower.contains(searchKeyword.lowercase()) ||
+                                        baseName.contains(searchKeyword.lowercase()) ||
+                                        pathLower.contains(searchKeyword.lowercase())
+
+                                if (directMatch) return@filter true
+
+                                if (searchTokens.isNotEmpty()) {
+                                    val tokenOverlap = searchTokens.count { token ->
+                                        titleLower.contains(token) || pathLower.contains(token)
+                                    }
+                                    if (tokenOverlap == searchTokens.size || (searchTokens.size >= 2 && tokenOverlap >= searchTokens.size - 1)) {
+                                        return@filter true
+                                    }
+                                }
+
+                                if (f.sizeBytes in 1..500_000L && setOf("TXT", "CSV", "JSON", "MD", "DOCX", "PPTX", "PPT").contains(f.format.uppercase())) {
+                                    try {
+                                        val textContent = LocalFileManager.readTextContent(context, f.uri.toString(), f.path, f.format, 10000)
+                                        if (textContent.contains(searchKeyword, ignoreCase = true)) return@filter true
+                                        if (searchTokens.isNotEmpty() && searchTokens.all { textContent.contains(it, ignoreCase = true) }) return@filter true
+                                    } catch (_: Exception) {}
+                                }
+
+                                false
+                            }.map { item ->
+                                AiFileResult(
+                                    id = item.id.toInt(),
+                                    title = item.title,
+                                    format = item.format,
+                                    size = item.sizeFormatted,
+                                    dateText = item.dateText,
+                                    priority = item.priority,
+                                    iconResId = getFormatIcon(item.format),
+                                    source = "Device Files",
+                                    uriString = item.uri.toString(),
+                                    filePath = item.path,
+                                    category = null
+                                )
+                            }
+                        } catch (_: Exception) {
+                            emptyList<AiFileResult>()
+                        }
+                    }
+
+                    // B. AI Vault Search via Backend
+                    val vaultDeferred = async(Dispatchers.IO) {
+                        aiRepository.sendChatMessage(
+                            message = trimmed,
+                            conversationId = conversationId.toIntOrNull()
+                        )
+                    }
+
+                    val localMatches = localDeferred.await()
+                    val vaultResult = vaultDeferred.await()
+
+                    val vaultMatches = mutableListOf<AiFileResult>()
+                    var backendExplanation: String? = null
+
+                    vaultResult.onSuccess { response ->
+                        backendExplanation = response.message?.text ?: response.reply
+                        val rawFiles = response.message?.files
+                            ?: response.message?.related_files
+                            ?: response.related_files
+                            ?: emptyList()
+
+                        val mapped = rawFiles.map { rf ->
+                            val prio = when (rf.priority?.uppercase()) {
+                                "IMPORTANT" -> PriorityLevel.IMPORTANT
+                                "LOW" -> PriorityLevel.LOW
+                                "NORMAL" -> PriorityLevel.NORMAL
+                                else -> null
+                            }
+                            AiFileResult(
+                                id = rf.id,
+                                title = rf.title,
+                                format = rf.format ?: "PDF",
+                                size = rf.size ?: "1.0 MB",
+                                dateText = rf.dateText ?: "Recent",
+                                priority = prio,
+                                iconResId = getFormatIcon(rf.format),
+                                page = rf.page,
+                                snippet = rf.snippet,
+                                source = rf.source ?: "AI Vault",
+                                uriString = rf.uri_string,
+                                filePath = rf.file_path,
+                                fileUrl = rf.file_url,
+                                category = rf.category
+                            )
+                        }
+                        vaultMatches.addAll(mapped)
+                    }
+
+                    val allMatches = mutableListOf<AiFileResult>()
+                    allMatches.addAll(localMatches)
+                    for (vf in vaultMatches) {
+                        if (allMatches.none { it.title.equals(vf.title, ignoreCase = true) }) {
+                            allMatches.add(vf)
+                        }
+                    }
+
+                    val replyText = if (allMatches.isEmpty()) {
+                        "No matching files found for '$searchKeyword'. Try another filename or keyword."
+                    } else {
+                        when (intent) {
+                            is AiUserIntent.FileOpen -> {
+                                if (allMatches.size == 1) {
+                                    "I found '**${allMatches.first().title}**'. Tap below to view."
+                                } else {
+                                    "I found **${allMatches.size} files** matching '**$searchKeyword**'. Tap a file card below to open it:"
+                                }
+                            }
+                            is AiUserIntent.FileTypeFilter -> {
+                                val fmt = formatFilter ?: "matching"
+                                "Here are your **${allMatches.size} $fmt file${if (allMatches.size > 1) "s" else ""}** found across Device Files and AI Vault:"
+                            }
+                            else -> {
+                                if (vaultMatches.isNotEmpty() && !backendExplanation.isNullOrBlank() && !backendExplanation!!.contains("could not find information", ignoreCase = true) && !backendExplanation!!.contains("No matching files", ignoreCase = true)) {
+                                    "I found **${allMatches.size} matching file${if (allMatches.size > 1) "s" else ""}** for '**$searchKeyword**':\n\n$backendExplanation"
+                                } else {
+                                    "I found **${allMatches.size} matching file${if (allMatches.size > 1) "s" else ""}** for '**$searchKeyword**' across Device Files and AI Vault:"
+                                }
+                            }
+                        }
+                    }
+
+                    // Save AI response to Room
+                    chatRepository.saveAiMessage(conversationId, replyText, allMatches)
+
+                    _uiState.update { state ->
+                        state.copy(
+                            messages = state.messages.filterNot { it == loadingMsg } + ChatMessage.Ai(replyText, allMatches),
+                            isThinking = false
+                        )
+                    }
+                }
+                else -> {
+                    // General query
+                    val result = aiRepository.sendChatMessage(
+                        message = trimmed,
+                        conversationId = conversationId.toIntOrNull()
+                    )
+
+                    val replyText = result.getOrNull()?.let { response ->
+                        response.message?.text ?: response.reply ?: "I analyzed your query."
+                    } ?: "I'm working in local mode right now. You can ask me to search, filter, or open your files anytime!"
+
+                    val rawFiles = result.getOrNull()?.let { response ->
+                        response.message?.files
+                            ?: response.message?.related_files
+                            ?: response.related_files
+                            ?: emptyList()
+                    } ?: emptyList()
+
+                    val mappedFiles = rawFiles.map { rf ->
+                        val prio = when (rf.priority?.uppercase()) {
+                            "IMPORTANT" -> PriorityLevel.IMPORTANT
+                            "LOW" -> PriorityLevel.LOW
+                            else -> PriorityLevel.NORMAL
+                        }
+                        AiFileResult(
+                            id = rf.id,
+                            title = rf.title,
+                            format = rf.format ?: "PDF",
+                            size = rf.size ?: "1.0 MB",
+                            dateText = rf.dateText ?: "Recent",
+                            priority = prio,
+                            iconResId = getFormatIcon(rf.format),
+                            page = rf.page,
+                            snippet = rf.snippet,
+                            source = rf.source ?: "AI Vault",
+                            uriString = rf.uri_string,
+                            filePath = rf.file_path,
+                            fileUrl = rf.file_url,
+                            category = rf.category
+                        )
+                    }
+
+                    // Save AI response to Room
+                    chatRepository.saveAiMessage(conversationId, replyText, mappedFiles)
+
+                    _uiState.update { state ->
+                        state.copy(
+                            messages = state.messages.filterNot { it == loadingMsg } + ChatMessage.Ai(replyText, mappedFiles),
+                            isThinking = false
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Requirement 1 & 7: Loads chat history from Room DB (and syncs with remote).
+     */
+    fun loadChatHistory(category: String = "ALL", searchQuery: String = "") {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingHistory = true) }
+            chatRepository.syncRemoteHistory()
+
+            val allChats = chatRepository.getAllChats()
+            val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+            val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
+
+            val items = allChats.map { chat ->
+                val lastMsg = chatRepository.getMessagesForConversation(chat.conversationId).lastOrNull()
+                val snippet = when (lastMsg) {
+                    is ChatMessage.User -> lastMsg.text
+                    is ChatMessage.Ai -> lastMsg.text
+                    else -> "No messages yet"
+                }
+
+                val dateText = if (chat.updatedAt > 0) dateFormat.format(Date(chat.updatedAt)) else "Recent"
+                val timeText = if (chat.updatedAt > 0) timeFormat.format(Date(chat.updatedAt)) else ""
+
+                val cat = when {
+                    snippet.contains("search", ignoreCase = true) || snippet.contains("find", ignoreCase = true) -> HistoryCategory.SEARCH
+                    snippet.contains("analy", ignoreCase = true) || snippet.contains("summar", ignoreCase = true) -> HistoryCategory.ANALYSIS
+                    else -> HistoryCategory.GENERAL
+                }
+
+                ChatHistoryItem(
+                    id = chat.conversationId,
+                    title = chat.title.ifBlank { "Conversation" },
+                    snippet = snippet.take(80),
+                    dateText = dateText,
+                    timeText = timeText,
+                    category = cat,
+                    icon = when (cat) {
+                        HistoryCategory.ANALYSIS -> Icons.Outlined.Description
+                        HistoryCategory.SEARCH -> Icons.Default.Search
+                        else -> Icons.Outlined.ChatBubbleOutline
+                    }
+                )
+            }.filter { item ->
+                val matchesCategory = category == "ALL" || item.category.name.equals(category, ignoreCase = true)
+                val matchesSearch = searchQuery.isBlank() ||
+                        item.title.contains(searchQuery, ignoreCase = true) ||
+                        item.snippet.contains(searchQuery, ignoreCase = true)
+                matchesCategory && matchesSearch
+            }
+
+            _uiState.update {
+                it.copy(
+                    historyItems = items,
+                    isLoadingHistory = false
+                )
+            }
+        }
+    }
+
+    fun deleteChat(conversationId: String) {
+        viewModelScope.launch {
+            chatRepository.deleteConversation(conversationId)
+            if (_uiState.value.currentConversationId == conversationId) {
+                startNewChat()
+            }
+            loadChatHistory()
+        }
+    }
+
+    fun clearAllHistory() {
+        viewModelScope.launch {
+            chatRepository.clearAllConversations()
+            startNewChat()
+            loadChatHistory()
+        }
+    }
+
+    fun editMessage(index: Int, newText: String) {
+        if (index !in _uiState.value.messages.indices || newText.isBlank()) return
+        val currentMessages = _uiState.value.messages.toMutableList()
+        val oldMsg = currentMessages[index]
+        currentMessages[index] = when (oldMsg) {
+            is ChatMessage.User -> ChatMessage.User(newText)
+            is ChatMessage.Ai -> oldMsg.copy(text = newText)
+        }
+        _uiState.update { it.copy(messages = currentMessages) }
+    }
+
+    private fun getFormatIcon(format: String?): Int {
+        return when (format?.uppercase()) {
+            "DOCX", "DOC" -> R.drawable.doc
+            "PPT", "PPTX" -> R.drawable.ppt
+            else -> R.drawable.pdf
+        }
+    }
+}

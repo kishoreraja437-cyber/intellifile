@@ -48,7 +48,7 @@ enum class HistoryCategory(val label: String, val icon: ImageVector?) {
 }
 
 data class ChatHistoryItem(
-    val id: Int = 0,
+    val id: String = "",
     val title: String,
     val snippet: String,
     val dateText: String,
@@ -60,6 +60,7 @@ data class ChatHistoryItem(
 @Composable
 fun AiChatHistoryScreen(
     modifier: Modifier = Modifier,
+    chatViewModel: ChatViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     onBackClick: () -> Unit = {},
     onClearHistoryClick: () -> Unit = {},
     onDeleteIndividualClick: (ChatHistoryItem) -> Unit = {},
@@ -68,6 +69,7 @@ fun AiChatHistoryScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val aiRepository = remember { AiRepository(context) }
+    val uiState by chatViewModel.uiState.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf(HistoryCategory.ALL) }
@@ -78,6 +80,7 @@ fun AiChatHistoryScreen(
     val historyItems = remember { mutableStateListOf<ChatHistoryItem>() }
 
     fun fetchHistory() {
+        chatViewModel.loadChatHistory(selectedCategory.name, searchQuery)
         coroutineScope.launch {
             isLoading = true
             val catParam = when (selectedCategory) {
@@ -89,8 +92,7 @@ fun AiChatHistoryScreen(
             val result = aiRepository.getChatHistory(catParam)
             isLoading = false
             result.onSuccess { dtoList ->
-                historyItems.clear()
-                dtoList.forEach { dto ->
+                val remoteItems = dtoList.map { dto ->
                     val cat = when (dto.category.uppercase()) {
                         "ANALYSIS" -> HistoryCategory.ANALYSIS
                         "SEARCH" -> HistoryCategory.SEARCH
@@ -101,35 +103,40 @@ fun AiChatHistoryScreen(
                         HistoryCategory.SEARCH -> Icons.Default.Search
                         else -> Icons.Outlined.ChatBubbleOutline
                     }
-                    historyItems.add(
-                        ChatHistoryItem(
-                            id = dto.id,
-                            title = dto.title,
-                            snippet = dto.snippet,
-                            dateText = dto.dateText ?: "Recent",
-                            timeText = dto.timeText ?: "",
-                            category = cat,
-                            icon = icon
-                        )
+                    ChatHistoryItem(
+                        id = dto.id.toString(),
+                        title = dto.title,
+                        snippet = dto.snippet,
+                        dateText = dto.dateText ?: "Recent",
+                        timeText = dto.timeText ?: "",
+                        category = cat,
+                        icon = icon
                     )
                 }
+                historyItems.clear()
+                historyItems.addAll(remoteItems)
             }.onFailure {
-                // If API fails, keep current state
+                // If API fails, fall back to Room DB items
             }
         }
     }
 
-    LaunchedEffect(selectedCategory) {
+    LaunchedEffect(selectedCategory, searchQuery) {
         fetchHistory()
     }
 
-    val filteredItems = historyItems.filter { item ->
-        val matchesSearch = searchQuery.isBlank() ||
-                item.title.contains(searchQuery, ignoreCase = true) ||
-                item.snippet.contains(searchQuery, ignoreCase = true)
-        val matchesCategory = selectedCategory == HistoryCategory.ALL || item.category == selectedCategory
-        matchesSearch && matchesCategory
+    val displayItems = remember(historyItems.toList(), uiState.historyItems, searchQuery, selectedCategory) {
+        val combined = (historyItems + uiState.historyItems).distinctBy { it.id }
+        combined.filter { item ->
+            val matchesSearch = searchQuery.isBlank() ||
+                    item.title.contains(searchQuery, ignoreCase = true) ||
+                    item.snippet.contains(searchQuery, ignoreCase = true)
+            val matchesCategory = selectedCategory == HistoryCategory.ALL || item.category == selectedCategory
+            matchesSearch && matchesCategory
+        }
     }
+
+    val filteredItems = displayItems
 
     if (itemToDelete != null) {
         AlertDialog(
@@ -153,12 +160,11 @@ fun AiChatHistoryScreen(
                         val target = itemToDelete
                         itemToDelete = null
                         if (target != null) {
+                            chatViewModel.deleteChat(target.id)
                             coroutineScope.launch {
-                                val res = aiRepository.clearChatHistory(conversationId = target.id)
-                                res.onSuccess {
-                                    historyItems.removeAll { it.id == target.id }
-                                    onDeleteIndividualClick(target)
-                                }
+                                val res = aiRepository.clearChatHistory(conversationId = target.id.toIntOrNull())
+                                historyItems.removeAll { it.id == target.id }
+                                onDeleteIndividualClick(target)
                             }
                         }
                     }
@@ -201,12 +207,11 @@ fun AiChatHistoryScreen(
                 TextButton(
                     onClick = {
                         showClearConfirmDialog = false
+                        chatViewModel.clearAllHistory()
+                        historyItems.clear()
                         coroutineScope.launch {
-                            val res = aiRepository.clearChatHistory()
-                            res.onSuccess {
-                                historyItems.clear()
-                                onClearHistoryClick()
-                            }
+                            aiRepository.clearChatHistory()
+                            onClearHistoryClick()
                         }
                     }
                 ) {
