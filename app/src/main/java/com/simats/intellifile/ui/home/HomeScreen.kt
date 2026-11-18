@@ -84,9 +84,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.AutoFixHigh
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.foundation.BorderStroke
 
 import androidx.compose.material.icons.outlined.Share
 
@@ -240,9 +237,7 @@ fun HomeScreen(
 
     onFileClick: (RecentFile) -> Unit = {},
 
-    onShareFileClick: (RecentFile) -> Unit = {},
-
-    onWatermarkRemoverClick: () -> Unit = {}
+    onShareFileClick: (RecentFile) -> Unit = {}
 
 ) {
 
@@ -693,90 +688,6 @@ fun HomeScreen(
 
                 }
 
-            }
-
-
-
-            // PDF Tools Section
-            item {
-                Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp)) {
-                    Text(
-                        text = "PDF Tools",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF111827)
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Card(
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        border = BorderStroke(1.dp, Color(0xFFD5ECEE)),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onWatermarkRemoverClick() }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(46.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFEFF8F8))
-                                    .border(1.5.dp, Color(0xFF55A9AF), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.AutoFixHigh,
-                                    contentDescription = null,
-                                    tint = Color(0xFF55A9AF),
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = "Watermark Remover",
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF183A3C)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(Color(0xFF55A9AF))
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                                    ) {
-                                        Text(
-                                            text = "NEW",
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.White
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Detect & erase text, image, and scanned watermarks",
-                                    fontSize = 12.sp,
-                                    color = Color(0xFF537779),
-                                    lineHeight = 16.sp
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = null,
-                                tint = Color(0xFF55A9AF)
-                            )
-                        }
-                    }
-                }
             }
 
 

@@ -17,8 +17,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.AutoFixHigh
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
@@ -90,8 +88,7 @@ fun FileDetailScreen(
     onShareClick: () -> Unit = {},
     onMoreOptionsClick: () -> Unit = {},
     onSetPriorityClick: () -> Unit = {},
-    onPriorityChanged: (PriorityLevel?) -> Unit = {},
-    onWatermarkRemoverClick: () -> Unit = {}
+    onPriorityChanged: (PriorityLevel?) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -565,38 +562,6 @@ fun FileDetailScreen(
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
-            }
-
-            if (fileData.fileName.endsWith(".pdf", ignoreCase = true) || fileData.fileType.contains("PDF", ignoreCase = true)) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Button(
-                    onClick = onWatermarkRemoverClick,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEFF8F8)),
-                    shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.5.dp, Color(0xFF55A9AF)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AutoFixHigh,
-                            contentDescription = "Watermark Remover",
-                            tint = Color(0xFF55A9AF),
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Remove Watermark",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF55A9AF)
-                        )
-                    }
-                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))

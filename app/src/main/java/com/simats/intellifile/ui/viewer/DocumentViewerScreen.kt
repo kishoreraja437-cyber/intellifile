@@ -32,7 +32,6 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Circle
@@ -108,8 +107,7 @@ fun DocumentViewerScreen(
     onMoreClick: () -> Unit = {},
     onSetPriorityClick: () -> Unit = {},
     onConfirmSave: () -> Unit = {},
-    onDismissSaveConfirmation: () -> Unit = {},
-    onWatermarkRemoverClick: () -> Unit = {}
+    onDismissSaveConfirmation: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val isPreview = LocalInspectionMode.current
@@ -549,16 +547,6 @@ fun DocumentViewerScreen(
                                 contentDescription = "Search",
                                 tint = Color(0xFF111827)
                             )
-                        }
-
-                        if (isPdf) {
-                            IconButton(onClick = onWatermarkRemoverClick) {
-                                Icon(
-                                    imageVector = Icons.Default.AutoFixHigh,
-                                    contentDescription = "Remove Watermark",
-                                    tint = Color(0xFF55A9AF)
-                                )
-                            }
                         }
 
                         IconButton(onClick = {
