@@ -642,6 +642,8 @@ fun MainScreen(
 
                         onHistoryItemClick = { historyItem ->
 
+                            chatViewModel.loadConversation(historyItem.id)
+
                             activeAiConversationId = historyItem.id
 
                             isAiHistoryOpen = false

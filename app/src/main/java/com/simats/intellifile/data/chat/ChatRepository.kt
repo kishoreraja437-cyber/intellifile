@@ -3,6 +3,9 @@ package com.simats.intellifile.data.chat
 import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.simats.intellifile.R
+import com.simats.intellifile.data.model.AiChatMessageDto
+import com.simats.intellifile.ui.home.PriorityLevel
 import com.simats.intellifile.data.repository.AiRepository
 import com.simats.intellifile.ui.ai.AiFileResult
 import com.simats.intellifile.ui.ai.ChatMessage
@@ -137,7 +140,14 @@ class ChatRepository(private val context: Context) {
         files: List<AiFileResult> = emptyList()
     ): MessageEntity = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        chatDao.updateChatTimestamp(conversationId, now)
+        var chat = chatDao.getChatById(conversationId)
+        if (chat == null) {
+            chat = ChatEntity(conversationId, "IntelliFile AI", now, now, true)
+            chatDao.deactivateAllChats()
+            chatDao.insertChat(chat)
+        } else {
+            chatDao.updateChatTimestamp(conversationId, now)
+        }
 
         val filesJson = if (files.isNotEmpty()) {
             try {
@@ -216,6 +226,83 @@ class ChatRepository(private val context: Context) {
                 }
             }
         } catch (_: Exception) {}
+    }
+
+    suspend fun getMessageEntitiesForConversation(conversationId: String): List<MessageEntity> = withContext(Dispatchers.IO) {
+        messageDao.getMessagesForConversation(conversationId)
+    }
+
+    suspend fun ensureChatExists(conversationId: String, title: String) = withContext(Dispatchers.IO) {
+        val existing = chatDao.getChatById(conversationId)
+        val now = System.currentTimeMillis()
+        if (existing == null) {
+            val newChat = ChatEntity(conversationId, title, now, now, true)
+            chatDao.deactivateAllChats()
+            chatDao.insertChat(newChat)
+        } else {
+            chatDao.deactivateAllChats()
+            chatDao.setActiveChat(conversationId)
+            if (existing.title.isBlank() || existing.title == "New Chat") {
+                chatDao.updateChatTitle(conversationId, title, now)
+            }
+        }
+    }
+
+    suspend fun saveMessagesBatch(
+        conversationId: String,
+        remoteMsgs: List<AiChatMessageDto>
+    ) = withContext(Dispatchers.IO) {
+        if (remoteMsgs.isEmpty()) return@withContext
+        val now = System.currentTimeMillis()
+        val baseTime = now - (remoteMsgs.size * 1000L)
+        val entities = remoteMsgs.mapIndexed { idx, rm ->
+            val timestamp = baseTime + (idx * 1000L)
+            val filesJson = if (!rm.files.isNullOrEmpty() || !rm.related_files.isNullOrEmpty()) {
+                val files = rm.files ?: rm.related_files ?: emptyList()
+                val mapped = files.map { rf ->
+                    val prio = when (rf.priority?.uppercase()) {
+                        "IMPORTANT" -> PriorityLevel.IMPORTANT
+                        "NORMAL" -> PriorityLevel.NORMAL
+                        "LOW" -> PriorityLevel.LOW
+                        else -> null
+                    }
+                    val iconRes = when (rf.format?.uppercase()) {
+                        "DOCX", "DOC" -> R.drawable.doc
+                        "PPT", "PPTX" -> R.drawable.ppt
+                        else -> R.drawable.pdf
+                    }
+                    AiFileResult(
+                        id = rf.id,
+                        title = rf.title,
+                        format = rf.format ?: "PDF",
+                        size = rf.size ?: "1.0 MB",
+                        dateText = rf.dateText ?: "Recent",
+                        priority = prio,
+                        iconResId = iconRes,
+                        page = rf.page,
+                        snippet = rf.snippet,
+                        source = rf.source ?: "AI Vault",
+                        uriString = rf.uri_string,
+                        filePath = rf.file_path,
+                        fileUrl = rf.file_url,
+                        category = rf.category
+                    )
+                }
+                try { gson.toJson(mapped) } catch (_: Exception) { null }
+            } else null
+
+            val msgId = "msg_${conversationId}_${rm.id}_${idx}"
+            MessageEntity(
+                msgId,
+                conversationId,
+                rm.text,
+                if (rm.sender.equals("USER", ignoreCase = true)) "USER" else "AI",
+                timestamp,
+                filesJson
+            )
+        }
+        messageDao.insertMessages(entities)
+        chatDao.updateChatTimestamp(conversationId, now)
     }
 
     private fun parseFilesJson(json: String?): List<AiFileResult> {

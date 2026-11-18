@@ -111,67 +111,130 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun loadConversation(conversationId: String) {
         if (conversationId.isBlank()) return
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoadingConversation = true) }
+            _uiState.update {
+                it.copy(
+                    isLoadingConversation = true,
+                    currentConversationId = conversationId,
+                    messages = emptyList()
+                )
+            }
             chatRepository.setActiveConversation(conversationId)
 
             val chat = chatRepository.getChatById(conversationId)
-            var storedMessages = chatRepository.getMessagesForConversation(conversationId)
+            val storedMessages = chatRepository.getMessagesForConversation(conversationId)
 
-            // If empty locally and numeric, attempt to sync from remote backend
-            if (storedMessages.isEmpty()) {
-                conversationId.toIntOrNull()?.let { numId ->
-                    val remoteRes = aiRepository.getConversationMessages(numId)
-                    remoteRes.onSuccess { remoteMsgs ->
-                        remoteMsgs.forEach { rm ->
-                            if (rm.sender.equals("USER", ignoreCase = true)) {
-                                chatRepository.saveUserMessage(conversationId, rm.text)
-                            } else {
-                                val mappedFiles = (rm.files ?: rm.related_files ?: emptyList()).map { rf ->
-                                    val prio = when (rf.priority?.uppercase()) {
-                                        "IMPORTANT" -> PriorityLevel.IMPORTANT
-                                        "NORMAL" -> PriorityLevel.NORMAL
-                                        "LOW" -> PriorityLevel.LOW
-                                        else -> null
-                                    }
-                                    AiFileResult(
-                                        id = rf.id,
-                                        title = rf.title,
-                                        format = rf.format ?: "PDF",
-                                        size = rf.size ?: "1.0 MB",
-                                        dateText = rf.dateText ?: "Recent",
-                                        priority = prio,
-                                        iconResId = getFormatIcon(rf.format),
-                                        page = rf.page,
-                                        snippet = rf.snippet,
-                                        source = rf.source ?: "AI Vault",
-                                        uriString = rf.uri_string,
-                                        filePath = rf.file_path,
-                                        fileUrl = rf.file_url,
-                                        category = rf.category
-                                    )
+            // Step 1: If Room DB already has messages, display them immediately
+            if (storedMessages.isNotEmpty()) {
+                _uiState.update {
+                    it.copy(
+                        currentConversationId = conversationId,
+                        conversationTitle = chat?.title?.ifBlank { null } ?: "IntelliFile AI",
+                        messages = storedMessages,
+                        isLoadingConversation = false,
+                        promptInput = ""
+                    )
+                }
+                return@launch
+            }
+
+            // Step 2: If empty locally, fetch from backend via aiRepository
+            val numId = conversationId.toIntOrNull()
+            if (numId != null) {
+                val remoteRes = aiRepository.getConversationDetails(numId)
+                remoteRes.onSuccess { details ->
+                    val remoteMsgs = details.messages
+                    val remoteConv = details.conversation
+                    val title = remoteConv?.title?.ifBlank { null } ?: chat?.title?.ifBlank { null } ?: "Chat #$numId"
+
+                    // Ensure conversation exists in Room
+                    chatRepository.ensureChatExists(conversationId, title)
+
+                    // Map remote messages into ChatMessage models
+                    val parsed = remoteMsgs.map { rm ->
+                        if (rm.sender.equals("USER", ignoreCase = true)) {
+                            ChatMessage.User(rm.text)
+                        } else {
+                            val mappedFiles = (rm.files ?: rm.related_files ?: emptyList()).map { rf ->
+                                val prio = when (rf.priority?.uppercase()) {
+                                    "IMPORTANT" -> PriorityLevel.IMPORTANT
+                                    "NORMAL" -> PriorityLevel.NORMAL
+                                    "LOW" -> PriorityLevel.LOW
+                                    else -> null
                                 }
-                                chatRepository.saveAiMessage(conversationId, rm.text, mappedFiles)
+                                AiFileResult(
+                                    id = rf.id,
+                                    title = rf.title,
+                                    format = rf.format ?: "PDF",
+                                    size = rf.size ?: "1.0 MB",
+                                    dateText = rf.dateText ?: "Recent",
+                                    priority = prio,
+                                    iconResId = getFormatIcon(rf.format),
+                                    page = rf.page,
+                                    snippet = rf.snippet,
+                                    source = rf.source ?: "AI Vault",
+                                    uriString = rf.uri_string,
+                                    filePath = rf.file_path,
+                                    fileUrl = rf.file_url,
+                                    category = rf.category
+                                )
                             }
+                            ChatMessage.Ai(
+                                text = rm.text,
+                                files = mappedFiles,
+                                isLoading = false
+                            )
                         }
-                        storedMessages = chatRepository.getMessagesForConversation(conversationId)
                     }
+
+                    // Immediately present all restored messages on the AI Chat screen
+                    _uiState.update {
+                        it.copy(
+                            currentConversationId = conversationId,
+                            conversationTitle = title,
+                            messages = if (parsed.isNotEmpty()) parsed else listOf(ChatMessage.Ai(text = "This conversation has no messages yet.")),
+                            isLoadingConversation = false,
+                            promptInput = ""
+                        )
+                    }
+
+                    // Persist batch into Room DB asynchronously with preserved chronological ordering
+                    chatRepository.saveMessagesBatch(conversationId, remoteMsgs)
+                    return@launch
+                }.onFailure { err ->
+                    android.util.Log.e("ChatViewModel", "Error restoring remote conversation: ${err.message}")
                 }
             }
 
-            val displayMessages = if (storedMessages.isEmpty()) {
-                listOf(ChatMessage.Ai(text = "This conversation has no messages yet."))
-            } else {
-                storedMessages
-            }
-
+            // Fallback if both Room and remote have no messages
             _uiState.update {
                 it.copy(
                     currentConversationId = conversationId,
-                    conversationTitle = chat?.title ?: "IntelliFile AI",
-                    messages = displayMessages,
+                    conversationTitle = chat?.title?.ifBlank { null } ?: "IntelliFile AI",
+                    messages = listOf(ChatMessage.Ai(text = "This conversation has no messages yet.")),
                     isLoadingConversation = false,
                     promptInput = ""
                 )
+            }
+        }
+    }
+
+    fun updateMessageAt(index: Int, newText: String) {
+        val current = _uiState.value.messages.toMutableList()
+        if (index in current.indices) {
+            val old = current[index]
+            val updated = when (old) {
+                is ChatMessage.User -> ChatMessage.User(newText)
+                is ChatMessage.Ai -> old.copy(text = newText)
+            }
+            current[index] = updated
+            _uiState.update { it.copy(messages = current) }
+
+            val convId = _uiState.value.currentConversationId ?: return
+            viewModelScope.launch(Dispatchers.IO) {
+                val entities = chatRepository.getMessageEntitiesForConversation(convId)
+                if (index in entities.indices) {
+                    chatRepository.updateMessage(entities[index].messageId, newText)
+                }
             }
         }
     }

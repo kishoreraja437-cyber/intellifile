@@ -39,6 +39,8 @@ object RetrofitClient {
             val original = chain.request()
             val builder = original.newBuilder()
                 .header("Accept", "application/json")
+                .header("ngrok-skip-browser-warning", "true")
+                .header("User-Agent", "IntelliFile-Android")
 
             val token = sessionManager.getToken()
             if (!token.isNullOrBlank()) {
