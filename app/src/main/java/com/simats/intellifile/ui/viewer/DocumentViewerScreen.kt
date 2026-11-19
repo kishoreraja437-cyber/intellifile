@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -85,12 +86,22 @@ import com.simats.intellifile.data.manager.SlideTable
 import com.simats.intellifile.data.manager.SlideSection
 import com.simats.intellifile.data.model.LocalFileItem
 import com.simats.intellifile.ui.dialog.SaveConfirmationDialog
+import com.simats.intellifile.data.manager.DocumentElement
+import com.simats.intellifile.data.manager.DocumentElementType
+import com.simats.intellifile.data.manager.DocumentTable
+import com.simats.intellifile.data.manager.DocumentImage
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.ViewAgenda
 import com.simats.intellifile.ui.viewer.ppt.PPTViewerScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 enum class PresentationViewMode {
     SLIDE_CARDS, ALL_CONTENT
+}
+
+enum class WordDocViewMode {
+    PAGE_VIEW, CONTINUOUS
 }
 
 @Composable
@@ -143,6 +154,8 @@ fun DocumentViewerScreen(
     var currentPageIndex by remember { mutableIntStateOf(1) }
     var totalUnitsCount by remember { mutableIntStateOf(totalPages.coerceAtLeast(1)) }
     var zoomPercentage by remember { mutableIntStateOf(100) }
+    var wordDocViewMode by remember { mutableStateOf(WordDocViewMode.PAGE_VIEW) }
+    var zoomTargetDocumentImage by remember { mutableStateOf<DocumentImage?>(null) }
     var isBookmarked by remember {
         mutableStateOf(
             if (!isPreview && key.isNotBlank()) LocalFileDatabaseHelper.getInstance(context).isBookmarked(key) else false
@@ -436,6 +449,82 @@ fun DocumentViewerScreen(
         )
     }
 
+    // Document Image Zoom Dialog
+    if (zoomTargetDocumentImage != null) {
+        val targetImg = zoomTargetDocumentImage!!
+        val bmp = remember(targetImg) {
+            try {
+                BitmapFactory.decodeByteArray(targetImg.bytes, 0, targetImg.bytes.size)
+            } catch (_: Exception) { null }
+        }
+        var imgScale by remember { mutableFloatStateOf(1f) }
+        var imgOffset by remember { mutableStateOf(Offset.Zero) }
+
+        Dialog(
+            onDismissRequest = { zoomTargetDocumentImage = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.92f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                imgScale = (imgScale * zoom).coerceIn(0.5f, 5f)
+                                imgOffset += pan
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = targetImg.caption,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .graphicsLayer(
+                                    scaleX = imgScale,
+                                    scaleY = imgScale,
+                                    translationX = imgOffset.x,
+                                    translationY = imgOffset.y
+                                )
+                        )
+                    } else {
+                        Text("Image could not be rendered", color = Color.White)
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = targetImg.caption.ifBlank { "Document Graphic" },
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                    IconButton(
+                        onClick = { zoomTargetDocumentImage = null },
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.5f))
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                    }
+                }
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -512,7 +601,11 @@ fun DocumentViewerScreen(
                                 isPdf -> "PDF Document · Page $currentPageIndex of $totalUnitsCount"
                                 parsedContent is ParsedDocumentContent.Presentation -> "PowerPoint Presentation · Slide $currentPageIndex of $totalUnitsCount"
                                 parsedContent is ParsedDocumentContent.Spreadsheet -> "Excel Spreadsheet · ${(parsedContent as ParsedDocumentContent.Spreadsheet).rows.size} Rows"
-                                parsedContent is ParsedDocumentContent.RichDocument -> "Word Document · Page $currentPageIndex of $totalUnitsCount"
+                                parsedContent is ParsedDocumentContent.RichDocument -> {
+                                    val rich = parsedContent as ParsedDocumentContent.RichDocument
+                                    if (rich.wordCount > 0) "Word Document · Page $currentPageIndex of $totalUnitsCount · ${rich.wordCount} words"
+                                    else "Word Document · Page $currentPageIndex of $totalUnitsCount"
+                                }
                                 else -> "$effectiveFormat Document"
                             }
                             Text(
@@ -536,6 +629,25 @@ fun DocumentViewerScreen(
                                 Icon(
                                     imageVector = Icons.Default.Slideshow,
                                     contentDescription = "Fullscreen Slideshow",
+                                    tint = Color(0xFF111827)
+                                )
+                            }
+                        }
+
+                        if (parsedContent is ParsedDocumentContent.RichDocument || effectiveFormat.uppercase() in listOf("DOC", "DOCX", "RTF")) {
+                            IconButton(onClick = { openWithExternalApp() }) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                    contentDescription = "Open in Word / Office App",
+                                    tint = Color(0xFF55A9AF)
+                                )
+                            }
+                            IconButton(onClick = {
+                                wordDocViewMode = if (wordDocViewMode == WordDocViewMode.PAGE_VIEW) WordDocViewMode.CONTINUOUS else WordDocViewMode.PAGE_VIEW
+                            }) {
+                                Icon(
+                                    imageVector = if (wordDocViewMode == WordDocViewMode.PAGE_VIEW) Icons.Default.ViewAgenda else Icons.AutoMirrored.Filled.MenuBook,
+                                    contentDescription = if (wordDocViewMode == WordDocViewMode.PAGE_VIEW) "Switch to Continuous Reading" else "Switch to Page View",
                                     tint = Color(0xFF111827)
                                 )
                             }
@@ -773,18 +885,28 @@ fun DocumentViewerScreen(
                     // DOCX / DOC / RTF Document Reader View
                     parsedContent is ParsedDocumentContent.RichDocument -> {
                         val doc = parsedContent as ParsedDocumentContent.RichDocument
-                        val pageIdx = (currentPageIndex - 1).coerceIn(0, doc.pages.size - 1)
-                        val page = doc.pages.getOrNull(pageIdx)
+                        if (wordDocViewMode == WordDocViewMode.CONTINUOUS) {
+                            WordDocumentContinuousView(
+                                doc = doc,
+                                zoomPercentage = zoomPercentage,
+                                searchQuery = searchQuery,
+                                onZoomImage = { zoomTargetDocumentImage = it }
+                            )
+                        } else {
+                            val pageIdx = if (doc.pages.isNotEmpty()) (currentPageIndex - 1).coerceIn(0, doc.pages.size - 1) else 0
+                            val page = doc.pages.getOrNull(pageIdx)
 
-                        WordDocumentPageView(
-                            page = page,
-                            currentPage = currentPageIndex,
-                            totalPages = doc.totalPages,
-                            zoomPercentage = zoomPercentage,
-                            searchQuery = searchQuery,
-                            onPrevPage = { if (currentPageIndex > 1) currentPageIndex-- },
-                            onNextPage = { if (currentPageIndex < totalUnitsCount) currentPageIndex++ }
-                        )
+                            WordDocumentPageView(
+                                page = page,
+                                currentPage = currentPageIndex,
+                                totalPages = doc.totalPages,
+                                zoomPercentage = zoomPercentage,
+                                searchQuery = searchQuery,
+                                onPrevPage = { if (currentPageIndex > 1) currentPageIndex-- },
+                                onNextPage = { if (currentPageIndex < totalUnitsCount) currentPageIndex++ },
+                                onZoomImage = { zoomTargetDocumentImage = it }
+                            )
+                        }
                     }
 
                     // Plain Text View (TXT, JSON, MD, LOG)
@@ -825,47 +947,57 @@ fun DocumentViewerScreen(
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (totalUnitsCount > 1) {
-                        IconButton(
-                            onClick = { if (currentPageIndex > 1) currentPageIndex-- },
-                            enabled = currentPageIndex > 1,
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                                contentDescription = "Previous $unitName",
-                                tint = if (currentPageIndex > 1) Color(0xFF374151) else Color(0xFFD1D5DB),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-
-                    Text(
-                        text = if (totalUnitsCount > 1) "$unitName $currentPageIndex / $totalUnitsCount" else "$unitName 1 / 1",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF374151),
-                        modifier = Modifier
-                            .clickable {
-                                if (totalUnitsCount > 1) {
-                                    showJumpDialog = true
-                                }
+                    if (wordDocViewMode == WordDocViewMode.CONTINUOUS && parsedContent is ParsedDocumentContent.RichDocument) {
+                        Text(
+                            text = "Full Document · $totalUnitsCount Pages",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF374151),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    } else {
+                        if (totalUnitsCount > 1) {
+                            IconButton(
+                                onClick = { if (currentPageIndex > 1) currentPageIndex-- },
+                                enabled = currentPageIndex > 1,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                    contentDescription = "Previous $unitName",
+                                    tint = if (currentPageIndex > 1) Color(0xFF374151) else Color(0xFFD1D5DB),
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
-                            .padding(horizontal = 8.dp)
-                    )
+                        }
 
-                    if (totalUnitsCount > 1) {
-                        IconButton(
-                            onClick = { if (currentPageIndex < totalUnitsCount) currentPageIndex++ },
-                            enabled = currentPageIndex < totalUnitsCount,
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = "Next $unitName",
-                                tint = if (currentPageIndex < totalUnitsCount) Color(0xFF374151) else Color(0xFFD1D5DB),
-                                modifier = Modifier.size(18.dp)
-                            )
+                        Text(
+                            text = if (totalUnitsCount > 1) "$unitName $currentPageIndex / $totalUnitsCount" else "$unitName 1 / 1",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF374151),
+                            modifier = Modifier
+                                .clickable {
+                                    if (totalUnitsCount > 1) {
+                                        showJumpDialog = true
+                                    }
+                                }
+                                .padding(horizontal = 8.dp)
+                        )
+
+                        if (totalUnitsCount > 1) {
+                            IconButton(
+                                onClick = { if (currentPageIndex < totalUnitsCount) currentPageIndex++ },
+                                enabled = currentPageIndex < totalUnitsCount,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = "Next $unitName",
+                                    tint = if (currentPageIndex < totalUnitsCount) Color(0xFF374151) else Color(0xFFD1D5DB),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -2383,8 +2515,123 @@ private fun SpreadsheetTableView(
 }
 
 // ==========================================
-// 3. WORD DOCUMENT PAGE COMPOSABLE (DOC/DOCX)
+// 3. WORD DOCUMENT COMPOSABLES (DOC/DOCX)
 // ==========================================
+
+@Composable
+private fun WordDocumentContinuousView(
+    doc: com.simats.intellifile.data.manager.ParsedDocumentContent.RichDocument,
+    zoomPercentage: Int,
+    searchQuery: String,
+    onZoomImage: (com.simats.intellifile.data.manager.DocumentImage) -> Unit
+) {
+    val scaleFactor = zoomPercentage / 100f
+    val readingTimeMin = ((doc.wordCount / 200.0) + 0.5).toInt().coerceAtLeast(1)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .shadow(3.dp, RoundedCornerShape(12.dp))
+            .background(Color.White)
+            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
+            .padding(20.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Column {
+            // Document Metadata Banner
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFEFF8F8))
+                    .border(1.dp, Color(0xFFD5ECEE), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = doc.title,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = (13 * scaleFactor).sp,
+                        color = Color(0xFF183A3C),
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${doc.totalPages} Pages · ${doc.wordCount} Words · ~$readingTimeMin min read",
+                        fontSize = (11 * scaleFactor).sp,
+                        color = Color(0xFF537779)
+                    )
+                }
+                Text(
+                    text = "Continuous",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF55A9AF),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color.White)
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Render all pages sequentially
+            doc.pages.forEachIndexed { pageIdx, page ->
+                if (pageIdx > 0) {
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = Color(0xFFE2E8F0))
+                        Text(
+                            text = "  Page ${pageIdx + 1} of ${doc.totalPages}  ",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF94A3B8)
+                        )
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = Color(0xFFE2E8F0))
+                    }
+                    Spacer(modifier = Modifier.height(18.dp))
+                }
+
+                if (page.elements.isNotEmpty()) {
+                    page.elements.forEach { element ->
+                        RenderDocumentElement(
+                            element = element,
+                            scaleFactor = scaleFactor,
+                            searchQuery = searchQuery,
+                            onZoomImage = onZoomImage
+                        )
+                    }
+                } else if (page.paragraphs.isNotEmpty()) {
+                    page.paragraphs.forEach { p ->
+                        RenderPlainParagraph(
+                            text = p,
+                            scaleFactor = scaleFactor,
+                            searchQuery = searchQuery
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                text = "— End of Document —",
+                fontSize = 12.sp,
+                color = Color(0xFF94A3B8),
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+    }
+}
+
 @Composable
 private fun WordDocumentPageView(
     page: com.simats.intellifile.data.manager.DocumentPageData?,
@@ -2393,10 +2640,10 @@ private fun WordDocumentPageView(
     zoomPercentage: Int,
     searchQuery: String,
     onPrevPage: () -> Unit,
-    onNextPage: () -> Unit
+    onNextPage: () -> Unit,
+    onZoomImage: (com.simats.intellifile.data.manager.DocumentImage) -> Unit
 ) {
     val scaleFactor = zoomPercentage / 100f
-    val bodySize = (15 * scaleFactor).sp
 
     Column(
         modifier = Modifier
@@ -2429,36 +2676,340 @@ private fun WordDocumentPageView(
                         color = Color(0xFF94A3B8)
                     )
                     Text(
-                        text = "IntelliFile Reader",
+                        text = "IntelliFile Document Reader",
                         fontSize = 11.sp,
-                        color = Color(0xFFCBD5E1)
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF55A9AF)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 HorizontalDivider(color = Color(0xFFF1F5F9), thickness = 1.dp)
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                if (page != null && page.paragraphs.isNotEmpty()) {
+                if (page != null && page.elements.isNotEmpty()) {
+                    page.elements.forEach { element ->
+                        RenderDocumentElement(
+                            element = element,
+                            scaleFactor = scaleFactor,
+                            searchQuery = searchQuery,
+                            onZoomImage = onZoomImage
+                        )
+                    }
+                } else if (page != null && page.paragraphs.isNotEmpty()) {
                     page.paragraphs.forEach { p ->
-                        val isMatch = searchQuery.isNotBlank() && p.contains(searchQuery, ignoreCase = true)
-                        Text(
+                        RenderPlainParagraph(
                             text = p,
-                            fontSize = bodySize,
-                            color = Color(0xFF1E293B),
-                            lineHeight = (bodySize.value * 1.6f).sp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .then(if (isMatch) Modifier.background(Color(0xFFFEF08A).copy(alpha = 0.5f), RoundedCornerShape(4.dp)) else Modifier)
-                                .padding(vertical = 6.dp)
+                            scaleFactor = scaleFactor,
+                            searchQuery = searchQuery
                         )
                     }
                 } else {
-                    Text(
-                        text = "Page content empty.",
-                        fontSize = bodySize,
-                        color = Color(0xFF94A3B8)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Page content empty.",
+                            fontSize = (14 * scaleFactor).sp,
+                            color = Color(0xFF94A3B8)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RenderDocumentElement(
+    element: com.simats.intellifile.data.manager.DocumentElement,
+    scaleFactor: Float,
+    searchQuery: String,
+    onZoomImage: (com.simats.intellifile.data.manager.DocumentImage) -> Unit
+) {
+    when (element.type) {
+        com.simats.intellifile.data.manager.DocumentElementType.TITLE -> {
+            Text(
+                text = element.text,
+                fontSize = (22 * scaleFactor).sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color(0xFF183A3C),
+                lineHeight = (26 * scaleFactor).sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp, bottom = 8.dp)
+            )
+        }
+
+        com.simats.intellifile.data.manager.DocumentElementType.SUBTITLE -> {
+            Text(
+                text = element.text,
+                fontSize = (15 * scaleFactor).sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF537779),
+                lineHeight = (20 * scaleFactor).sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp)
+            )
+        }
+
+        com.simats.intellifile.data.manager.DocumentElementType.HEADING_1 -> {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = element.text,
+                fontSize = (18 * scaleFactor).sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF55A9AF),
+                lineHeight = (22 * scaleFactor).sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp)
+            )
+        }
+
+        com.simats.intellifile.data.manager.DocumentElementType.HEADING_2 -> {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = element.text,
+                fontSize = (16 * scaleFactor).sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF183A3C),
+                lineHeight = (20 * scaleFactor).sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 4.dp)
+            )
+        }
+
+        com.simats.intellifile.data.manager.DocumentElementType.HEADING_3 -> {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = element.text,
+                fontSize = (15 * scaleFactor).sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF183A3C),
+                lineHeight = (19 * scaleFactor).sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 4.dp)
+            )
+        }
+
+        com.simats.intellifile.data.manager.DocumentElementType.LIST_ITEM -> {
+            val isMatch = searchQuery.isNotBlank() && element.text.contains(searchQuery, ignoreCase = true)
+            val bullet = if (element.bullet.isNotBlank()) element.bullet else "•"
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (isMatch) Modifier.background(Color(0xFFFEF08A).copy(alpha = 0.5f), RoundedCornerShape(4.dp)) else Modifier)
+                    .padding(vertical = 3.dp, horizontal = 4.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Text(
+                    text = bullet,
+                    fontSize = (14 * scaleFactor).sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF55A9AF),
+                    modifier = Modifier.padding(end = 8.dp, top = 1.dp)
+                )
+                Text(
+                    text = element.text.removePrefix("•").removePrefix("-").trim(),
+                    fontSize = (14 * scaleFactor).sp,
+                    color = Color(0xFF1E293B),
+                    lineHeight = (20 * scaleFactor).sp,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        com.simats.intellifile.data.manager.DocumentElementType.QUOTE,
+        com.simats.intellifile.data.manager.DocumentElementType.CALLOUT -> {
+            val isMatch = searchQuery.isNotBlank() && element.text.contains(searchQuery, ignoreCase = true)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFF0FDFA))
+                    .border(
+                        BorderStroke(1.dp, Color(0xFFCCFBF1)),
+                        RoundedCornerShape(8.dp)
                     )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (isMatch) Modifier.background(Color(0xFFFEF08A).copy(alpha = 0.5f)) else Modifier)
+                        .padding(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(4.dp)
+                            .height(24.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Color(0xFF55A9AF))
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = element.text,
+                        fontSize = (13.5f * scaleFactor).sp,
+                        color = Color(0xFF134E4A),
+                        lineHeight = (19 * scaleFactor).sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+
+        com.simats.intellifile.data.manager.DocumentElementType.TABLE -> {
+            val table = element.table
+            if (table != null && table.rows.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                DocumentTableView(table = table, scaleFactor = scaleFactor, searchQuery = searchQuery)
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+        }
+
+        com.simats.intellifile.data.manager.DocumentElementType.IMAGE -> {
+            val img = element.image
+            if (img != null && img.bytes.isNotEmpty()) {
+                val bmp = remember(img) {
+                    try {
+                        BitmapFactory.decodeByteArray(img.bytes, 0, img.bytes.size)
+                    } catch (_: Exception) { null }
+                }
+                if (bmp != null) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                            .clickable { onZoomImage(img) },
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Image(
+                                bitmap = bmp.asImageBitmap(),
+                                contentDescription = img.caption,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 260.dp)
+                                    .clip(RoundedCornerShape(6.dp)),
+                                contentScale = ContentScale.Fit
+                            )
+                            if (img.caption.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = img.caption,
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF64748B),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        com.simats.intellifile.data.manager.DocumentElementType.DIVIDER -> {
+            Spacer(modifier = Modifier.height(10.dp))
+            HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 1.dp)
+            Spacer(modifier = Modifier.height(10.dp))
+        }
+
+        else -> {
+            RenderPlainParagraph(
+                text = element.text,
+                scaleFactor = scaleFactor,
+                searchQuery = searchQuery
+            )
+        }
+    }
+}
+
+@Composable
+private fun RenderPlainParagraph(
+    text: String,
+    scaleFactor: Float,
+    searchQuery: String
+) {
+    val isMatch = searchQuery.isNotBlank() && text.contains(searchQuery, ignoreCase = true)
+    val bodySize = (14.5f * scaleFactor).sp
+
+    Text(
+        text = text,
+        fontSize = bodySize,
+        color = Color(0xFF1E293B),
+        lineHeight = (bodySize.value * 1.55f).sp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (isMatch) Modifier.background(Color(0xFFFEF08A).copy(alpha = 0.5f), RoundedCornerShape(4.dp)) else Modifier)
+            .padding(vertical = 4.dp)
+    )
+}
+
+@Composable
+private fun DocumentTableView(
+    table: com.simats.intellifile.data.manager.DocumentTable,
+    scaleFactor: Float,
+    searchQuery: String
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, Color(0xFFCBD5E1))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+        ) {
+            Column {
+                table.rows.forEachIndexed { rowIdx, rowCells ->
+                    val isHeader = rowIdx == 0 && table.hasHeader
+                    val rowBg = when {
+                        isHeader -> Color(0xFFF1F5F9)
+                        rowIdx % 2 == 1 -> Color(0xFFF8FAFC)
+                        else -> Color.White
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .background(rowBg)
+                            .border(BorderStroke(0.5.dp, Color(0xFFE2E8F0))),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        rowCells.forEachIndexed { colIdx, cellText ->
+                            val isMatch = searchQuery.isNotBlank() && cellText.contains(searchQuery, ignoreCase = true)
+                            Box(
+                                modifier = Modifier
+                                    .widthIn(min = 90.dp, max = 220.dp)
+                                    .border(BorderStroke(0.5.dp, Color(0xFFE2E8F0)))
+                                    .then(if (isMatch) Modifier.background(Color(0xFFFEF08A).copy(alpha = 0.6f)) else Modifier)
+                                    .padding(horizontal = 10.dp, vertical = 7.dp)
+                            ) {
+                                Text(
+                                    text = cellText,
+                                    fontSize = if (isHeader) (12 * scaleFactor).sp else (11.5f * scaleFactor).sp,
+                                    fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isHeader) Color(0xFF0F172A) else Color(0xFF334155),
+                                    lineHeight = (15 * scaleFactor).sp
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

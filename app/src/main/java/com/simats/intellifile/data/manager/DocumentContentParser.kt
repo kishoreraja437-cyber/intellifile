@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import org.xmlpull.v1.XmlPullParser
+import org.xmlpull.v1.XmlPullParserFactory
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -27,7 +29,12 @@ sealed class ParsedDocumentContent {
         val title: String,
         val totalPages: Int,
         val pages: List<DocumentPageData>,
-        val fullText: String
+        val fullText: String,
+        val wordCount: Int = 0,
+        val charCount: Int = 0,
+        val allElements: List<DocumentElement> = emptyList(),
+        val allImages: List<DocumentImage> = emptyList(),
+        val allTables: List<DocumentTable> = emptyList()
     ) : ParsedDocumentContent()
 
     data class PlainText(
@@ -44,6 +51,56 @@ sealed class ParsedDocumentContent {
         val message: String
     ) : ParsedDocumentContent()
 }
+
+enum class DocumentElementType {
+    TITLE,
+    SUBTITLE,
+    HEADING_1,
+    HEADING_2,
+    HEADING_3,
+    PARAGRAPH,
+    LIST_ITEM,
+    CALLOUT,
+    QUOTE,
+    TABLE,
+    IMAGE,
+    DIVIDER
+}
+
+data class DocumentTable(
+    val rows: List<List<String>>,
+    val hasHeader: Boolean = true
+)
+
+data class DocumentImage(
+    val fileName: String,
+    val bytes: ByteArray,
+    val caption: String = ""
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as DocumentImage
+        if (fileName != other.fileName) return false
+        if (!bytes.contentEquals(other.bytes)) return false
+        return caption == other.caption
+    }
+
+    override fun hashCode(): Int {
+        var result = fileName.hashCode()
+        result = 31 * result + bytes.contentHashCode()
+        result = 31 * result + caption.hashCode()
+        return result
+    }
+}
+
+data class DocumentElement(
+    val type: DocumentElementType,
+    val text: String = "",
+    val bullet: String = "",
+    val table: DocumentTable? = null,
+    val image: DocumentImage? = null
+)
 
 data class SlideImage(
     val fileName: String,
@@ -122,7 +179,10 @@ data class SlideData(
 
 data class DocumentPageData(
     val pageNumber: Int,
-    val paragraphs: List<String>
+    val paragraphs: List<String> = emptyList(),
+    val elements: List<DocumentElement> = emptyList(),
+    val tables: List<DocumentTable> = emptyList(),
+    val images: List<DocumentImage> = emptyList()
 )
 
 object DocumentContentParser {
@@ -213,7 +273,9 @@ object DocumentContentParser {
                 zipHasWord || isWordHint -> {
                     if (isZip || rawExt == "docx") {
                         try {
-                            parseDocx(bytes, fileName)
+                            val docx = parseDocx(bytes, fileName)
+                            if (docx.pages.isNotEmpty() && docx.fullText.isNotBlank()) docx
+                            else parseDoc(bytes, fileName)
                         } catch (_: Exception) {
                             parseDoc(bytes, fileName)
                         }
@@ -1087,108 +1149,636 @@ object DocumentContentParser {
     // 2. DOCUMENT PARSERS (DOCX & DOC)
     // ==========================================
 
-    private fun parseDocx(bytes: ByteArray, fileName: String): ParsedDocumentContent {
-        val zip = ZipInputStream(ByteArrayInputStream(bytes))
-        var entry = zip.nextEntry
-        var documentXml: String? = null
-
-        while (entry != null) {
-            val entryName = entry.name.replace('\\', '/')
-            if (entryName.endsWith("word/document.xml", ignoreCase = true)) {
-                val out = ByteArrayOutputStream()
-                val buf = ByteArray(4096)
-                var len: Int
-                while (zip.read(buf).also { len = it } > 0) {
-                    out.write(buf, 0, len)
-                }
-                documentXml = out.toString("UTF-8")
-                break
-            }
-            entry = zip.nextEntry
-        }
-
-        if (documentXml.isNullOrBlank()) {
-            return ParsedDocumentContent.Error("Invalid Word document (missing word/document.xml).")
-        }
-
-        val pRegex = Regex("<w:p[ >](.*?)</w:p>", RegexOption.DOT_MATCHES_ALL)
-        val tRegex = Regex("<w:t[^>]*>(.*?)</w:t>")
-        val pageBreakRegex = Regex("<w:br[^>]*w:type=\"page\"|<w:lastRenderedPageBreak")
-
-        val rawParagraphs = mutableListOf<String>()
-        val pageBreakIndices = mutableSetOf<Int>()
-
-        var pIndex = 0
-        for (match in pRegex.findAll(documentXml)) {
-            val pContent = match.value
-            val text = tRegex.findAll(pContent).map { unescapeXml(it.groupValues[1]) }.joinToString("").trim()
-            if (text.isNotBlank()) {
-                rawParagraphs.add(text)
-                if (pageBreakRegex.containsMatchIn(pContent)) {
-                    pageBreakIndices.add(pIndex)
-                }
-                pIndex++
-            }
-        }
-
-        if (rawParagraphs.isEmpty()) {
-            rawParagraphs.add("This Word document contains no readable text.")
-        }
-
-        val pages = mutableListOf<DocumentPageData>()
-        var currentPageParagraphs = mutableListOf<String>()
-        var currentWordsCount = 0
-
-        rawParagraphs.forEachIndexed { idx, p ->
-            currentPageParagraphs.add(p)
-            currentWordsCount += p.split("\\s+".toRegex()).size
-
-            val shouldBreak = pageBreakIndices.contains(idx) || currentWordsCount >= 350 || currentPageParagraphs.size >= 7
-            if (shouldBreak) {
-                pages.add(DocumentPageData(pages.size + 1, currentPageParagraphs))
-                currentPageParagraphs = mutableListOf()
-                currentWordsCount = 0
-            }
-        }
-
-        if (currentPageParagraphs.isNotEmpty()) {
-            pages.add(DocumentPageData(pages.size + 1, currentPageParagraphs))
-        }
-
-        val fullText = rawParagraphs.joinToString("\n\n")
-
-        return ParsedDocumentContent.RichDocument(
-            title = fileName,
-            totalPages = pages.size,
-            pages = pages,
-            fullText = fullText
-        )
-    }
-
-    private fun parseDoc(bytes: ByteArray, fileName: String): ParsedDocumentContent.RichDocument {
-        val textLines = scanTextFromBinary(bytes)
-
-        if (textLines.isEmpty()) {
+    fun parseDocx(bytes: ByteArray, fileName: String): ParsedDocumentContent.RichDocument {
+        if (bytes.isEmpty()) {
             return ParsedDocumentContent.RichDocument(
                 title = fileName,
                 totalPages = 1,
-                pages = listOf(DocumentPageData(1, listOf("Word document loaded. No textual content detected."))),
+                pages = listOf(DocumentPageData(1, listOf("This Word document is empty."))),
                 fullText = ""
             )
         }
 
-        val pages = mutableListOf<DocumentPageData>()
-        val chunks = textLines.chunked(6)
+        var documentXmlBytes: ByteArray? = null
+        val mediaMap = mutableMapOf<String, ByteArray>()
+        val relsTargetMap = mutableMapOf<String, String>()
 
-        chunks.forEachIndexed { index, chunk ->
-            pages.add(DocumentPageData(index + 1, chunk))
+        try {
+            val zip = ZipInputStream(ByteArrayInputStream(bytes))
+            var entry = zip.nextEntry
+            while (entry != null) {
+                val entryName = entry.name.replace('\\', '/')
+                val lowerName = entryName.lowercase()
+
+                if (lowerName.endsWith("word/document.xml") || lowerName == "document.xml") {
+                    val out = ByteArrayOutputStream()
+                    val buf = ByteArray(4096)
+                    var len: Int
+                    while (zip.read(buf).also { len = it } > 0) {
+                        out.write(buf, 0, len)
+                    }
+                    documentXmlBytes = out.toByteArray()
+                } else if (lowerName.contains("media/") ||
+                    lowerName.endsWith(".png") || lowerName.endsWith(".jpg") ||
+                    lowerName.endsWith(".jpeg") || lowerName.endsWith(".webp") ||
+                    lowerName.endsWith(".gif") || lowerName.endsWith(".bmp")
+                ) {
+                    val out = ByteArrayOutputStream()
+                    val buf = ByteArray(4096)
+                    var len: Int
+                    while (zip.read(buf).also { len = it } > 0) {
+                        out.write(buf, 0, len)
+                    }
+                    val simpleName = entryName.substringAfterLast('/')
+                    val b = out.toByteArray()
+                    mediaMap[simpleName] = b
+                    mediaMap[entryName] = b
+                } else if (lowerName.endsWith("document.xml.rels")) {
+                    val out = ByteArrayOutputStream()
+                    val buf = ByteArray(4096)
+                    var len: Int
+                    while (zip.read(buf).also { len = it } > 0) {
+                        out.write(buf, 0, len)
+                    }
+                    val relsXml = out.toString("UTF-8")
+                    val relRegex = Regex("""Id="([^"]+)"[^>]*Target="([^"]+)"""")
+                    for (m in relRegex.findAll(relsXml)) {
+                        val rId = m.groupValues[1]
+                        val target = m.groupValues[2].replace('\\', '/').substringAfterLast('/')
+                        relsTargetMap[rId] = target
+                    }
+                }
+                entry = zip.nextEntry
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
+
+        val elements = mutableListOf<DocumentElement>()
+        val hardPageBreakIndices = mutableSetOf<Int>()
+
+        if (documentXmlBytes != null && documentXmlBytes.isNotEmpty()) {
+            try {
+                val factory = javax.xml.parsers.SAXParserFactory.newInstance()
+                factory.isNamespaceAware = false
+                val saxParser = factory.newSAXParser()
+
+                var inParagraph = false
+                var inTable = false
+                var inCell = false
+                val paragraphText = StringBuilder()
+                var paragraphStyle = ""
+                var isListItem = false
+                val currentTableRows = mutableListOf<List<String>>()
+                val currentRowCells = mutableListOf<String>()
+                val currentCellText = StringBuilder()
+                val paragraphImages = mutableListOf<DocumentImage>()
+
+                saxParser.parse(ByteArrayInputStream(documentXmlBytes), object : org.xml.sax.helpers.DefaultHandler() {
+                    override fun startElement(uri: String?, localName: String?, qName: String?, attributes: org.xml.sax.Attributes?) {
+                        val rawName = qName ?: localName ?: ""
+                        val tag = rawName.substringAfter(':').lowercase()
+                        when (tag) {
+                            "tbl" -> {
+                                inTable = true
+                                currentTableRows.clear()
+                            }
+                            "tr" -> {
+                                currentRowCells.clear()
+                            }
+                            "tc" -> {
+                                inCell = true
+                                currentCellText.clear()
+                            }
+                            "p" -> {
+                                inParagraph = true
+                                paragraphText.clear()
+                                paragraphStyle = ""
+                                isListItem = false
+                                paragraphImages.clear()
+                            }
+                            "pstyle" -> {
+                                val v = attributes?.getValue("w:val")
+                                    ?: attributes?.getValue("val") ?: ""
+                                paragraphStyle = v
+                            }
+                            "numpr" -> {
+                                isListItem = true
+                            }
+                            "tab" -> {
+                                if (inCell) currentCellText.append("    ")
+                                else if (inParagraph) paragraphText.append("    ")
+                            }
+                            "br" -> {
+                                val bType = attributes?.getValue("w:type")
+                                    ?: attributes?.getValue("type") ?: ""
+                                if (bType.equals("page", ignoreCase = true)) {
+                                    hardPageBreakIndices.add(elements.size)
+                                } else {
+                                    if (inCell) currentCellText.append("\n")
+                                    else if (inParagraph) paragraphText.append("\n")
+                                }
+                            }
+                            "lastrenderedpagebreak" -> {
+                                hardPageBreakIndices.add(elements.size)
+                            }
+                            "blip" -> {
+                                val embedId = attributes?.getValue("r:embed")
+                                    ?: attributes?.getValue("embed") ?: ""
+                                val target = relsTargetMap[embedId]
+                                if (target != null && mediaMap.containsKey(target)) {
+                                    val imgBytes = mediaMap[target]!!
+                                    paragraphImages.add(
+                                        DocumentImage(
+                                            fileName = target,
+                                            bytes = imgBytes,
+                                            caption = "Figure ${elements.count { it.type == DocumentElementType.IMAGE } + 1}"
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    override fun characters(ch: CharArray?, start: Int, length: Int) {
+                        if (ch != null && length > 0) {
+                            val txt = String(ch, start, length)
+                            if (inCell) {
+                                currentCellText.append(txt)
+                            } else if (inParagraph) {
+                                paragraphText.append(txt)
+                            }
+                        }
+                    }
+
+                    override fun endElement(uri: String?, localName: String?, qName: String?) {
+                        val rawName = qName ?: localName ?: ""
+                        val tag = rawName.substringAfter(':').lowercase()
+                        when (tag) {
+                            "tc" -> {
+                                inCell = false
+                                currentRowCells.add(currentCellText.toString().trim())
+                                currentCellText.clear()
+                            }
+                            "tr" -> {
+                                if (currentRowCells.any { it.isNotBlank() }) {
+                                    currentTableRows.add(currentRowCells.toList())
+                                }
+                                currentRowCells.clear()
+                            }
+                            "tbl" -> {
+                                inTable = false
+                                if (currentTableRows.isNotEmpty()) {
+                                    val table = DocumentTable(
+                                        rows = currentTableRows.toList(),
+                                        hasHeader = currentTableRows.size > 1
+                                    )
+                                    elements.add(
+                                        DocumentElement(
+                                            type = DocumentElementType.TABLE,
+                                            table = table
+                                        )
+                                    )
+                                }
+                            }
+                            "p" -> {
+                                inParagraph = false
+                                if (inCell) {
+                                    currentCellText.append(" ")
+                                } else {
+                                    for (img in paragraphImages) {
+                                        elements.add(
+                                            DocumentElement(
+                                                type = DocumentElementType.IMAGE,
+                                                image = img
+                                            )
+                                        )
+                                    }
+
+                                    val rawP = paragraphText.toString().trim()
+                                    if (rawP.isNotBlank()) {
+                                        val elType = resolveParagraphType(rawP, paragraphStyle, isListItem)
+                                        elements.add(
+                                            DocumentElement(
+                                                type = elType,
+                                                text = rawP,
+                                                bullet = if (elType == DocumentElementType.LIST_ITEM) "•" else ""
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                })
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        // Secondary fallback: Tag-agnostic regex scanner if XML parser yielded no elements
+        if (elements.isEmpty() && documentXmlBytes != null) {
+            val xmlStr = String(documentXmlBytes, StandardCharsets.UTF_8)
+            val tblRegex = Regex("<(?:[a-zA-Z0-9]+:)?tbl[ >](.*?)</(?:[a-zA-Z0-9]+:)?tbl>", RegexOption.DOT_MATCHES_ALL)
+            val trRegex = Regex("<(?:[a-zA-Z0-9]+:)?tr[ >](.*?)</(?:[a-zA-Z0-9]+:)?tr>", RegexOption.DOT_MATCHES_ALL)
+            val tcRegex = Regex("<(?:[a-zA-Z0-9]+:)?tc[ >](.*?)</(?:[a-zA-Z0-9]+:)?tc>", RegexOption.DOT_MATCHES_ALL)
+            val tRegex = Regex("<(?:[a-zA-Z0-9]+:)?t[^>]*>(.*?)</(?:[a-zA-Z0-9]+:)?t>", RegexOption.DOT_MATCHES_ALL)
+            val pRegex = Regex("<(?:[a-zA-Z0-9]+:)?p[ >](.*?)</(?:[a-zA-Z0-9]+:)?p>", RegexOption.DOT_MATCHES_ALL)
+
+            for (tblMatch in tblRegex.findAll(xmlStr)) {
+                val tableRows = mutableListOf<List<String>>()
+                for (trMatch in trRegex.findAll(tblMatch.value)) {
+                    val cells = mutableListOf<String>()
+                    for (tcMatch in tcRegex.findAll(trMatch.value)) {
+                        val cellText = tRegex.findAll(tcMatch.value).map { unescapeXml(it.groupValues[1]) }.joinToString("").trim()
+                        cells.add(cellText)
+                    }
+                    if (cells.any { it.isNotBlank() }) {
+                        tableRows.add(cells)
+                    }
+                }
+                if (tableRows.isNotEmpty()) {
+                    elements.add(
+                        DocumentElement(
+                            type = DocumentElementType.TABLE,
+                            table = DocumentTable(rows = tableRows, hasHeader = tableRows.size > 1)
+                        )
+                    )
+                }
+            }
+
+            for (pMatch in pRegex.findAll(xmlStr)) {
+                val pBody = pMatch.value
+                val text = tRegex.findAll(pBody).map { unescapeXml(it.groupValues[1]) }.joinToString("").trim()
+                if (text.isNotBlank()) {
+                    val elType = resolveParagraphType(text, "", false)
+                    elements.add(DocumentElement(type = elType, text = text))
+                }
+            }
+
+            if (elements.isEmpty()) {
+                for (tMatch in tRegex.findAll(xmlStr)) {
+                    val t = unescapeXml(tMatch.groupValues[1]).trim()
+                    if (t.isNotBlank() && t.length >= 2) {
+                        elements.add(DocumentElement(type = DocumentElementType.PARAGRAPH, text = t))
+                    }
+                }
+            }
+        }
+
+        // If completely empty, try parseDoc
+        if (elements.isEmpty()) {
+            return parseDoc(bytes, fileName)
+        }
+
+        return buildRichDocument(fileName, elements, hardPageBreakIndices)
+    }
+
+    fun parseDoc(bytes: ByteArray, fileName: String): ParsedDocumentContent.RichDocument {
+        if (bytes.isEmpty()) {
+            return ParsedDocumentContent.RichDocument(
+                title = fileName,
+                totalPages = 1,
+                pages = listOf(DocumentPageData(1, listOf("Word document is empty (0 bytes)."))),
+                fullText = ""
+            )
+        }
+
+        // 1. Check if RTF document
+        val previewIso = try {
+            String(bytes.take(64).toByteArray(), StandardCharsets.ISO_8859_1).trim()
+        } catch (_: Exception) { "" }
+
+        if (previewIso.startsWith("{\\rtf")) {
+            return parseRtfDocument(bytes, fileName)
+        }
+
+        // 2. Check if HTML or MHTML saved as .doc
+        val previewUtf = try {
+            String(bytes.take(256).toByteArray(), StandardCharsets.UTF_8).lowercase().trim()
+        } catch (_: Exception) { "" }
+
+        if (previewUtf.startsWith("<!doctype html") || previewUtf.startsWith("<html") ||
+            previewUtf.contains("<head") || previewUtf.contains("<body") || previewUtf.startsWith("mime-version:")
+        ) {
+            return parseHtmlDocument(bytes, fileName)
+        }
+
+        // 3. True Word 97-2003 OLE2 Binary document
+        return parseOleWordDocument(bytes, fileName)
+    }
+
+    private fun resolveParagraphType(text: String, style: String, isList: Boolean): DocumentElementType {
+        val s = style.lowercase()
+        return when {
+            s.contains("title") -> DocumentElementType.TITLE
+            s.contains("subtitle") -> DocumentElementType.SUBTITLE
+            s.contains("heading1") || s == "1" -> DocumentElementType.HEADING_1
+            s.contains("heading2") || s == "2" -> DocumentElementType.HEADING_2
+            s.contains("heading3") || s == "3" -> DocumentElementType.HEADING_3
+            s.contains("quote") || s.contains("callout") -> DocumentElementType.QUOTE
+            isList || s.contains("list") -> DocumentElementType.LIST_ITEM
+            text.startsWith("•") || text.startsWith("- ") || text.startsWith("* ") ||
+                    text.matches(Regex("^[0-9]+[.)]\\s+.*")) -> DocumentElementType.LIST_ITEM
+            text.length in 3..60 && text.all { it.isUpperCase() || it.isWhitespace() || it in "—:-/&" } -> DocumentElementType.HEADING_1
+            text.length in 3..70 && text.endsWith(":") && !text.contains(". ") -> DocumentElementType.HEADING_2
+            else -> DocumentElementType.PARAGRAPH
+        }
+    }
+
+    private fun buildRichDocument(
+        fileName: String,
+        elements: List<DocumentElement>,
+        hardPageBreakIndices: Set<Int> = emptySet()
+    ): ParsedDocumentContent.RichDocument {
+        val pages = mutableListOf<DocumentPageData>()
+        var currentPageElements = mutableListOf<DocumentElement>()
+        var currentWordCount = 0
+
+        elements.forEachIndexed { idx, el ->
+            currentPageElements.add(el)
+            val wordsInEl = when {
+                el.table != null -> el.table.rows.sumOf { r -> r.sumOf { c -> c.split(Regex("\\s+")).count { it.isNotBlank() } } }
+                else -> el.text.split(Regex("\\s+")).count { it.isNotBlank() }
+            }
+            currentWordCount += wordsInEl
+
+            val shouldBreak = hardPageBreakIndices.contains(idx) ||
+                    (currentWordCount >= 380 && currentPageElements.size >= 4) ||
+                    currentPageElements.size >= 12
+
+            if (shouldBreak) {
+                val pageParas = currentPageElements.filter { it.text.isNotBlank() }.map { it.text }
+                val pageTables = currentPageElements.mapNotNull { it.table }
+                val pageImages = currentPageElements.mapNotNull { it.image }
+                pages.add(
+                    DocumentPageData(
+                        pageNumber = pages.size + 1,
+                        paragraphs = if (pageParas.isNotEmpty()) pageParas else listOf("Document content on this page."),
+                        elements = currentPageElements.toList(),
+                        tables = pageTables,
+                        images = pageImages
+                    )
+                )
+                currentPageElements = mutableListOf()
+                currentWordCount = 0
+            }
+        }
+
+        if (currentPageElements.isNotEmpty() || pages.isEmpty()) {
+            val pageParas = currentPageElements.filter { it.text.isNotBlank() }.map { it.text }
+            val pageTables = currentPageElements.mapNotNull { it.table }
+            val pageImages = currentPageElements.mapNotNull { it.image }
+            pages.add(
+                DocumentPageData(
+                    pageNumber = pages.size + 1,
+                    paragraphs = if (pageParas.isNotEmpty()) pageParas else listOf("Document content."),
+                    elements = currentPageElements.toList(),
+                    tables = pageTables,
+                    images = pageImages
+                )
+            )
+        }
+
+        val allImages = elements.mapNotNull { it.image }
+        val allTables = elements.mapNotNull { it.table }
+        val fullTextSb = StringBuilder()
+        for (el in elements) {
+            when {
+                el.table != null -> {
+                    fullTextSb.append(el.table.rows.joinToString("\n") { it.joinToString(" | ") }).append("\n\n")
+                }
+                el.text.isNotBlank() -> {
+                    fullTextSb.append(el.text).append("\n\n")
+                }
+            }
+        }
+        val fullText = fullTextSb.toString().trim()
+        val totalWords = fullText.split(Regex("\\s+")).count { it.isNotBlank() }
 
         return ParsedDocumentContent.RichDocument(
             title = fileName,
             totalPages = pages.size,
             pages = pages,
-            fullText = textLines.joinToString("\n\n")
+            fullText = fullText,
+            wordCount = totalWords,
+            charCount = fullText.length,
+            allElements = elements,
+            allImages = allImages,
+            allTables = allTables
+        )
+    }
+
+    private fun parseRtfDocument(bytes: ByteArray, fileName: String): ParsedDocumentContent.RichDocument {
+        return try {
+            val raw = String(bytes, StandardCharsets.ISO_8859_1)
+            var cleaned = raw.replace(Regex("""\{\\\*?\\[a-zA-Z]+[^{}]*(?:\{[^{}]*\}[^{}]*)*\}"""), "")
+            cleaned = cleaned.replace(Regex("""\\par\b|\\line\b"""), "\n")
+            cleaned = cleaned.replace(Regex("""\\tab\b"""), "    ")
+            cleaned = Regex("""\\'([0-9a-fA-F]{2})""").replace(cleaned) { m ->
+                try {
+                    val code = m.groupValues[1].toInt(16)
+                    code.toChar().toString()
+                } catch (_: Exception) { "" }
+            }
+            cleaned = Regex("""\\u([0-9]+)\??""").replace(cleaned) { m ->
+                try {
+                    val code = m.groupValues[1].toInt()
+                    code.toChar().toString()
+                } catch (_: Exception) { "" }
+            }
+            cleaned = cleaned.replace(Regex("""\\[a-zA-Z]+-?[0-9]* ?"""), "")
+            cleaned = cleaned.replace("{", "").replace("}", "")
+
+            val lines = cleaned.lines().map { it.trim() }.filter { it.isNotBlank() }
+            val elements = mutableListOf<DocumentElement>()
+            for (line in lines) {
+                val elType = resolveParagraphType(line, "", false)
+                elements.add(
+                    DocumentElement(
+                        type = elType,
+                        text = line,
+                        bullet = if (elType == DocumentElementType.LIST_ITEM) "•" else ""
+                    )
+                )
+            }
+
+            if (elements.isEmpty()) {
+                elements.add(DocumentElement(type = DocumentElementType.PARAGRAPH, text = "RTF Document opened. No text content found."))
+            }
+
+            buildRichDocument(fileName, elements)
+        } catch (_: Exception) {
+            parseFallbackDoc(fileName, "RTF document loaded.")
+        }
+    }
+
+    private fun parseHtmlDocument(bytes: ByteArray, fileName: String): ParsedDocumentContent.RichDocument {
+        return try {
+            val html = String(bytes, StandardCharsets.UTF_8)
+            val elements = mutableListOf<DocumentElement>()
+
+            fun stripTags(s: String) = s.replace(Regex("<[^>]+>"), " ").replace("&nbsp;", " ").replace("&amp;", "&").trim()
+
+            val trRegex = Regex("<tr[^>]*>(.*?)</tr>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+            val tdRegex = Regex("<t[dh][^>]*>(.*?)</t[dh]>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+            val tblRegex = Regex("<table[^>]*>(.*?)</table>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+
+            for (tbl in tblRegex.findAll(html)) {
+                val rows = mutableListOf<List<String>>()
+                for (tr in trRegex.findAll(tbl.value)) {
+                    val cells = tdRegex.findAll(tr.value).map { stripTags(it.groupValues[1]) }.toList()
+                    if (cells.any { it.isNotBlank() }) rows.add(cells)
+                }
+                if (rows.isNotEmpty()) {
+                    elements.add(DocumentElement(type = DocumentElementType.TABLE, table = DocumentTable(rows, rows.size > 1)))
+                }
+            }
+
+            val pRegex = Regex("<(?:p|h[1-6]|li)[^>]*>(.*?)</(?:p|h[1-6]|li)>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+            for (m in pRegex.findAll(html)) {
+                val rawTag = m.value.substring(1, 3).lowercase()
+                val text = stripTags(m.groupValues[1])
+                if (text.isNotBlank()) {
+                    val elType = when (rawTag) {
+                        "h1" -> DocumentElementType.HEADING_1
+                        "h2" -> DocumentElementType.HEADING_2
+                        "h3" -> DocumentElementType.HEADING_3
+                        "li" -> DocumentElementType.LIST_ITEM
+                        else -> DocumentElementType.PARAGRAPH
+                    }
+                    elements.add(DocumentElement(type = elType, text = text, bullet = if (elType == DocumentElementType.LIST_ITEM) "•" else ""))
+                }
+            }
+
+            if (elements.isEmpty()) {
+                val stripped = stripTags(html)
+                for (line in stripped.lines().map { it.trim() }.filter { it.length >= 3 }) {
+                    elements.add(DocumentElement(type = DocumentElementType.PARAGRAPH, text = line))
+                }
+            }
+
+            if (elements.isEmpty()) {
+                elements.add(DocumentElement(type = DocumentElementType.PARAGRAPH, text = "HTML Document opened. No readable content found."))
+            }
+
+            buildRichDocument(fileName, elements)
+        } catch (_: Exception) {
+            parseFallbackDoc(fileName, "HTML document loaded.")
+        }
+    }
+
+    private fun parseOleWordDocument(bytes: ByteArray, fileName: String): ParsedDocumentContent.RichDocument {
+        val extractedImages = extractImagesFromPptBinary(bytes)
+        val elements = mutableListOf<DocumentElement>()
+
+        val ignoredStrings = setOf(
+            "WordDocument", "SummaryInformation", "DocumentSummaryInformation", "CompObj",
+            "Root Entry", "Data", "1Table", "0Table", "Normal.dot", "Normal.dotm",
+            "Times New Roman", "Calibri", "Arial", "Cambria", "Symbol", "Wingdings",
+            "Default Paragraph Font", "Heading 1", "Heading 2", "Heading 3", "Title",
+            "Standard", "Microsoft Office Word", "Microsoft Word Document", "Table",
+            "Current User", "PowerPoint Document"
+        )
+
+        val utf16TextBlocks = mutableListOf<String>()
+        val sbUtf16 = java.lang.StringBuilder()
+        var idx = 0
+        while (idx < bytes.size - 1) {
+            val b1 = bytes[idx].toInt() and 0xFF
+            val b2 = bytes[idx + 1].toInt() and 0xFF
+            val cp = b1 or (b2 shl 8)
+
+            if (cp in 32..126 || cp == 10 || cp == 13 || cp in 160..0x04FF) {
+                sbUtf16.append(cp.toChar())
+            } else {
+                if (sbUtf16.length >= 6) {
+                    val s = sbUtf16.toString().trim()
+                    if (s.isNotBlank() && s.length >= 6 && s.any { it.isLetter() } && s !in ignoredStrings) {
+                        utf16TextBlocks.add(s)
+                    }
+                }
+                sbUtf16.setLength(0)
+            }
+            idx += 2
+        }
+        if (sbUtf16.length >= 6) {
+            val s = sbUtf16.toString().trim()
+            if (s.isNotBlank() && s.length >= 6 && s.any { it.isLetter() } && s !in ignoredStrings) {
+                utf16TextBlocks.add(s)
+            }
+        }
+
+        val asciiTextBlocks = mutableListOf<String>()
+        val sbAscii = java.lang.StringBuilder()
+        for (b in bytes) {
+            val c = b.toInt() and 0xFF
+            if (c in 32..126 || c == 10 || c == 13 || c in 160..255) {
+                sbAscii.append(c.toChar())
+            } else {
+                if (sbAscii.length >= 6) {
+                    val s = sbAscii.toString().trim()
+                    if (s.isNotBlank() && s.length >= 6 && s.any { it.isLetter() } && s !in ignoredStrings) {
+                        asciiTextBlocks.add(s)
+                    }
+                }
+                sbAscii.setLength(0)
+            }
+        }
+        if (sbAscii.length >= 6) {
+            val s = sbAscii.toString().trim()
+            if (s.isNotBlank() && s.length >= 6 && s.any { it.isLetter() } && s !in ignoredStrings) {
+                asciiTextBlocks.add(s)
+            }
+        }
+
+        val chosenText = when {
+            utf16TextBlocks.sumOf { it.length } > asciiTextBlocks.sumOf { it.length } * 1.5 -> utf16TextBlocks
+            else -> asciiTextBlocks.ifEmpty { utf16TextBlocks }
+        }
+
+        for (chunk in chosenText) {
+            val lines = chunk.split("\r\n", "\r", "\n").map { it.trim() }.filter { it.isNotBlank() }
+            for (line in lines) {
+                if (line.length in 3..2000 && line !in ignoredStrings && line.count { it.isLetter() } >= 2) {
+                    val elType = resolveParagraphType(line, "", false)
+                    elements.add(
+                        DocumentElement(
+                            type = elType,
+                            text = line,
+                            bullet = if (elType == DocumentElementType.LIST_ITEM) "•" else ""
+                        )
+                    )
+                }
+            }
+        }
+
+        for ((imgIdx, img) in extractedImages.withIndex()) {
+            val docImg = DocumentImage(
+                fileName = img.fileName,
+                bytes = img.bytes,
+                caption = "Document Image ${imgIdx + 1}"
+            )
+            elements.add(DocumentElement(type = DocumentElementType.IMAGE, image = docImg))
+        }
+
+        if (elements.isEmpty()) {
+            return parseFallbackDoc(fileName, "Word Document loaded: $fileName")
+        }
+
+        return buildRichDocument(fileName, elements)
+    }
+
+    private fun parseFallbackDoc(fileName: String, message: String): ParsedDocumentContent.RichDocument {
+        val p = listOf(message)
+        return ParsedDocumentContent.RichDocument(
+            title = fileName,
+            totalPages = 1,
+            pages = listOf(DocumentPageData(1, p)),
+            fullText = message,
+            wordCount = message.split(Regex("\\s+")).count { it.isNotBlank() },
+            charCount = message.length,
+            allElements = listOf(DocumentElement(type = DocumentElementType.PARAGRAPH, text = message))
         )
     }
 

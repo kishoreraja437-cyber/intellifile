@@ -185,5 +185,103 @@ class DocumentContentParserTest {
             assertTrue("Slide 2 points contain AWS or EC2", parsed.slides[1].points.any { it.contains("Amazon") || it.contains("EC2") } || parsed.slides[1].title.contains("Amazon"))
         }
     }
+
+    @Test
+    fun testParseDocx_syntheticDocxWithTableAndHeadings() {
+        val baos = ByteArrayOutputStream()
+        val zos = ZipOutputStream(baos)
+
+        val docXml = """
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+              <w:body>
+                <w:p>
+                  <w:pPr><w:pStyle w:val="Title"/></w:pPr>
+                  <w:r><w:t>Project Specification Document</w:t></w:r>
+                </w:p>
+                <w:p>
+                  <w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+                  <w:r><w:t>1. Executive Overview</w:t></w:r>
+                </w:p>
+                <w:p>
+                  <w:r><w:t>IntelliFile provides on-device AI document intelligence and instant viewing.</w:t></w:r>
+                </w:p>
+                <w:tbl>
+                  <w:tr>
+                    <w:tc><w:p><w:r><w:t>Feature</w:t></w:r></w:p></w:tc>
+                    <w:tc><w:p><w:r><w:t>Status</w:t></w:r></w:p></w:tc>
+                  </w:tr>
+                  <w:tr>
+                    <w:tc><w:p><w:r><w:t>Word Viewer</w:t></w:r></w:p></w:tc>
+                    <w:tc><w:p><w:r><w:t>Active</w:t></w:r></w:p></w:tc>
+                  </w:tr>
+                </w:tbl>
+              </w:body>
+            </w:document>
+        """.trimIndent()
+
+        zos.putNextEntry(ZipEntry("word/document.xml"))
+        zos.write(docXml.toByteArray(StandardCharsets.UTF_8))
+        zos.closeEntry()
+        zos.close()
+
+        val bytes = baos.toByteArray()
+        val result = DocumentContentParser.parseDocx(bytes, "specification.docx")
+
+        assertNotNull("DOCX parser must return result", result)
+        assertTrue("Total pages must be >= 1", result.totalPages >= 1)
+        assertTrue("Word count must be > 0", result.wordCount > 5)
+        assertTrue("Full text must contain title", result.fullText.contains("Project Specification Document"))
+        assertTrue("Full text must contain heading", result.fullText.contains("Executive Overview"))
+        assertTrue("Must extract table", result.allTables.isNotEmpty())
+        assertEquals("Table must have 2 rows", 2, result.allTables[0].rows.size)
+        assertEquals("Table col 1 header", "Feature", result.allTables[0].rows[0][0])
+        assertEquals("Table col 2 header", "Status", result.allTables[0].rows[0][1])
+    }
+
+    @Test
+    fun testParseRealFactScanAiDocx() {
+        val file = java.io.File("""C:\xampp\htdocs\intellifile_backend\uploads\documents\22a73c671a9873170802bcd5_FactScanAI_Project_Document.docx""")
+        if (file.exists()) {
+            val bytes = file.readBytes()
+            val parsed = DocumentContentParser.parseDocx(bytes, file.name)
+            assertNotNull("Should parse FactScanAI docx", parsed)
+            assertTrue("Should have multiple pages", parsed.totalPages >= 1)
+            assertTrue("Word count should be large", parsed.wordCount > 500)
+            assertTrue("Full text contains title", parsed.fullText.contains("FACTSCAN AI"))
+            assertTrue("Full text contains summary", parsed.fullText.contains("EXECUTIVE SUMMARY"))
+            assertTrue("Must extract tables", parsed.allTables.isNotEmpty())
+            assertTrue("Table contains competitor analysis", parsed.allTables.any { tbl ->
+                tbl.rows.any { r -> r.any { c -> c.contains("Competitor") || c.contains("Unique Value") } }
+            })
+        }
+    }
+
+    @Test
+    fun testParseRealResearchProjectDocx() {
+        val file = java.io.File("""C:\xampp\htdocs\intellifile_backend\uploads\documents\57f8ea760bce149f6dd78f53_research_project.docx""")
+        if (file.exists()) {
+            val bytes = file.readBytes()
+            val parsed = DocumentContentParser.parseDocx(bytes, file.name)
+            assertNotNull("Should parse research project docx", parsed)
+            assertTrue("Pages >= 1", parsed.totalPages >= 1)
+            assertTrue("Full text contains IntelliFile", parsed.fullText.contains("IntelliFile"))
+            assertTrue("Full text contains Abstract", parsed.fullText.contains("Abstract"))
+        }
+    }
+
+    @Test
+    fun testParseDoc_rtfFormat() {
+        val rtf = """
+            {\rtf1\ansi\deff0 {\fonttbl {\f0 Times New Roman;}}\f0\fs24\b Document Header\b0\par This is a test paragraph.\par - Item 1\par - Item 2\par}
+        """.trimIndent()
+        val bytes = rtf.toByteArray(StandardCharsets.ISO_8859_1)
+        val parsed = DocumentContentParser.parseDoc(bytes, "test.doc")
+
+        assertNotNull(parsed)
+        assertTrue("Pages >= 1", parsed.totalPages >= 1)
+        assertTrue("Contains header", parsed.fullText.contains("Document Header"))
+        assertTrue("Contains paragraph", parsed.fullText.contains("test paragraph"))
+    }
 }
 

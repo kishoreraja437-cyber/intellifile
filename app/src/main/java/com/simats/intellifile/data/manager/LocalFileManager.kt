@@ -537,7 +537,16 @@ object LocalFileManager {
                         if (read > 0) String(buffer, 0, read) else ""
                     }
                 }
-                "DOCX" -> extractDocxText(stream, maxChars)
+                "DOCX" -> {
+                    val bytes = stream.readBytes()
+                    val docx = DocumentContentParser.parseDocx(bytes, "document.docx")
+                    if (docx.fullText.isNotBlank()) docx.fullText.take(maxChars) else "No readable text found in Word document."
+                }
+                "DOC" -> {
+                    val bytes = stream.readBytes()
+                    val doc = DocumentContentParser.parseDoc(bytes, "document.doc")
+                    if (doc.fullText.isNotBlank()) doc.fullText.take(maxChars) else "No readable text found in Word document."
+                }
                 "PPTX" -> extractPptxText(stream, maxChars)
                 "PPT" -> {
                     val bytes = stream.readBytes()
