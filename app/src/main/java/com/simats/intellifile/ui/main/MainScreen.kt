@@ -624,6 +624,13 @@ fun MainScreen(
                         chatViewModel = chatViewModel,
                         onBackClick = { isAiHistoryOpen = false },
 
+                        onNewChatClick = {
+                            chatViewModel.startNewChat()
+                            activeAiConversationId = null
+                            isAiHistoryOpen = false
+                            selectedTab = BottomNavItem.AI
+                        },
+
                         onClearHistoryClick = {
 
                             activeAiConversationId = null

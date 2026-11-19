@@ -381,6 +381,7 @@ data class AiChatResponse(
     @SerializedName("success") val success: Boolean,
 
     @SerializedName("conversation_id") val conversation_id: Int = 0,
+    @SerializedName("conversation_title") val conversation_title: String? = null,
 
     @SerializedName("category") val category: String? = null,
 

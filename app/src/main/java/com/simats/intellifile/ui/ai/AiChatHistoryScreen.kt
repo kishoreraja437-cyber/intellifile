@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.AutoAwesome
@@ -63,6 +64,7 @@ fun AiChatHistoryScreen(
     chatViewModel: ChatViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     onBackClick: () -> Unit = {},
     onClearHistoryClick: () -> Unit = {},
+    onNewChatClick: () -> Unit = {},
     onDeleteIndividualClick: (ChatHistoryItem) -> Unit = {},
     onHistoryItemClick: (ChatHistoryItem) -> Unit = {}
 ) {
@@ -273,6 +275,14 @@ fun AiChatHistoryScreen(
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    IconButton(onClick = onNewChatClick) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "New Chat",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
                     if (historyItems.isNotEmpty()) {
                         IconButton(onClick = { showClearConfirmDialog = true }) {
                             Icon(
