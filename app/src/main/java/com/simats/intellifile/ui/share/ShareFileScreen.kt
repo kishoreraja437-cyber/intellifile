@@ -37,8 +37,9 @@ import com.simats.intellifile.data.model.LocalFileItem
 
 data class AppShareTarget(
     val name: String,
-    val iconBgColor: Color,
-    val icon: ImageVector
+    val iconBgColor: Color = Color.Transparent,
+    val icon: ImageVector? = null,
+    val iconDrawableRes: Int? = null
 )
 
 @Composable
@@ -65,11 +66,28 @@ fun ShareFileScreen(
 
     val appTargets = remember {
         listOf(
-            AppShareTarget("WhatsApp", Color(0xFF25D366), Icons.Outlined.Share),
-            AppShareTarget("Gmail", Color(0xFFEA4335), Icons.Outlined.Mail),
-            AppShareTarget("Telegram", Color(0xFF229ED9), Icons.Outlined.Share),
-            AppShareTarget("Bluetooth", Color(0xFF0082FC), Icons.Outlined.Bluetooth),
-            AppShareTarget("More", Color(0xFFEEF0FD), Icons.Default.MoreHoriz)
+            AppShareTarget(
+                name = "WhatsApp",
+                iconDrawableRes = R.drawable.ic_whatsapp_logo
+            ),
+            AppShareTarget(
+                name = "Gmail",
+                iconDrawableRes = R.drawable.ic_gmail_logo
+            ),
+            AppShareTarget(
+                name = "Telegram",
+                iconDrawableRes = R.drawable.ic_telegram_logo
+            ),
+            AppShareTarget(
+                name = "Bluetooth",
+                iconBgColor = Color(0xFF0082FC),
+                icon = Icons.Outlined.Bluetooth
+            ),
+            AppShareTarget(
+                name = "More",
+                iconBgColor = Color(0xFFEEF0FD),
+                icon = Icons.Default.MoreHoriz
+            )
         )
     }
 
@@ -199,24 +217,37 @@ fun ShareFileScreen(
                 items(appTargets) { target ->
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.clickable {
-                            LocalFileManager.shareFileToTarget(context, localItem, target.name)
-                            onShareOptionClick(target.name)
-                        }
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                LocalFileManager.shareFileToTarget(context, localItem, target.name)
+                                onShareOptionClick(target.name)
+                            }
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(52.dp)
-                                .clip(CircleShape)
-                                .background(target.iconBgColor),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = target.icon,
+                        if (target.iconDrawableRes != null) {
+                            Image(
+                                painter = painterResource(id = target.iconDrawableRes),
                                 contentDescription = target.name,
-                                tint = if (target.name == "More") MaterialTheme.colorScheme.primary else Color.White,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .clip(CircleShape)
                             )
+                        } else if (target.icon != null) {
+                            Box(
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .clip(CircleShape)
+                                    .background(target.iconBgColor),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = target.icon,
+                                    contentDescription = target.name,
+                                    tint = if (target.name == "More") MaterialTheme.colorScheme.primary else Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))

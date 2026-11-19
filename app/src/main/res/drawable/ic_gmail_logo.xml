@@ -1,0 +1,39 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- White Circular Badge with subtle outline -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,24m-23.5,0a23.5,23.5 0,1 1,47 0a23.5,23.5 0,1 1,-47 0"
+        android:strokeColor="#E5E7EB"
+        android:strokeWidth="1" />
+    <!-- Google Workspace Gmail Multi-color M -->
+    <group
+        android:scaleX="0.052"
+        android:scaleY="0.052"
+        android:translateX="10.69"
+        android:translateY="10.69">
+        <!-- Blue left pillar -->
+        <path
+            android:fillColor="#4285F4"
+            android:pathData="M34.9,448h81.5V250.2L0,163v250.2C0,432.5 15.7,448 34.9,448" />
+        <!-- Green right pillar -->
+        <path
+            android:fillColor="#34A853"
+            android:pathData="M395.6,448h81.5c19.3,0 34.9,-15.7 34.9,-34.9V163l-116.4,87.3" />
+        <!-- Yellow top right corner -->
+        <path
+            android:fillColor="#FBBC04"
+            android:pathData="M395.6,99v151.3L512,163v-46.5c0,-43.2 -49.3,-67.8 -83.8,-41.9" />
+        <!-- Red center chevron -->
+        <path
+            android:fillColor="#EA4335"
+            android:pathData="M116.4,250.2V99L256,203.7 395.6,99v151.3L256,355" />
+        <!-- Dark red / Crimson top left corner -->
+        <path
+            android:fillColor="#C5221F"
+            android:pathData="M0,116.4V163l116.4,87.3V99L83.8,74.5C49.2,48.6 0,73.2 0,116.4" />
+    </group>
+</vector>

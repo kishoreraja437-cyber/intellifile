@@ -413,7 +413,13 @@ object LocalFileManager {
      */
     fun shareFileToTarget(context: Context, fileItem: LocalFileItem, targetName: String) {
         val packageName = when (targetName.lowercase()) {
-            "whatsapp" -> "com.whatsapp"
+            "whatsapp" -> {
+                val isNormalInstalled = try {
+                    context.packageManager.getPackageInfo("com.whatsapp", 0)
+                    true
+                } catch (_: Exception) { false }
+                if (isNormalInstalled) "com.whatsapp" else "com.whatsapp.w4b"
+            }
             "gmail" -> "com.google.android.gm"
             "telegram" -> "org.telegram.messenger"
             "bluetooth" -> "com.android.bluetooth"
