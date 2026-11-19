@@ -2,6 +2,7 @@ package com.simats.intellifile.ui.about
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -25,7 +26,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -74,7 +74,7 @@ fun AboutScreen(
                     Text(
                         text = "IntelliFile prioritizes your privacy by keeping your files stored locally on your device by default. Documents are only transmitted to our servers when you explicitly choose 'Add to AI Vault'.",
                         fontSize = 13.sp,
-                        color = Color(0xFF4B5563),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 18.sp
                     )
 
@@ -89,7 +89,7 @@ fun AboutScreen(
                     Text(
                         text = "When you opt in to AI analysis, document content is securely transmitted over TLS encryption solely for text extraction, semantic search, and summary generation. We do not sell your personal data.",
                         fontSize = 13.sp,
-                        color = Color(0xFF4B5563),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 18.sp
                     )
 
@@ -104,7 +104,7 @@ fun AboutScreen(
                     Text(
                         text = "Your password is encrypted using standard bcrypt hashing. Session tokens are uniquely generated and expire after 30 days of inactivity.",
                         fontSize = 13.sp,
-                        color = Color(0xFF4B5563),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 18.sp
                     )
                 }
@@ -145,7 +145,7 @@ fun AboutScreen(
                     Text(
                         text = "By creating an account or using IntelliFile, you agree to comply with all applicable copyright and intellectual property laws regarding uploaded documents.",
                         fontSize = 13.sp,
-                        color = Color(0xFF4B5563),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 18.sp
                     )
 
@@ -160,7 +160,7 @@ fun AboutScreen(
                     Text(
                         text = "IntelliFile is designed for personal and educational document organization. Users may not upload malicious files, exploit automated scraping mechanisms, or attempt unauthorized access to server infrastructure.",
                         fontSize = 13.sp,
-                        color = Color(0xFF4B5563),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 18.sp
                     )
 
@@ -175,7 +175,7 @@ fun AboutScreen(
                     Text(
                         text = "AI-generated summaries, answers, and categorizations are provided for informational assistance. Users should verify critical details against source documents.",
                         fontSize = 13.sp,
-                        color = Color(0xFF4B5563),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 18.sp
                     )
                 }
@@ -256,7 +256,7 @@ fun AboutScreen(
                 Text(
                     text = "Version 1.0.0",
                     fontSize = 13.sp,
-                    color = Color(0xFF6B7280)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -265,24 +265,24 @@ fun AboutScreen(
                     text = "Find. Prioritize. Access.",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111827)
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // App Description Card
+            // App Description Card (Dusky Aqua Container)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(18.dp))
-                    .background(Color(0xFFEEF0FD))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .padding(18.dp)
             ) {
                 Text(
                     text = "IntelliFile is an AI-powered document management system that helps you find, prioritize and access your files easily.",
                     fontSize = 14.sp,
-                    color = Color(0xFF4B5563),
+                    color = MaterialTheme.colorScheme.onBackground,
                     lineHeight = 20.sp
                 )
             }
@@ -300,7 +300,7 @@ fun AboutScreen(
                     Icon(
                         imageVector = Icons.Outlined.Star,
                         contentDescription = "Key Features",
-                        tint = Color(0xFF6C5CE7),
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
                     )
 
@@ -310,7 +310,7 @@ fun AboutScreen(
                         text = "Key Features",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF111827)
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 }
 
@@ -322,12 +322,13 @@ fun AboutScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // Legal Policies Card
+            // Legal Policies Card (Dusky Aqua Themed)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(18.dp))
-                    .background(Color.White)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
+                    .background(MaterialTheme.colorScheme.surface)
             ) {
                 Row(
                     modifier = Modifier
@@ -346,7 +347,7 @@ fun AboutScreen(
                         Icon(
                             imageVector = Icons.Outlined.Info,
                             contentDescription = "Privacy Policy",
-                            tint = Color(0xFF6C5CE7),
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
 
@@ -356,19 +357,19 @@ fun AboutScreen(
                             text = "Privacy Policy",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium,
-                            color = Color(0xFF111827)
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = "Open",
-                        tint = Color(0xFF6C5CE7),
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
 
-                HorizontalDivider(color = Color(0xFFF1F5F9), thickness = 1.dp)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), thickness = 1.dp)
 
                 Row(
                     modifier = Modifier
@@ -387,7 +388,7 @@ fun AboutScreen(
                         Icon(
                             imageVector = Icons.Outlined.Description,
                             contentDescription = "Terms of Service",
-                            tint = Color(0xFF6C5CE7),
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
 
@@ -397,14 +398,14 @@ fun AboutScreen(
                             text = "Terms of Service",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium,
-                            color = Color(0xFF111827)
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = "Open",
-                        tint = Color(0xFF6C5CE7),
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -427,7 +428,7 @@ fun FeatureBulletItem(
         Icon(
             imageVector = Icons.Default.Check,
             contentDescription = "Check",
-            tint = Color(0xFF6C5CE7),
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(16.dp)
         )
 
@@ -436,7 +437,7 @@ fun FeatureBulletItem(
         Text(
             text = text,
             fontSize = 13.sp,
-            color = Color(0xFF4B5563)
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
