@@ -11,9 +11,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.SdStorage
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material3.Button
@@ -33,6 +32,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.simats.intellifile.data.manager.LocalFileManager
 
 @Composable
@@ -43,7 +45,19 @@ fun FilePermissionsDetailScreen(
     onSelectFilesClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val hasPermission = remember { LocalFileManager.hasStoragePermission(context) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var hasPermission by remember { mutableStateOf(LocalFileManager.hasStoragePermission(context)) }
+
+    // Dynamically refresh permission status when returning from System Settings
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasPermission = LocalFileManager.hasStoragePermission(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Box(
         modifier = modifier
@@ -85,37 +99,26 @@ fun FilePermissionsDetailScreen(
 
             // Sub-heading Description
             Text(
-                text = "Allow IntelliFile to access your documents\nfor offline search, organization, and AI analysis.",
+                text = "Allow IntelliFile to access your documents for offline search, viewing, organization, and AI analysis.",
                 fontSize = 14.sp,
-                color = Color(0xFF4B5563),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 20.sp
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Permission Card 1: Documents Access
+            // Unified Document & Storage Access Card
             PermissionItemCard(
                 icon = Icons.Outlined.Description,
-                title = "Documents Access",
-                description = "Access to your documents (PDF, DOCX, XLS, TXT) for searching and organizing.",
-                isGranted = hasPermission,
-                onClick = onManageAccessClick
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Permission Card 2: Storage / File Access
-            PermissionItemCard(
-                icon = Icons.Outlined.SdStorage,
-                title = "Document Storage Access",
-                description = "Direct read access to documents stored in Internal Storage and Downloads.",
+                title = "All Documents & Storage Access",
+                description = "Direct access to documents (PDF, DOCX, XLS, PPT, TXT) across internal storage and downloads for searching, viewing, and organizing.",
                 isGranted = hasPermission,
                 onClick = onManageAccessClick
             )
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // Manage Access Button
+            // Primary Manage / Grant Access Button
             Button(
                 onClick = onManageAccessClick,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
@@ -129,14 +132,14 @@ fun FilePermissionsDetailScreen(
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.Shield,
+                        imageVector = if (hasPermission) Icons.Outlined.CheckCircle else Icons.Outlined.Shield,
                         contentDescription = "Manage Access",
                         tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = if (hasPermission) "Manage Permission" else "Grant Document Access",
+                        text = if (hasPermission) "Manage Permission in Settings" else "Grant Document Access",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -144,38 +147,7 @@ fun FilePermissionsDetailScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Select Files Button
-            Button(
-                onClick = onSelectFilesClick,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Folder,
-                        contentDescription = "View Documents",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "View Documents",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Privacy Guarantee Banner Card
             Row(
@@ -190,7 +162,7 @@ fun FilePermissionsDetailScreen(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
-                        .background(Color.White),
+                        .background(MaterialTheme.colorScheme.surface),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -218,7 +190,7 @@ fun FilePermissionsDetailScreen(
                     Text(
                         text = "Only documents are accessed. No photos, media, or personal data are ever read or uploaded without your explicit consent.",
                         fontSize = 12.sp,
-                        color = Color(0xFF6B7280),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 17.sp
                     )
                 }
@@ -242,8 +214,8 @@ fun PermissionItemCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(20.dp))
-            .background(Color.White)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surface)
             .clickable { onClick() }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -300,7 +272,7 @@ fun PermissionItemCard(
             Text(
                 text = description,
                 fontSize = 12.sp,
-                color = Color(0xFF6B7280),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 17.sp
             )
         }
@@ -310,7 +282,7 @@ fun PermissionItemCard(
         Icon(
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = "Details",
-            tint = Color(0xFF9CA3AF),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             modifier = Modifier.size(18.dp)
         )
     }
