@@ -1,10 +1,7 @@
 package com.simats.intellifile.ui.notifications
 
 import android.widget.Toast
-import android.Manifest
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -23,7 +20,6 @@ import androidx.compose.foundation.verticalScroll
 import com.simats.intellifile.ui.common.DraggableScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PriorityHigh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.outlined.AccessTime
@@ -42,7 +38,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.simats.intellifile.data.manager.NotificationHelper
 import com.simats.intellifile.data.model.UserSettingsDto
 import com.simats.intellifile.data.repository.AuthRepository
 import com.simats.intellifile.data.session.SessionManager
@@ -58,18 +53,6 @@ fun NotificationsScreen(
     val coroutineScope = rememberCoroutineScope()
     val sessionManager = remember { SessionManager(context) }
     val authRepo = remember { AuthRepository(context) }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            NotificationHelper.sendTestNotification(context, "New Document")
-            Toast.makeText(context, "Test notification sent! Check notification bar.", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(context, "Notification permission is required to show alerts.", Toast.LENGTH_LONG).show()
-        }
-    }
-
 
     // Initialize immediately from local session to prevent UI flicker
     val initialSettings = remember { sessionManager.getNotificationSettings() }
@@ -250,50 +233,7 @@ fun NotificationsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Action: Test Notification
-            OutlinedButton(
-                onClick = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                        !NotificationHelper.hasNotificationPermission(context)
-                    ) {
-                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    } else {
-                        NotificationHelper.sendTestNotification(context, "New Document")
-                        Toast.makeText(context, "Test notification sent! Check notification bar.", Toast.LENGTH_SHORT).show()
-                    }
-                },
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.primary
-                ),
-                border = ButtonDefaults.outlinedButtonBorder.copy(
-                    brush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary)
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.NotificationsActive,
-                        contentDescription = "Test Notification",
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Send Test Notification",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
             // Save Settings Button
             Button(
