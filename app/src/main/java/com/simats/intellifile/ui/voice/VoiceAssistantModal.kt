@@ -1643,6 +1643,12 @@ fun VoiceAssistantFileCard(
     onOpen: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val iconRes = when (file.format.trim().removePrefix(".").uppercase()) {
+        "DOCX", "DOC" -> R.drawable.doc
+        "PPT", "PPTX" -> R.drawable.ppt
+        else -> R.drawable.pdf
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -1652,7 +1658,7 @@ fun VoiceAssistantFileCard(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Image(
-            painter = painterResource(id = file.iconResId),
+            painter = painterResource(id = iconRes),
             contentDescription = "File Icon",
             modifier = Modifier.size(36.dp)
         )

@@ -309,7 +309,15 @@ class ChatRepository(private val context: Context) {
         if (json.isNullOrBlank()) return emptyList()
         return try {
             val type = object : TypeToken<List<AiFileResult>>() {}.type
-            gson.fromJson<List<AiFileResult>>(json, type) ?: emptyList()
+            val list = gson.fromJson<List<AiFileResult>>(json, type) ?: emptyList()
+            list.map { item ->
+                val resolvedIcon = when (item.format.trim().removePrefix(".").uppercase()) {
+                    "DOCX", "DOC" -> R.drawable.doc
+                    "PPT", "PPTX" -> R.drawable.ppt
+                    else -> R.drawable.pdf
+                }
+                item.copy(iconResId = resolvedIcon)
+            }
         } catch (_: Exception) {
             emptyList()
         }

@@ -628,7 +628,7 @@ fun MainScreen(
                             chatViewModel.startNewChat()
                             activeAiConversationId = null
                             isAiHistoryOpen = false
-                            selectedTab = BottomNavItem.AI
+                            navigateToTab(BottomNavItem.AI)
                         },
 
                         onClearHistoryClick = {
@@ -655,7 +655,7 @@ fun MainScreen(
 
                             isAiHistoryOpen = false
 
-                            selectedTab = BottomNavItem.AI
+                            navigateToTab(BottomNavItem.AI)
 
                         }
 
@@ -1028,6 +1028,12 @@ fun MainScreen(
                                     val finalUri = if (!aiFile.uriString.isNullOrBlank()) aiFile.uriString else (localMatch?.uri?.toString() ?: "")
                                     val finalPath = if (!aiFile.filePath.isNullOrBlank()) aiFile.filePath else (localMatch?.path ?: "")
 
+                                    val resolvedIcon = when (aiFile.format.trim().removePrefix(".").uppercase()) {
+                                        "DOCX", "DOC" -> R.drawable.doc
+                                        "PPT", "PPTX" -> R.drawable.ppt
+                                        else -> R.drawable.pdf
+                                    }
+
                                     selectedDetailFile = FileDetailData(
                                         fileName = aiFile.title,
                                         fileSize = aiFile.size,
@@ -1035,7 +1041,7 @@ fun MainScreen(
                                         createdDate = aiFile.dateText,
                                         modifiedDate = aiFile.dateText,
                                         priority = aiFile.priority,
-                                        iconResId = aiFile.iconResId,
+                                        iconResId = resolvedIcon,
                                         uriString = finalUri,
                                         path = finalPath
                                     )
