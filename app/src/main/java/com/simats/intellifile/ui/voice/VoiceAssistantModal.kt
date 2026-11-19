@@ -1292,25 +1292,18 @@ fun VoiceWaveOrb(
         label = "rippleAlpha"
     )
 
-    // Radiant specular shimmer sweep across the orb glass surface
-    val shimmerOffset by infiniteTransition.animateFloat(
-        initialValue = -1.2f,
-        targetValue = 2.2f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "shimmerOffset"
-    )
-
-    // Processing neural rotation
-    val processingRotation by infiniteTransition.animateFloat(
+    // Smooth continuous rotating effect
+    val orbRotation by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(3200, easing = LinearEasing)
+            animation = tween(
+                durationMillis = if (state == AssistantVoiceState.PROCESSING) 3000 else 6000,
+                easing = LinearEasing
+            ),
+            repeatMode = RepeatMode.Restart
         ),
-        label = "processingRotation"
+        label = "orbRotation"
     )
 
     // Dynamic voice amplitude surge from live mic input RMS
@@ -1395,7 +1388,7 @@ fun VoiceWaveOrb(
                     .fillMaxSize()
                     .graphicsLayer(
                         translationY = hoverOffset,
-                        rotationZ = if (state == AssistantVoiceState.PROCESSING) processingRotation else 0f
+                        rotationZ = orbRotation * 0.4f
                     )
             ) {
                 val cx = size.width / 2f
@@ -1456,7 +1449,7 @@ fun VoiceWaveOrb(
                 )
             }
 
-            // 3. Compact 3D Liquid AI Energy Orb (Perfect Sphere, 100.dp - no ameba morphing)
+            // 3. Compact 3D Liquid AI Energy Orb with smooth rotating effect (no shining/shimmer glare)
             Box(
                 modifier = Modifier
                     .size(100.dp)
@@ -1464,7 +1457,7 @@ fun VoiceWaveOrb(
                         translationY = hoverOffset,
                         scaleX = 1f + animatedVoiceSurge * 0.15f,
                         scaleY = 1f + animatedVoiceSurge * 0.15f,
-                        rotationZ = if (state == AssistantVoiceState.PROCESSING) processingRotation else 0f
+                        rotationZ = orbRotation
                     ),
                 contentAlignment = Alignment.Center
             ) {
@@ -1473,35 +1466,6 @@ fun VoiceWaveOrb(
                     contentDescription = "Liquid AI Voice Assistant",
                     modifier = Modifier.fillMaxSize()
                 )
-
-                // Dynamic Specular Shimmer Light Sweep Layer
-                if (state == AssistantVoiceState.LISTENING || state == AssistantVoiceState.SPEAKING) {
-                    Canvas(
-                        modifier = Modifier
-                            .fillMaxSize(0.92f)
-                            .clip(CircleShape)
-                    ) {
-                        val shimmerBandWidth = size.width * 0.65f
-                        val startX = (size.width + shimmerBandWidth) * shimmerOffset - shimmerBandWidth
-                        val startY = 0f
-                        val endX = startX + shimmerBandWidth
-                        val endY = size.height
-
-                        drawRect(
-                            brush = Brush.linearGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color(0xFF00E5FF).copy(alpha = 0.15f),
-                                    Color.White.copy(alpha = 0.55f),
-                                    Color(0xFF26E07F).copy(alpha = 0.30f),
-                                    Color.Transparent
-                                ),
-                                start = Offset(startX, startY),
-                                end = Offset(endX, endY)
-                            )
-                        )
-                    }
-                }
             }
         }
 
