@@ -14,7 +14,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -157,18 +156,6 @@ fun ContactSupportScreen(
                 onClick = {
                     selectedSubject = "Bug Report / Issue"
                 }
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Support Option 3: FAQs & Help Center
-            SupportChannelCard(
-                icon = Icons.AutoMirrored.Outlined.HelpOutline,
-                badgeColor = Color(0xFF3B82F6),
-                title = "FAQs & Help Center",
-                subtitle = "Find answers to common questions.",
-                showArrow = false,
-                onClick = onFaqClick
             )
 
             Spacer(modifier = Modifier.height(24.dp))
