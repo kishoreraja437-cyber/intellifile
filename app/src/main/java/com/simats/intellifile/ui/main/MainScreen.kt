@@ -777,7 +777,10 @@ fun MainScreen(
 
                         },
 
-                        onSelectFilesClick = { isRecentFilesOpen = true }
+                        onSelectFilesClick = {
+                            isFilePermissionsOpen = false
+                            navigateToTab(BottomNavItem.FILES)
+                        }
 
                     )
 

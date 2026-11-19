@@ -11,9 +11,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.SdStorage
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -107,20 +106,26 @@ fun FilePermissionsDetailScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Unified Document & Storage Access Card
+            // 1. Document Storage Access Card (tapping opens settings to grant/manage access)
             PermissionItemCard(
-                icon = Icons.Outlined.Description,
-                title = "All Documents & Storage Access",
-                description = "Direct access to documents (PDF, DOCX, XLS, PPT, TXT) across internal storage and downloads for searching, viewing, and organizing.",
+                icon = Icons.Outlined.SdStorage,
+                title = "Document Storage Access",
+                description = "Direct read access to documents stored in Internal Storage and Downloads.",
                 isGranted = hasPermission,
                 onClick = onManageAccessClick
             )
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // Primary Manage / Grant Access Button
+            // 2. View Documents Button (Enabled to view the file / documents)
             Button(
-                onClick = onManageAccessClick,
+                onClick = {
+                    if (hasPermission) {
+                        onSelectFilesClick()
+                    } else {
+                        onManageAccessClick()
+                    }
+                },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
@@ -132,14 +137,14 @@ fun FilePermissionsDetailScreen(
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Icon(
-                        imageVector = if (hasPermission) Icons.Outlined.CheckCircle else Icons.Outlined.Shield,
-                        contentDescription = "Manage Access",
+                        imageVector = Icons.Outlined.Folder,
+                        contentDescription = "View Documents",
                         tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = if (hasPermission) "Manage Permission in Settings" else "Grant Document Access",
+                        text = if (hasPermission) "View Documents" else "Grant Access & View Documents",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -147,9 +152,9 @@ fun FilePermissionsDetailScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
-            // Privacy Guarantee Banner Card
+            // 3. Privacy Guarantee Banner Card: "Your privacy is our priority."
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
