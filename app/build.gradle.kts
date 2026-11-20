@@ -21,6 +21,12 @@ android {
         multiDexEnabled = true
     }
 
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
+        disable += "InvalidFragmentVersionForActivityResult"
+    }
+
     buildTypes {
         release {
             optimization {

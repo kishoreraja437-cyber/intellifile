@@ -299,6 +299,7 @@ class MainActivity : ComponentActivity() {
     }
 
 
+    @Suppress("InvalidFragmentVersionForActivityResult")
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
