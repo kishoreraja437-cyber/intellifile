@@ -1084,7 +1084,7 @@ fun MyFilesScreen(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = if (isUploadingToVault) "Uploading & Extracting..." else if (isUploadingToVault) uploadProgressMessage.ifBlank { "Moving to IntelliSpace..." } else "Select & Move Documents to IntelliSpace",
+                                        text = if (isUploadingToVault) uploadProgressMessage.ifBlank { "Moving to IntelliSpace..." } else "Select & Move Documents to IntelliSpace",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.sp
                                     )

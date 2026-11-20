@@ -1,10 +1,13 @@
 package com.simats.intellifile.data.repository
 
+import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
+import android.provider.MediaStore
 import com.simats.intellifile.data.api.IntelliFileApiService
 import com.simats.intellifile.data.api.NetworkConfig
 import com.simats.intellifile.data.api.RetrofitClient
+import com.simats.intellifile.data.local.LocalFileDatabaseHelper
 import com.simats.intellifile.data.manager.LocalFileManager
 import com.simats.intellifile.data.model.*
 import com.simats.intellifile.data.session.SessionManager
@@ -14,8 +17,10 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
+
 
 
 class DocumentRepository(private val context: Context) {
@@ -32,69 +37,100 @@ class DocumentRepository(private val context: Context) {
         fileName: String,
         category: String? = null,
         priority: String? = null
-    ): Result<DocumentDto> {
+    ): Result<DocumentDto> = withContext(Dispatchers.IO) {
         val safeFileName = fileName.substringAfterLast('/').substringAfterLast('\\').trim().ifBlank { "document" }
         val cleanName = safeFileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-        val tempFile = File(context.cacheDir, "vault_upload_${System.currentTimeMillis()}_$cleanName")
+        var tempFile: File? = null
+        var fileToUpload: File? = null
 
-        return try {
-            var streamOpened = false
+        return@withContext try {
+            // Priority Strategy 1: Direct file on disk if accessible (zero copying, instant!)
+            if (filePath.isNotBlank() && filePath != "Internal Storage") {
+                val directFile = File(filePath)
+                if (directFile.exists() && directFile.canRead() && directFile.length() > 0L) {
+                    fileToUpload = directFile
+                }
+            }
 
-            // Strategy 1: ContentResolver via uriString (safest across all Android versions)
-            if (uriString.isNotBlank()) {
+            // Priority Strategy 2: ContentResolver via uriString with high-speed 64KB buffering
+            if (fileToUpload == null && uriString.isNotBlank()) {
                 try {
                     val uri = Uri.parse(uriString)
                     context.contentResolver.openInputStream(uri)?.use { input ->
-                        FileOutputStream(tempFile).use { output ->
-                            input.copyTo(output)
-                            streamOpened = true
+                        val targetTemp = File(context.cacheDir, "vault_upload_${System.currentTimeMillis()}_$cleanName")
+                        BufferedOutputStream(FileOutputStream(targetTemp), 65536).use { output ->
+                            val buffer = ByteArray(65536)
+                            var read: Int
+                            while (input.read(buffer).also { read = it } != -1) {
+                                output.write(buffer, 0, read)
+                            }
+                            output.flush()
+                        }
+                        if (targetTemp.exists() && targetTemp.length() > 0L) {
+                            tempFile = targetTemp
+                            fileToUpload = targetTemp
                         }
                     }
                 } catch (_: Exception) {}
             }
 
-            // Strategy 2: Direct file copy if accessible
-            if ((!streamOpened || tempFile.length() <= 0L) && filePath.isNotBlank() && filePath != "Internal Storage") {
+            // Priority Strategy 3: Fast targeted MediaStore lookup by exact displayName (5ms vs 5000ms scan)
+            if (fileToUpload == null) {
                 try {
-                    val directFile = File(filePath)
-                    if (directFile.exists() && directFile.canRead()) {
-                        directFile.inputStream().use { input ->
-                            FileOutputStream(tempFile).use { output ->
-                                input.copyTo(output)
-                                streamOpened = true
+                    val projection = arrayOf(
+                        MediaStore.Files.FileColumns._ID,
+                        MediaStore.Files.FileColumns.DATA
+                    )
+                    context.contentResolver.query(
+                        MediaStore.Files.getContentUri("external"),
+                        projection,
+                        "${MediaStore.Files.FileColumns.DISPLAY_NAME} = ?",
+                        arrayOf(safeFileName),
+                        null
+                    )?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val dataIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns.DATA)
+                            val pathStr = if (dataIdx != -1) cursor.getString(dataIdx) else null
+                            if (!pathStr.isNullOrBlank()) {
+                                val df = File(pathStr)
+                                if (df.exists() && df.canRead() && df.length() > 0L) {
+                                    fileToUpload = df
+                                }
+                            }
+                            if (fileToUpload == null) {
+                                val idIdx = cursor.getColumnIndex(MediaStore.Files.FileColumns._ID)
+                                if (idIdx != -1) {
+                                    val id = cursor.getLong(idIdx)
+                                    val matchedUri = ContentUris.withAppendedId(MediaStore.Files.getContentUri("external"), id)
+                                    context.contentResolver.openInputStream(matchedUri)?.use { input ->
+                                        val targetTemp = File(context.cacheDir, "vault_upload_${System.currentTimeMillis()}_$cleanName")
+                                        BufferedOutputStream(FileOutputStream(targetTemp), 65536).use { output ->
+                                            val buffer = ByteArray(65536)
+                                            var read: Int
+                                            while (input.read(buffer).also { read = it } != -1) {
+                                                output.write(buffer, 0, read)
+                                            }
+                                            output.flush()
+                                        }
+                                        if (targetTemp.exists() && targetTemp.length() > 0L) {
+                                            tempFile = targetTemp
+                                            fileToUpload = targetTemp
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 } catch (_: Exception) {}
             }
 
-            // Strategy 3: MediaStore lookup matching fileName or path
-            if (!streamOpened || tempFile.length() <= 0L) {
-                try {
-                    val deviceFiles = LocalFileManager.getDeviceFiles(context)
-                    val matchedItem = deviceFiles.firstOrNull {
-                        it.title.equals(fileName, ignoreCase = true) ||
-                        it.title.equals(safeFileName, ignoreCase = true) ||
-                        (filePath.isNotBlank() && it.path == filePath) ||
-                        (uriString.isNotBlank() && it.uri.toString() == uriString)
-                    }
-                    if (matchedItem != null && matchedItem.uri != Uri.EMPTY) {
-                        context.contentResolver.openInputStream(matchedItem.uri)?.use { input ->
-                            FileOutputStream(tempFile).use { output ->
-                                input.copyTo(output)
-                                streamOpened = true
-                            }
-                        }
-                    }
-                } catch (_: Exception) {}
-            }
-
-            if (!streamOpened || !tempFile.exists() || tempFile.length() <= 0L) {
-                return Result.failure(Exception("Cannot read file content. Please check that storage access is granted."))
+            val finalFile = fileToUpload
+            if (finalFile == null || !finalFile.exists() || finalFile.length() <= 0L) {
+                return@withContext Result.failure(Exception("Cannot access file content. Please verify storage permissions."))
             }
 
             val mimeType = LocalFileManager.resolveMimeType(safeFileName)
-            val requestFile = tempFile.asRequestBody(mimeType.toMediaTypeOrNull())
+            val requestFile = finalFile.asRequestBody(mimeType.toMediaTypeOrNull())
             val filePart = MultipartBody.Part.createFormData("document", safeFileName, requestFile)
 
             val sessionManager = SessionManager(context)
@@ -114,20 +150,29 @@ class DocumentRepository(private val context: Context) {
                 title = titlePart,
                 userId = userIdPart
             )
+
             if (response.isSuccessful && response.body()?.success == true) {
-                val doc = response.body()?.document ?: return Result.failure(Exception("Upload completed but no document returned"))
+                val doc = response.body()?.document ?: return@withContext Result.failure(Exception("Upload completed but server returned empty document."))
+                // Automatically persist vault status into local SQLite database
+                val dbHelper = LocalFileDatabaseHelper.getInstance(context)
+                val primaryKey = if (filePath.isNotBlank()) filePath else uriString
+                if (primaryKey.isNotBlank()) {
+                    dbHelper.setVaultStatus(primaryKey, safeFileName, true, doc.id)
+                }
+                if (uriString.isNotBlank() && uriString != primaryKey) {
+                    dbHelper.setVaultStatus(uriString, safeFileName, true, doc.id)
+                }
+                dbHelper.setVaultStatus(safeFileName, safeFileName, true, doc.id)
                 Result.success(doc)
             } else {
-                val msg = response.body()?.message ?: response.errorBody()?.string() ?: "Upload failed"
+                val msg = response.body()?.message ?: response.errorBody()?.string() ?: "Upload to IntelliSpace failed."
                 Result.failure(Exception(msg))
             }
         } catch (e: Exception) {
             Result.failure(e)
         } finally {
             try {
-                if (tempFile.exists()) {
-                    tempFile.delete()
-                }
+                tempFile?.let { if (it.exists()) it.delete() }
             } catch (_: Exception) {}
         }
     }
