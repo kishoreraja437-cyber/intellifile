@@ -1422,7 +1422,7 @@ fun VaultDocumentCard(
                         onClick = onViewFileClick,
                         enabled = !isLoadingFile,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF6C63FF),
+                            containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = Color.White
                         ),
                         shape = RoundedCornerShape(8.dp),
@@ -1464,7 +1464,10 @@ fun VaultDocumentCard(
                     // AI Insights Button
                     Button(
                         onClick = onViewSummaryClick,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEFF6FF)),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = Color.White
+                        ),
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                         modifier = Modifier.height(30.dp)
@@ -1473,7 +1476,7 @@ fun VaultDocumentCard(
                             Icon(
                                 imageVector = Icons.Default.AutoAwesome,
                                 contentDescription = null,
-                                tint = Color(0xFF2563EB),
+                                tint = Color.White,
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
@@ -1481,7 +1484,7 @@ fun VaultDocumentCard(
                                 text = "AI Insights",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF2563EB)
+                                color = Color.White
                             )
                         }
                     }
