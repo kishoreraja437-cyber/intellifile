@@ -1,7 +1,10 @@
 package com.simats.intellifile.ui.viewer.ppt
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.net.Uri
 import android.widget.Toast
@@ -71,6 +74,22 @@ fun PPTViewerScreen(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
+    val activity = context as? Activity
+    val isLandscape = activity?.resources?.configuration?.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    DisposableEffect(Unit) {
+        onDispose {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    val toggleOrientation: () -> Unit = {
+        activity?.requestedOrientation = if (isLandscape) {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
+    }
 
     // Load presentation
     LaunchedEffect(filePath, fileUriString, fileName) {
@@ -147,12 +166,14 @@ fun PPTViewerScreen(
                     matchingCount = uiState.matchingSlideIndices.size,
                     hasNotes = !uiState.currentSlideInfo?.notes.isNullOrBlank(),
                     isThumbnailsOpen = uiState.showThumbnailsDrawer,
+                    isLandscape = isLandscape,
                     onBackClick = onBackClick,
                     onToggleSearch = { viewModel.setSearchActive(!uiState.isSearchActive) },
                     onSearchQueryChanged = { viewModel.onSearchQueryChanged(it) },
                     onNextSearchResult = { viewModel.nextSearchResult() },
                     onToggleNotes = { viewModel.toggleNotes() },
                     onToggleThumbnails = { viewModel.toggleThumbnailsDrawer() },
+                    onToggleOrientation = toggleOrientation,
                     onToggleFullscreen = { viewModel.toggleFullscreen() },
                     onShareClick = effectiveShareClick
                 )
@@ -230,7 +251,7 @@ fun PPTViewerScreen(
                             viewModel.updateZoomAndPan(zoomDelta, panDelta)
                         },
                         onDoubleTap = {
-                            if (uiState.zoomScale > 1.1f) viewModel.resetZoom() else viewModel.zoomIn()
+                            if (uiState.zoomScale > 1.1f) viewModel.resetZoom() else viewModel.updateZoomAndPan(2.2f, Offset.Zero)
                         },
                         onSwipeNext = { viewModel.nextSlide() },
                         onSwipePrevious = { viewModel.previousSlide() }
@@ -245,8 +266,10 @@ fun PPTViewerScreen(
                     totalSlides = uiState.totalSlides,
                     canGoPrevious = uiState.canGoPrevious,
                     canGoNext = uiState.canGoNext,
+                    isLandscape = isLandscape,
                     onPreviousClick = { viewModel.previousSlide() },
                     onNextClick = { viewModel.nextSlide() },
+                    onToggleOrientation = toggleOrientation,
                     onExitFullscreen = { viewModel.setFullscreen(false) }
                 )
             }
@@ -289,12 +312,14 @@ private fun PPTViewerTopBar(
     matchingCount: Int,
     hasNotes: Boolean,
     isThumbnailsOpen: Boolean,
+    isLandscape: Boolean,
     onBackClick: () -> Unit,
     onToggleSearch: () -> Unit,
     onSearchQueryChanged: (String) -> Unit,
     onNextSearchResult: () -> Unit,
     onToggleNotes: () -> Unit,
     onToggleThumbnails: () -> Unit,
+    onToggleOrientation: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onShareClick: () -> Unit
 ) {
@@ -381,6 +406,15 @@ private fun PPTViewerTopBar(
                         imageVector = Icons.Default.GridView,
                         contentDescription = "Thumbnails",
                         tint = if (isThumbnailsOpen) DuskyAqua else DarkOceanTeal
+                    )
+                }
+
+                // Rotate Screen (Portrait <-> Landscape)
+                IconButton(onClick = onToggleOrientation) {
+                    Icon(
+                        imageVector = Icons.Default.ScreenRotation,
+                        contentDescription = "Rotate Screen",
+                        tint = if (isLandscape) DuskyAqua else DarkOceanTeal
                     )
                 }
 
@@ -520,7 +554,7 @@ private fun PPTVisualCanvasView(
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth(if (isFullscreen) 0.98f else 0.94f)
+                .fillMaxWidth(if (isFullscreen) 1f else 0.98f)
                 .graphicsLayer {
                     scaleX = zoomScale
                     scaleY = zoomScale
@@ -728,10 +762,30 @@ private fun BoxScope.PPTFullscreenOverlayControls(
     totalSlides: Int,
     canGoPrevious: Boolean,
     canGoNext: Boolean,
+    isLandscape: Boolean,
     onPreviousClick: () -> Unit,
     onNextClick: () -> Unit,
+    onToggleOrientation: () -> Unit,
     onExitFullscreen: () -> Unit
 ) {
+    // Screen Rotation Button
+    FilledIconButton(
+        onClick = onToggleOrientation,
+        colors = IconButtonDefaults.filledIconButtonColors(
+            containerColor = Color.Black.copy(alpha = 0.6f),
+            contentColor = Color.White
+        ),
+        modifier = Modifier
+            .align(Alignment.TopEnd)
+            .padding(top = 16.dp, end = 68.dp)
+            .size(44.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.ScreenRotation,
+            contentDescription = "Rotate Screen"
+        )
+    }
+
     // Exit Fullscreen Button at Top-Right
     FilledIconButton(
         onClick = onExitFullscreen,

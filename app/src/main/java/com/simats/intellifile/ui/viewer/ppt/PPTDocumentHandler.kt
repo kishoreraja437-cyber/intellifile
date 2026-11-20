@@ -94,7 +94,8 @@ private sealed class NativeSlideElement {
         val strokeColor: Int?,
         val strokeWidthPt: Float = 0f,
         val cornerRadiusPx: Float = 16f,
-        val paragraphs: List<NativeParagraph>
+        val paragraphs: List<NativeParagraph>,
+        val imageMediaKey: String? = null
     ) : NativeSlideElement()
 
     data class Table(
@@ -117,7 +118,9 @@ private data class NativeTableCell(
     val text: String,
     val fillColor: Int?,
     val isBold: Boolean,
-    val textColor: Int?
+    val textColor: Int?,
+    val fontSizePt: Float = 12f,
+    val alignment: Layout.Alignment = Layout.Alignment.ALIGN_NORMAL
 )
 
 private data class NativeParagraph(
@@ -132,6 +135,20 @@ private data class NativeTextRun(
     val isItalic: Boolean,
     val color: Int
 )
+
+private data class TransformContext(
+    val offX: Long = 0L,
+    val offY: Long = 0L,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+    val chOffX: Long = 0L,
+    val chOffY: Long = 0L
+) {
+    fun toAbsoluteX(x: Long): Long = offX + ((x - chOffX) * scaleX).toLong()
+    fun toAbsoluteY(y: Long): Long = offY + ((y - chOffY) * scaleY).toLong()
+    fun toAbsoluteW(w: Long): Long = (w * scaleX).toLong()
+    fun toAbsoluteH(h: Long): Long = (h * scaleY).toLong()
+}
 
 // =========================================================================
 // DOCUMENT HANDLER: 100% FREE, WATERMARK-FREE NATIVE POWERPOINT ENGINE
@@ -532,28 +549,184 @@ object PPTDocumentHandler {
 
                     zip.getInputStream(slideEntry).use { input ->
                         val doc = parseXmlDocument(input)
+                        val cSld = doc.findFirstDescendant("cSld") ?: doc.documentElement
+                        val spTree = cSld.findFirstDescendant("spTree") ?: cSld
 
-                        // A. Check for pictures (<p:pic>)
-                        val pics = doc.findDescendants("pic")
-                        for (pic in pics) {
+                        fun parseShapeNode(sp: Element, context: TransformContext) {
+                            val xfrm = sp.findFirstDescendant("xfrm") ?: return
+                            val rawX = xfrm.findFirstDescendant("off")?.getAttribute("x")?.toLongOrNull() ?: 0L
+                            val rawY = xfrm.findFirstDescendant("off")?.getAttribute("y")?.toLongOrNull() ?: 0L
+                            val rawW = xfrm.findFirstDescendant("ext")?.getAttribute("cx")?.toLongOrNull() ?: 0L
+                            val rawH = xfrm.findFirstDescendant("ext")?.getAttribute("cy")?.toLongOrNull() ?: 0L
+
+                            val absX = context.toAbsoluteX(rawX)
+                            val absY = context.toAbsoluteY(rawY)
+                            val absW = context.toAbsoluteW(rawW)
+                            val absH = if (rawH > 0) context.toAbsoluteH(rawH) else (slideHeightEmu / 4L)
+
+                            if (absW <= 0L) return
+
+                            val relX = absX.toFloat() / slideWidthEmu
+                            val relY = absY.toFloat() / slideHeightEmu
+                            val relW = absW.toFloat() / slideWidthEmu
+                            val relH = absH.toFloat() / slideHeightEmu
+
+                            // Check image fill (blipFill) inside shape
+                            val blip = sp.findFirstDescendant("blip")
+                            val embedId = blip?.getAttribute("r:embed") ?: ""
+                            val imageKey = slideRels[embedId]?.takeIf { mediaMap.containsKey(it) }
+
+                            // Check fill color
+                            var fillColor: Int? = null
+                            val spPr = sp.findFirstDescendant("spPr")
+                            val solidFill = spPr?.findFirstDescendant("solidFill")
+                            val srgbClr = solidFill?.findFirstDescendant("srgbClr")?.getAttribute("val")
+                            val schemeClr = solidFill?.findFirstDescendant("schemeClr")?.getAttribute("val")
+                            val alphaVal = solidFill?.findFirstDescendant("alpha")?.getAttribute("val")
+
+                            fillColor = when {
+                                !srgbClr.isNullOrBlank() -> parseHexColor(srgbClr, alphaVal)
+                                schemeClr in listOf("lt1", "bg1", "lt2") -> parseHexColor("FFFFFF", alphaVal)
+                                schemeClr in listOf("accent1") -> parseHexColor("55A9AF", alphaVal)
+                                schemeClr in listOf("accent2") -> parseHexColor("6FBEC3", alphaVal)
+                                schemeClr in listOf("accent3") -> parseHexColor("3F8F94", alphaVal)
+                                schemeClr in listOf("dk1", "tx1", "dk2") -> parseHexColor("1E293B", alphaVal)
+                                else -> null
+                            }
+
+                            // Check stroke border
+                            var strokeColor: Int? = null
+                            var strokeWidth = 0f
+                            val ln = spPr?.findFirstDescendant("ln")
+                            if (ln != null) {
+                                val lnFill = ln.findFirstDescendant("solidFill")?.findFirstDescendant("srgbClr")
+                                if (lnFill != null) {
+                                    strokeColor = parseHexColor(lnFill.getAttribute("val"))
+                                }
+                                val wVal = ln.getAttribute("w").toLongOrNull() ?: 0L
+                                strokeWidth = if (wVal > 0) (wVal / 12700f).coerceIn(1f, 8f) else 1f
+                            }
+
+                            // Check corner radius
+                            val prst = spPr?.findFirstDescendant("prstGeom")?.getAttribute("prst") ?: ""
+                            val cornerRadius = if (prst in listOf("roundRect", "ellipse")) 16f else 4f
+
+                            // Parse text body
+                            val txBody = sp.findFirstDescendant("txBody")
+                            val paragraphs = mutableListOf<NativeParagraph>()
+
+                            if (txBody != null) {
+                                val pNodes = txBody.findDescendants("p")
+                                for (p in pNodes) {
+                                    val pPr = p.findFirstDescendant("pPr")
+                                    val algnAttr = pPr?.getAttribute("algn") ?: ""
+                                    val alignment = when (algnAttr) {
+                                        "ctr" -> Layout.Alignment.ALIGN_CENTER
+                                        "r" -> Layout.Alignment.ALIGN_OPPOSITE
+                                        else -> Layout.Alignment.ALIGN_NORMAL
+                                    }
+
+                                    val buChar = pPr?.findFirstDescendant("buChar")?.getAttribute("char")
+                                    val hasBullet = buChar != null || (pPr?.findFirstDescendant("buNone") == null && pPr?.findFirstDescendant("buSzPct") != null)
+                                    val bulletPrefix = if (hasBullet) "${buChar ?: "•"} " else ""
+
+                                    val runs = mutableListOf<NativeTextRun>()
+                                    val textNodes = p.findDescendants("r") + p.findDescendants("fld")
+                                    for ((rIdx, r) in textNodes.withIndex()) {
+                                        var t = r.findFirstDescendant("t")?.textContent ?: ""
+                                        if (t.isEmpty()) continue
+                                        if (rIdx == 0 && bulletPrefix.isNotEmpty()) {
+                                            t = bulletPrefix + t
+                                        }
+
+                                        allExtractedText.append(t).append(" ")
+
+                                        val rPr = r.findFirstDescendant("rPr")
+                                        val szVal = rPr?.getAttribute("sz")?.toIntOrNull() ?: 1800
+                                        val fontSizePt = (szVal / 100f).coerceIn(9f, 72f)
+                                        val isBold = rPr?.getAttribute("b") == "1"
+                                        val isItalic = rPr?.getAttribute("i") == "1"
+
+                                        val srgbVal = rPr?.findFirstDescendant("srgbClr")?.getAttribute("val")
+                                        val schemeVal = rPr?.findFirstDescendant("schemeClr")?.getAttribute("val")
+                                        var textColor = when {
+                                            !srgbVal.isNullOrBlank() -> parseHexColor(srgbVal) ?: android.graphics.Color.rgb(30, 41, 59)
+                                            schemeVal in listOf("lt1", "bg1", "lt2") -> android.graphics.Color.WHITE
+                                            schemeVal in listOf("accent1") -> android.graphics.Color.rgb(85, 169, 175)
+                                            else -> android.graphics.Color.rgb(30, 41, 59)
+                                        }
+
+                                        // Contrast fix: prevent invisible white-on-white text
+                                        if (textColor == android.graphics.Color.WHITE) {
+                                            val hasDarkBg = fillColor != null && isColorDark(fillColor)
+                                            if (!hasDarkBg) {
+                                                textColor = android.graphics.Color.rgb(30, 41, 59)
+                                            }
+                                        }
+
+                                        runs.add(
+                                            NativeTextRun(
+                                                text = t,
+                                                fontSizePt = fontSizePt,
+                                                isBold = isBold,
+                                                isItalic = isItalic,
+                                                color = textColor
+                                            )
+                                        )
+
+                                        if (detectedTitle.isBlank() && (fontSizePt >= 22f || isBold)) {
+                                            val clean = t.removePrefix("• ").trim()
+                                            if (clean.length in 3..60) {
+                                                detectedTitle = clean
+                                            }
+                                        }
+                                    }
+
+                                    if (runs.isNotEmpty()) {
+                                        paragraphs.add(NativeParagraph(alignment, runs))
+                                    }
+                                }
+                            }
+
+                            if (imageKey != null || fillColor != null || strokeColor != null || paragraphs.isNotEmpty()) {
+                                elements.add(
+                                    NativeSlideElement.Shape(
+                                        relX = relX,
+                                        relY = relY,
+                                        relW = relW,
+                                        relH = relH,
+                                        fillColor = fillColor,
+                                        strokeColor = strokeColor,
+                                        strokeWidthPt = strokeWidth,
+                                        cornerRadiusPx = cornerRadius,
+                                        paragraphs = paragraphs,
+                                        imageMediaKey = imageKey
+                                    )
+                                )
+                            }
+                        }
+
+                        fun parsePicNode(pic: Element, context: TransformContext) {
                             val blip = pic.findFirstDescendant("blip")
                             val embedId = blip?.getAttribute("r:embed") ?: ""
                             val mediaKey = slideRels[embedId] ?: ""
-                            if (mediaKey.isBlank() || !mediaMap.containsKey(mediaKey)) continue
+                            if (mediaKey.isBlank() || !mediaMap.containsKey(mediaKey)) return
 
                             val xfrm = pic.findFirstDescendant("xfrm")
-                            val off = xfrm?.findFirstDescendant("off")
-                            val ext = xfrm?.findFirstDescendant("ext")
+                            val rawX = xfrm?.findFirstDescendant("off")?.getAttribute("x")?.toLongOrNull() ?: 0L
+                            val rawY = xfrm?.findFirstDescendant("off")?.getAttribute("y")?.toLongOrNull() ?: 0L
+                            val rawW = xfrm?.findFirstDescendant("ext")?.getAttribute("cx")?.toLongOrNull() ?: slideWidthEmu
+                            val rawH = xfrm?.findFirstDescendant("ext")?.getAttribute("cy")?.toLongOrNull() ?: slideHeightEmu
 
-                            val xEmu = off?.getAttribute("x")?.toLongOrNull() ?: 0L
-                            val yEmu = off?.getAttribute("y")?.toLongOrNull() ?: 0L
-                            val wEmu = ext?.getAttribute("cx")?.toLongOrNull() ?: slideWidthEmu
-                            val hEmu = ext?.getAttribute("cy")?.toLongOrNull() ?: slideHeightEmu
+                            val absX = context.toAbsoluteX(rawX)
+                            val absY = context.toAbsoluteY(rawY)
+                            val absW = context.toAbsoluteW(rawW)
+                            val absH = context.toAbsoluteH(rawH)
 
-                            val relX = xEmu.toFloat() / slideWidthEmu
-                            val relY = yEmu.toFloat() / slideHeightEmu
-                            val relW = wEmu.toFloat() / slideWidthEmu
-                            val relH = hEmu.toFloat() / slideHeightEmu
+                            val relX = absX.toFloat() / slideWidthEmu
+                            val relY = absY.toFloat() / slideHeightEmu
+                            val relW = absW.toFloat() / slideWidthEmu
+                            val relH = absH.toFloat() / slideHeightEmu
 
                             val isFullBleed = (relW >= 0.85f && relH >= 0.85f)
                             if (isFullBleed && backgroundKey == null) {
@@ -572,167 +745,38 @@ object PPTDocumentHandler {
                             )
                         }
 
-                        // B. Check for shapes (<p:sp>)
-                        val shapes = doc.findDescendants("sp")
-                        for (sp in shapes) {
-                            val xfrm = sp.findFirstDescendant("xfrm") ?: continue
-                            val off = xfrm.findFirstDescendant("off")
-                            val ext = xfrm.findFirstDescendant("ext")
+                        fun parseTableNode(gf: Element, context: TransformContext) {
+                            val tbl = gf.findFirstDescendant("tbl") ?: return
+                            val xfrm = gf.findFirstDescendant("xfrm") ?: return
+                            val rawX = xfrm.findFirstDescendant("off")?.getAttribute("x")?.toLongOrNull() ?: 0L
+                            val rawY = xfrm.findFirstDescendant("off")?.getAttribute("y")?.toLongOrNull() ?: 0L
+                            val rawW = xfrm.findFirstDescendant("ext")?.getAttribute("cx")?.toLongOrNull() ?: 0L
+                            val rawH = xfrm.findFirstDescendant("ext")?.getAttribute("cy")?.toLongOrNull() ?: 0L
 
-                            val xEmu = off?.getAttribute("x")?.toLongOrNull() ?: 0L
-                            val yEmu = off?.getAttribute("y")?.toLongOrNull() ?: 0L
-                            val wEmu = ext?.getAttribute("cx")?.toLongOrNull() ?: 0L
-                            val hEmu = ext?.getAttribute("cy")?.toLongOrNull() ?: 0L
+                            val absX = context.toAbsoluteX(rawX)
+                            val absY = context.toAbsoluteY(rawY)
+                            val absW = context.toAbsoluteW(rawW)
+                            val absH = context.toAbsoluteH(rawH)
+                            if (absW <= 0L) return
 
-                            if (wEmu <= 0L || hEmu <= 0L) continue
+                            val relX = absX.toFloat() / slideWidthEmu
+                            val relY = absY.toFloat() / slideHeightEmu
+                            val relW = absW.toFloat() / slideWidthEmu
+                            val relH = if (absH > 0L) absH.toFloat() / slideHeightEmu else 0.4f
 
-                            val relX = xEmu.toFloat() / slideWidthEmu
-                            val relY = yEmu.toFloat() / slideHeightEmu
-                            val relW = wEmu.toFloat() / slideWidthEmu
-                            val relH = hEmu.toFloat() / slideHeightEmu
-
-                            // Check fill color
-                            var fillColor: Int? = null
-                            val spPr = sp.findFirstDescendant("spPr")
-                            val solidFill = spPr?.findFirstDescendant("solidFill")
-                            val srgbClr = solidFill?.findFirstDescendant("srgbClr")?.getAttribute("val")
-                            val schemeClr = solidFill?.findFirstDescendant("schemeClr")?.getAttribute("val")
-                            fillColor = when {
-                                !srgbClr.isNullOrBlank() -> parseHexColor(srgbClr)
-                                schemeClr in listOf("lt1", "bg1", "lt2") -> android.graphics.Color.WHITE
-                                schemeClr in listOf("accent1") -> android.graphics.Color.rgb(85, 169, 175)
-                                schemeClr in listOf("dk1", "tx1", "dk2") -> android.graphics.Color.rgb(30, 41, 59)
-                                else -> null
-                            }
-
-                            // Check stroke border
-                            var strokeColor: Int? = null
-                            var strokeWidth = 0f
-                            val ln = spPr?.findFirstDescendant("ln")
-                            if (ln != null) {
-                                val lnFill = ln.findFirstDescendant("solidFill")?.findFirstDescendant("srgbClr")
-                                if (lnFill != null) {
-                                    strokeColor = parseHexColor(lnFill.getAttribute("val"))
-                                }
-                                val wVal = ln.getAttribute("w").toLongOrNull() ?: 0L
-                                strokeWidth = if (wVal > 0) (wVal / 12700f).coerceIn(1f, 8f) else 1f
-                            }
-
-                            // Parse text body (<p:txBody>)
-                            val txBody = sp.findFirstDescendant("txBody")
-                            val paragraphs = mutableListOf<NativeParagraph>()
-
-                            if (txBody != null) {
-                                val pNodes = txBody.findDescendants("p")
-                                for (p in pNodes) {
-                                    val pPr = p.findFirstDescendant("pPr")
-                                    val algnAttr = pPr?.getAttribute("algn") ?: ""
-                                    val alignment = when (algnAttr) {
-                                        "ctr" -> Layout.Alignment.ALIGN_CENTER
-                                        "r" -> Layout.Alignment.ALIGN_OPPOSITE
-                                        else -> Layout.Alignment.ALIGN_NORMAL
-                                    }
-
-                                    val runs = mutableListOf<NativeTextRun>()
-                                    val rNodes = p.findDescendants("r")
-                                    for (r in rNodes) {
-                                        val t = r.findFirstDescendant("t")?.textContent ?: ""
-                                        if (t.isEmpty()) continue
-
-                                        allExtractedText.append(t).append(" ")
-
-                                        val rPr = r.findFirstDescendant("rPr")
-                                        val szVal = rPr?.getAttribute("sz")?.toIntOrNull() ?: 2000
-                                        val fontSizePt = (szVal / 100f).coerceIn(10f, 72f)
-                                        val isBold = rPr?.getAttribute("b") == "1"
-                                        val isItalic = rPr?.getAttribute("i") == "1"
-
-                                        val srgbVal = rPr?.findFirstDescendant("srgbClr")?.getAttribute("val")
-                                        val schemeVal = rPr?.findFirstDescendant("schemeClr")?.getAttribute("val")
-                                        val textColor = when {
-                                            !srgbVal.isNullOrBlank() -> parseHexColor(srgbVal) ?: android.graphics.Color.rgb(30, 41, 59)
-                                            schemeVal in listOf("lt1", "bg1", "lt2") -> android.graphics.Color.WHITE
-                                            schemeVal in listOf("accent1") -> android.graphics.Color.rgb(85, 169, 175)
-                                            else -> android.graphics.Color.rgb(30, 41, 59)
-                                        }
-
-                                        runs.add(
-                                            NativeTextRun(
-                                                text = t,
-                                                fontSizePt = fontSizePt,
-                                                isBold = isBold,
-                                                isItalic = isItalic,
-                                                color = textColor
-                                            )
-                                        )
-
-                                        if (detectedTitle.isBlank() && (fontSizePt >= 24f || isBold)) {
-                                            val clean = t.trim()
-                                            if (clean.length in 3..60) {
-                                                detectedTitle = clean
-                                            }
-                                        }
-                                    }
-
-                                    if (runs.isNotEmpty()) {
-                                        paragraphs.add(NativeParagraph(alignment, runs))
-                                    }
-                                }
-                            }
-
-                            // If shape has visual presence (fill, stroke, or text), keep it
-                            if (fillColor != null || strokeColor != null || paragraphs.isNotEmpty()) {
-                                elements.add(
-                                    NativeSlideElement.Shape(
-                                        relX = relX,
-                                        relY = relY,
-                                        relW = relW,
-                                        relH = relH,
-                                        fillColor = fillColor,
-                                        strokeColor = strokeColor,
-                                        strokeWidthPt = strokeWidth,
-                                        cornerRadiusPx = 16f,
-                                        paragraphs = paragraphs
-                                    )
-                                )
-                            }
-                        }
-
-                        // C. Check for Tables (<p:graphicFrame> containing <a:tbl>)
-                        val frames = doc.findDescendants("graphicFrame")
-                        for (gf in frames) {
-                            val tbl = gf.findFirstDescendant("tbl") ?: continue
-                            val xfrm = gf.findFirstDescendant("xfrm") ?: continue
-                            val off = xfrm.findFirstDescendant("off")
-                            val ext = xfrm.findFirstDescendant("ext")
-
-                            val xEmu = off?.getAttribute("x")?.toLongOrNull() ?: 0L
-                            val yEmu = off?.getAttribute("y")?.toLongOrNull() ?: 0L
-                            val wEmu = ext?.getAttribute("cx")?.toLongOrNull() ?: 0L
-                            val hEmu = ext?.getAttribute("cy")?.toLongOrNull() ?: 0L
-
-                            if (wEmu <= 0L || hEmu <= 0L) continue
-
-                            val relX = xEmu.toFloat() / slideWidthEmu
-                            val relY = yEmu.toFloat() / slideHeightEmu
-                            val relW = wEmu.toFloat() / slideWidthEmu
-                            val relH = hEmu.toFloat() / slideHeightEmu
-
-                            // Column widths
                             val gridCols = tbl.findDescendants("gridCol")
                             val colWeights = gridCols.map { it.getAttribute("w").toLongOrNull() ?: 1000L }
                             val totalColWeight = max(1L, colWeights.sum())
                             val colWidthRels = colWeights.map { it.toFloat() / totalColWeight }
 
-                            // Rows
                             val trList = tbl.findDescendants("tr")
-                            val rowHeights = trList.map { it.getAttribute("h").toLongOrNull() ?: 1000L }
+                            val rowHeights = trList.map { it.getAttribute("h").toLongOrNull() ?: 0L }
                             val totalRowWeight = max(1L, rowHeights.sum())
 
                             val tableRows = mutableListOf<NativeTableRow>()
                             for ((rIdx, tr) in trList.withIndex()) {
                                 val isHeader = (rIdx == 0)
-                                val rowHeightRel = (rowHeights[rIdx].toFloat() / totalRowWeight)
+                                val rowHeightRel = if (totalRowWeight > 0) (rowHeights[rIdx].toFloat() / totalRowWeight) else 0f
                                 val cells = mutableListOf<NativeTableCell>()
 
                                 val tcList = tr.findDescendants("tc")
@@ -745,17 +789,42 @@ object PPTDocumentHandler {
 
                                     var cellFill: Int? = null
                                     val tcPr = tc.findFirstDescendant("tcPr")
-                                    val solidFill = tcPr?.findFirstDescendant("solidFill")?.findFirstDescendant("srgbClr")
-                                    if (solidFill != null) {
-                                        cellFill = parseHexColor(solidFill.getAttribute("val"))
+                                    if (tcPr != null) {
+                                        val tcChildren = tcPr.childNodes
+                                        for (ci in 0 until tcChildren.length) {
+                                            val cNode = tcChildren.item(ci)
+                                            if (cNode is Element && cNode.isMatchingTag("solidFill")) {
+                                                val srgb = cNode.findFirstDescendant("srgbClr")?.getAttribute("val")
+                                                if (!srgb.isNullOrBlank()) {
+                                                    cellFill = parseHexColor(srgb)
+                                                }
+                                                break
+                                            }
+                                        }
                                     }
+
+                                    val rPr = tc.findFirstDescendant("rPr")
+                                    val szVal = rPr?.getAttribute("sz")?.toIntOrNull() ?: (if (isHeader) 1300 else 1050)
+                                    val fontSizePt = (szVal / 100f).coerceIn(8.5f, 26f)
+                                    val srgbClr = rPr?.findFirstDescendant("srgbClr")?.getAttribute("val")
+                                    val textColor = when {
+                                        !srgbClr.isNullOrBlank() -> parseHexColor(srgbClr)
+                                        isHeader -> android.graphics.Color.WHITE
+                                        else -> android.graphics.Color.rgb(34, 34, 34)
+                                    }
+
+                                    val pPr = tc.findFirstDescendant("pPr")
+                                    val algnAttr = pPr?.getAttribute("algn") ?: ""
+                                    val alignment = if (algnAttr == "ctr" || isHeader) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
 
                                     cells.add(
                                         NativeTableCell(
                                             text = cellText,
                                             fillColor = cellFill,
-                                            isBold = isHeader,
-                                            textColor = if (isHeader) android.graphics.Color.WHITE else android.graphics.Color.rgb(30, 41, 59)
+                                            isBold = isHeader || rPr?.getAttribute("b") == "1",
+                                            textColor = textColor,
+                                            fontSizePt = fontSizePt,
+                                            alignment = alignment
                                         )
                                     )
                                 }
@@ -776,6 +845,50 @@ object PPTDocumentHandler {
                                 )
                             }
                         }
+
+                        fun parseTreeElements(container: Element, context: TransformContext) {
+                            val children = container.childNodes
+                            for (i in 0 until children.length) {
+                                val node = children.item(i)
+                                if (node !is Element) continue
+
+                                when {
+                                    node.isMatchingTag("grpSp") -> {
+                                        val grpXfrm = node.findFirstDescendant("grpSpPr")?.findFirstDescendant("xfrm")
+                                        val off = grpXfrm?.findFirstDescendant("off")
+                                        val ext = grpXfrm?.findFirstDescendant("ext")
+                                        val chOff = grpXfrm?.findFirstDescendant("chOff")
+                                        val chExt = grpXfrm?.findFirstDescendant("chExt")
+
+                                        val rawX = off?.getAttribute("x")?.toLongOrNull() ?: 0L
+                                        val rawY = off?.getAttribute("y")?.toLongOrNull() ?: 0L
+                                        val rawW = ext?.getAttribute("cx")?.toLongOrNull() ?: 0L
+                                        val rawH = ext?.getAttribute("cy")?.toLongOrNull() ?: 0L
+
+                                        val gx = context.toAbsoluteX(rawX)
+                                        val gy = context.toAbsoluteY(rawY)
+                                        val gw = context.toAbsoluteW(rawW)
+                                        val gh = context.toAbsoluteH(rawH)
+
+                                        val cx = chOff?.getAttribute("x")?.toLongOrNull() ?: 0L
+                                        val cy = chOff?.getAttribute("y")?.toLongOrNull() ?: 0L
+                                        val cw = chExt?.getAttribute("cx")?.toLongOrNull() ?: if (gw > 0) gw else 1L
+                                        val ch = chExt?.getAttribute("cy")?.toLongOrNull() ?: if (gh > 0) gh else 1L
+
+                                        val nextScaleX = if (cw > 0) gw.toFloat() / cw else 1f
+                                        val nextScaleY = if (ch > 0) gh.toFloat() / ch else 1f
+                                        val childContext = TransformContext(gx, gy, nextScaleX, nextScaleY, cx, cy)
+
+                                        parseTreeElements(node, childContext)
+                                    }
+                                    node.isMatchingTag("sp") -> parseShapeNode(node, context)
+                                    node.isMatchingTag("pic") -> parsePicNode(node, context)
+                                    node.isMatchingTag("graphicFrame") -> parseTableNode(node, context)
+                                }
+                            }
+                        }
+
+                        parseTreeElements(spTree, TransformContext())
                     }
 
                     if (detectedTitle.isBlank()) {
@@ -844,7 +957,7 @@ object PPTDocumentHandler {
                 }
             }
 
-            // 3. Draw Elements (Pictures, Shapes, Tables)
+            // 3. Draw Elements in Exact Natural Z-Order (Pictures, Shapes, Tables)
             val ptToPx = (targetWidth / (pres.slideWidthEmu / 12700f)).coerceAtLeast(1f)
 
             for (element in slide.elements) {
@@ -872,13 +985,30 @@ object PPTDocumentHandler {
                         val sY = element.relY * targetHeight
                         val sW = element.relW * targetWidth
                         val sH = element.relH * targetHeight
-                        val corner = (element.cornerRadiusPx * (targetWidth / 1600f)).coerceAtLeast(4f)
+                        val corner = (element.cornerRadiusPx * (targetWidth / 1600f)).coerceAtLeast(2f)
                         val rectF = RectF(sX, sY, sX + sW, sY + sH)
 
                         // Draw Shape Fill
                         if (element.fillColor != null) {
                             fillPaint.color = element.fillColor
                             canvas.drawRoundRect(rectF, corner, corner, fillPaint)
+                        }
+
+                        // Draw Image Fill if present (e.g. phone mockups, screenshots, diagram cards)
+                        if (element.imageMediaKey != null) {
+                            val imgBytes = pres.mediaMap[element.imageMediaKey]
+                            if (imgBytes != null) {
+                                val imgBmp = BitmapFactory.decodeByteArray(imgBytes, 0, imgBytes.size)
+                                if (imgBmp != null) {
+                                    canvas.save()
+                                    val clipPath = android.graphics.Path().apply {
+                                        addRoundRect(rectF, corner, corner, android.graphics.Path.Direction.CW)
+                                    }
+                                    canvas.clipPath(clipPath)
+                                    canvas.drawBitmap(imgBmp, null, rectF, paint)
+                                    canvas.restore()
+                                }
+                            }
                         }
 
                         // Draw Shape Stroke / Border
@@ -890,8 +1020,8 @@ object PPTDocumentHandler {
 
                         // Draw Formatted Text Blocks
                         if (element.paragraphs.isNotEmpty()) {
-                            val innerPad = (16f * (targetWidth / 1600f)).coerceAtLeast(8f)
-                            val availWidth = (sW - innerPad * 2).coerceAtLeast(40f).toInt()
+                            val innerPad = (14f * (targetWidth / 1600f)).coerceAtLeast(6f)
+                            val availWidth = (sW - innerPad * 2).coerceAtLeast(30f).toInt()
                             var currentY = sY + innerPad
 
                             for (para in element.paragraphs) {
@@ -903,7 +1033,7 @@ object PPTDocumentHandler {
                                     spannable.append(run.text)
                                     val end = spannable.length
 
-                                    val fontPx = (run.fontSizePt * ptToPx).toInt().coerceIn(12, 120)
+                                    val fontPx = (run.fontSizePt * ptToPx).toInt().coerceIn(10, 120)
                                     spannable.setSpan(AbsoluteSizeSpan(fontPx), start, end, 0)
                                     spannable.setSpan(ForegroundColorSpan(run.color), start, end, 0)
 
@@ -948,61 +1078,85 @@ object PPTDocumentHandler {
                         val cellPaint = Paint(Paint.ANTI_ALIAS_FLAG)
                         val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                             style = Paint.Style.STROKE
-                            color = android.graphics.Color.rgb(203, 213, 225) // Slate 300
-                            strokeWidth = max(1f, 1.5f * (targetWidth / 1600f))
+                            color = android.graphics.Color.rgb(184, 216, 218) // Soft aqua border #B8D8DA
+                            strokeWidth = max(1f, 1.2f * (targetWidth / 1600f))
                         }
+                        val padding = (8f * (targetWidth / 1600f)).coerceAtLeast(5f)
 
                         for ((rIdx, row) in element.rows.withIndex()) {
-                            val rowH = (row.rowHeightRel * tH).coerceAtLeast(30f * (targetWidth / 1600f))
-                            var currentX = tX
+                            // Step A: Pre-calculate layout & height for all cells in this row to prevent any row overlapping
+                            var maxCellTextH = 0f
+                            val cellLayouts = mutableListOf<StaticLayout?>()
 
                             for ((cIdx, cell) in row.cells.withIndex()) {
                                 val colPct = element.colWidthRels.getOrNull(cIdx) ?: (1f / row.cells.size)
                                 val cellW = colPct * tW
-                                val cellRect = RectF(currentX, currentY, currentX + cellW, currentY + rowH)
+                                val availCellW = (cellW - padding * 2).coerceAtLeast(20f).toInt()
 
-                                // Cell Background
+                                if (cell.text.isNotBlank()) {
+                                    val cellTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+                                        color = cell.textColor ?: if (row.isHeader) android.graphics.Color.WHITE else android.graphics.Color.rgb(34, 34, 34)
+                                        textSize = (cell.fontSizePt * ptToPx).coerceIn(10f, 32f)
+                                        typeface = if (cell.isBold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                                    }
+
+                                    val layout = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                        StaticLayout.Builder.obtain(cell.text, 0, cell.text.length, cellTextPaint, availCellW)
+                                            .setAlignment(cell.alignment)
+                                            .setLineSpacing(0f, 1.15f)
+                                            .build()
+                                    } else {
+                                        @Suppress("DEPRECATION")
+                                        StaticLayout(cell.text, cellTextPaint, availCellW, cell.alignment, 1.15f, 0f, true)
+                                    }
+
+                                    cellLayouts.add(layout)
+                                    if (layout.height > maxCellTextH) {
+                                        maxCellTextH = layout.height.toFloat()
+                                    }
+                                } else {
+                                    cellLayouts.add(null)
+                                }
+                            }
+
+                            // Dynamic row height accommodates wrapped text lines + cell padding
+                            val configuredRowH = row.rowHeightRel * tH
+                            val minRowH = (26f * (targetWidth / 1600f)).coerceAtLeast(22f)
+                            val actualRowH = maxOf(configuredRowH, maxCellTextH + padding * 2f, minRowH)
+
+                            // Step B: Draw each cell in this row
+                            var currentX = tX
+                            for ((cIdx, cell) in row.cells.withIndex()) {
+                                val colPct = element.colWidthRels.getOrNull(cIdx) ?: (1f / row.cells.size)
+                                val cellW = colPct * tW
+                                val cellRect = RectF(currentX, currentY, currentX + cellW, currentY + actualRowH)
+
+                                // Cell Background Fill
                                 cellPaint.style = Paint.Style.FILL
                                 cellPaint.color = when {
                                     cell.fillColor != null -> cell.fillColor
                                     row.isHeader -> android.graphics.Color.rgb(85, 169, 175) // Dusky Aqua
-                                    rIdx % 2 == 1 -> android.graphics.Color.rgb(248, 250, 252)
+                                    rIdx % 2 == 1 -> android.graphics.Color.rgb(241, 248, 248) // Subtle aqua zebra tint
                                     else -> android.graphics.Color.WHITE
                                 }
                                 canvas.drawRect(cellRect, cellPaint)
                                 canvas.drawRect(cellRect, borderPaint)
 
-                                // Cell Text
-                                if (cell.text.isNotBlank()) {
-                                    val cellTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-                                        color = cell.textColor ?: if (row.isHeader) android.graphics.Color.WHITE else android.graphics.Color.rgb(30, 41, 59)
-                                        textSize = ((if (row.isHeader) 16f else 14f) * ptToPx).coerceIn(12f, 48f)
-                                        typeface = if (cell.isBold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-                                    }
-
-                                    val padding = (8f * (targetWidth / 1600f)).coerceAtLeast(4f)
-                                    val availCellW = (cellW - padding * 2).coerceAtLeast(20f).toInt()
-                                    val cellLayout = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                                        StaticLayout.Builder.obtain(cell.text, 0, cell.text.length, cellTextPaint, availCellW)
-                                            .setAlignment(if (row.isHeader) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL)
-                                            .setLineSpacing(0f, 1.1f)
-                                            .build()
-                                    } else {
-                                        @Suppress("DEPRECATION")
-                                        StaticLayout(cell.text, cellTextPaint, availCellW, if (row.isHeader) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL, 1.1f, 0f, true)
-                                    }
-
+                                // Cell Text (vertically centered inside actualRowH)
+                                val layout = cellLayouts.getOrNull(cIdx)
+                                if (layout != null) {
                                     canvas.save()
-                                    val textOffsetY = currentY + max(padding, (rowH - cellLayout.height) / 2f)
+                                    val textOffsetY = currentY + (actualRowH - layout.height) / 2f
                                     canvas.translate(currentX + padding, textOffsetY)
-                                    cellLayout.draw(canvas)
+                                    layout.draw(canvas)
                                     canvas.restore()
                                 }
 
                                 currentX += cellW
                             }
 
-                            currentY += rowH
+                            // Step C: Advance currentY by the actual expanded height to prevent any row collision
+                            currentY += actualRowH
                         }
                     }
                 }
@@ -1069,21 +1223,43 @@ object PPTDocumentHandler {
         return result
     }
 
-    private fun parseHexColor(hex: String): Int? {
+    private fun isColorDark(color: Int): Boolean {
+        val r = android.graphics.Color.red(color)
+        val g = android.graphics.Color.green(color)
+        val b = android.graphics.Color.blue(color)
+        val luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+        return luminance < 0.65
+    }
+
+    private fun parseHexColor(hex: String, alphaVal: String? = null): Int? {
         return try {
             val clean = hex.removePrefix("#").trim()
-            if (clean.length == 6) {
-                val r = clean.substring(0, 2).toInt(16)
-                val g = clean.substring(2, 4).toInt(16)
-                val b = clean.substring(4, 6).toInt(16)
-                android.graphics.Color.rgb(r, g, b)
-            } else if (clean.length == 8) {
-                val a = clean.substring(0, 2).toInt(16)
-                val r = clean.substring(2, 4).toInt(16)
-                val g = clean.substring(4, 6).toInt(16)
-                val b = clean.substring(6, 8).toInt(16)
-                android.graphics.Color.argb(a, r, g, b)
-            } else null
+            val baseColor = when (clean.length) {
+                6 -> {
+                    val r = clean.substring(0, 2).toInt(16)
+                    val g = clean.substring(2, 4).toInt(16)
+                    val b = clean.substring(4, 6).toInt(16)
+                    android.graphics.Color.rgb(r, g, b)
+                }
+                8 -> {
+                    val a = clean.substring(0, 2).toInt(16)
+                    val r = clean.substring(2, 4).toInt(16)
+                    val g = clean.substring(4, 6).toInt(16)
+                    val b = clean.substring(6, 8).toInt(16)
+                    android.graphics.Color.argb(a, r, g, b)
+                }
+                else -> return null
+            }
+            if (!alphaVal.isNullOrBlank()) {
+                val alphaPct = (alphaVal.toIntOrNull() ?: 100000) / 100000f
+                val alphaInt = (alphaPct * 255).toInt().coerceIn(0, 255)
+                val r = android.graphics.Color.red(baseColor)
+                val g = android.graphics.Color.green(baseColor)
+                val b = android.graphics.Color.blue(baseColor)
+                android.graphics.Color.argb(alphaInt, r, g, b)
+            } else {
+                baseColor
+            }
         } catch (_: Exception) {
             null
         }
