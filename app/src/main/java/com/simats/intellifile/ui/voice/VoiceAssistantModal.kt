@@ -341,7 +341,7 @@ fun VoiceAssistantModal(
                             }
                         }
 
-                        // 2. Search AI Vault via backend API in parallel
+                        // 2. Search IntelliSpace via backend API in parallel
                         val vaultDeferred = async(Dispatchers.IO) {
                             try {
                                 aiRepository.sendChatMessage(
@@ -386,7 +386,7 @@ fun VoiceAssistantModal(
                                     iconResId = icon,
                                     page = rf.page,
                                     snippet = rf.snippet,
-                                    source = rf.source ?: "AI Vault",
+                                    source = rf.source ?: "IntelliSpace",
                                     uriString = rf.uri_string,
                                     filePath = rf.file_path,
                                     fileUrl = rf.file_url,
@@ -406,11 +406,11 @@ fun VoiceAssistantModal(
 
                         if (totalCount > 0) {
                             val reply = if (fmt != null && term.isNotBlank()) {
-                                "Found $totalCount $fmt file(s) matching '$term' across Device Files and AI Vault."
+                                "Found $totalCount $fmt file(s) matching '$term' across Device Files and IntelliSpace."
                             } else if (fmt != null) {
-                                "Found $totalCount $fmt file(s) across Device Files and AI Vault."
+                                "Found $totalCount $fmt file(s) across Device Files and IntelliSpace."
                             } else {
-                                "I found $totalCount file(s) matching '$term' across Device Files and AI Vault."
+                                "I found $totalCount file(s) matching '$term' across Device Files and IntelliSpace."
                             }
                             assistantReplyText = reply
                             statusMessage = "Search results"
@@ -894,7 +894,7 @@ fun VoiceAssistantModal(
                     if (attachedAiFiles.isNotEmpty()) {
                         item {
                             Text(
-                                text = "AI Vault Files (${attachedAiFiles.size})",
+                                text = "IntelliSpace Files (${attachedAiFiles.size})",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,

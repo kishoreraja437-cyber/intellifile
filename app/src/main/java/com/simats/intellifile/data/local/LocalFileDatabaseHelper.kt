@@ -265,7 +265,7 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
     }
 
     /**
-     * Marks a file as synced to the AI Vault with an optional server document ID.
+     * Marks a file as synced to the IntelliSpace with an optional server document ID.
      */
     fun setVaultStatus(uriOrPath: String, fileName: String, isSynced: Boolean, vaultDocId: Int? = null) {
         val existing = getMetadata(uriOrPath)

@@ -172,7 +172,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                     iconResId = getFormatIcon(rf.format),
                                     page = rf.page,
                                     snippet = rf.snippet,
-                                    source = rf.source ?: "AI Vault",
+                                    source = rf.source ?: "IntelliSpace",
                                     uriString = rf.uri_string,
                                     filePath = rf.file_path,
                                     fileUrl = rf.file_url,
@@ -382,7 +382,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
 
-                    // B. AI Vault Search via Backend
+                    // B. IntelliSpace Search via Backend
                     val vaultDeferred = async(Dispatchers.IO) {
                         aiRepository.sendChatMessage(
                             message = trimmed,
@@ -420,7 +420,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                 iconResId = getFormatIcon(rf.format),
                                 page = rf.page,
                                 snippet = rf.snippet,
-                                source = rf.source ?: "AI Vault",
+                                source = rf.source ?: "IntelliSpace",
                                 uriString = rf.uri_string,
                                 filePath = rf.file_path,
                                 fileUrl = rf.file_url,
@@ -451,13 +451,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             }
                             is AiUserIntent.FileTypeFilter -> {
                                 val fmt = formatFilter ?: "matching"
-                                "Here are your **${allMatches.size} $fmt file${if (allMatches.size > 1) "s" else ""}** found across Device Files and AI Vault:"
+                                "Here are your **${allMatches.size} $fmt file${if (allMatches.size > 1) "s" else ""}** found across Device Files and IntelliSpace:"
                             }
                             else -> {
                                 if (vaultMatches.isNotEmpty() && !backendExplanation.isNullOrBlank() && !backendExplanation!!.contains("could not find information", ignoreCase = true) && !backendExplanation!!.contains("No matching files", ignoreCase = true)) {
                                     "I found **${allMatches.size} matching file${if (allMatches.size > 1) "s" else ""}** for '**$searchKeyword**':\n\n$backendExplanation"
                                 } else {
-                                    "I found **${allMatches.size} matching file${if (allMatches.size > 1) "s" else ""}** for '**$searchKeyword**' across Device Files and AI Vault:"
+                                    "I found **${allMatches.size} matching file${if (allMatches.size > 1) "s" else ""}** for '**$searchKeyword**' across Device Files and IntelliSpace:"
                                 }
                             }
                         }
@@ -539,7 +539,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             iconResId = getFormatIcon(rf.format),
                             page = rf.page,
                             snippet = rf.snippet,
-                            source = rf.source ?: "AI Vault",
+                            source = rf.source ?: "IntelliSpace",
                             uriString = rf.uri_string,
                             filePath = rf.file_path,
                             fileUrl = rf.file_url,

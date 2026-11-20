@@ -136,7 +136,7 @@ interface IntelliFileApiService {
 
 
 
-    // --- Documents & AI Vault ---
+    // --- Documents & IntelliSpace ---
 
 
 

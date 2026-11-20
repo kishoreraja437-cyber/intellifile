@@ -653,7 +653,7 @@ object LocalFileManager {
     }
 
     /**
-     * Resolves local file access (URI string and local file path) for an AI Vault document.
+     * Resolves local file access (URI string and local file path) for an IntelliSpace document.
      * 1. Checks matching local file from device.
      * 2. Checks local file at doc.file_path.
      * 3. Checks app cacheDir for existing downloaded/cached copy.

@@ -19,8 +19,8 @@ class DocumentRepository(private val context: Context) {
         get() = RetrofitClient.getApiService(context)
 
     /**
-     * Uploads a local file to the server's AI Vault.
-     * Upload occurs ONLY after the user explicitly triggers "Add to AI Vault".
+     * Uploads a local file to the server's IntelliSpace.
+     * Upload occurs ONLY after the user explicitly triggers "Add to IntelliSpace".
      */
     suspend fun uploadToVault(
         filePath: String,

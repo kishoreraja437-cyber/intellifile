@@ -281,7 +281,7 @@ class ChatRepository(private val context: Context) {
                         iconResId = iconRes,
                         page = rf.page,
                         snippet = rf.snippet,
-                        source = rf.source ?: "AI Vault",
+                        source = rf.source ?: "IntelliSpace",
                         uriString = rf.uri_string,
                         filePath = rf.file_path,
                         fileUrl = rf.file_url,

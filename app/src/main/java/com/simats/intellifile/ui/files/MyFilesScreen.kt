@@ -93,7 +93,7 @@ import kotlinx.coroutines.launch
 
 enum class StorageSourceTab {
     DEVICE_FILES,
-    AI_VAULT
+    INTELLISPACE
 }
 
 @Composable
@@ -117,7 +117,7 @@ fun MyFilesScreen(
     var realFiles by remember { mutableStateOf<List<LocalFileItem>>(emptyList()) }
     var isLoadingDeviceFiles by remember { mutableStateOf(true) }
 
-    // AI Vault State
+    // IntelliSpace State
     var vaultDocuments by remember { mutableStateOf<List<DocumentDto>>(emptyList()) }
     var isVaultLoading by remember { mutableStateOf(false) }
     var isUploadingToVault by remember { mutableStateOf(false) }
@@ -186,7 +186,7 @@ fun MyFilesScreen(
         isLoadingDeviceFiles = false
     }
 
-    // Function to load AI Vault documents
+    // Function to load IntelliSpace documents
     fun loadVault() {
         coroutineScope.launch {
             isVaultLoading = true
@@ -200,21 +200,21 @@ fun MyFilesScreen(
         }
     }
 
-    // Load vault docs when switching to AI Vault tab
+    // Load vault docs when switching to IntelliSpace tab
     LaunchedEffect(selectedSource) {
-        if (selectedSource == StorageSourceTab.AI_VAULT) {
+        if (selectedSource == StorageSourceTab.INTELLISPACE) {
             loadVault()
         }
     }
 
-    // SAF Document Picker to upload directly to AI Vault (supports multi-selection of 2+ files)
+    // SAF Document Picker to upload directly to IntelliSpace (supports multi-selection of 2+ files)
     var uploadProgressMessage by remember { mutableStateOf("") }
     val uploadDocLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
             isUploadingToVault = true
-            uploadProgressMessage = "Moving ${uris.size} document${if (uris.size > 1) "s" else ""} to AI Vault..."
+            uploadProgressMessage = "Moving ${uris.size} document${if (uris.size > 1) "s" else ""} to IntelliSpace..."
             coroutineScope.launch {
                 var successCount = 0
                 var lastError: String? = null
@@ -247,9 +247,9 @@ fun MyFilesScreen(
                 uploadProgressMessage = ""
                 if (successCount > 0) {
                     val msg = if (successCount == 1) {
-                        "1 document moved to AI Vault successfully!"
+                        "1 document moved to IntelliSpace successfully!"
                     } else {
-                        "$successCount documents moved to AI Vault successfully!"
+                        "$successCount documents moved to IntelliSpace successfully!"
                     }
                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                     loadVault()
@@ -575,7 +575,7 @@ fun MyFilesScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("Vault Status", fontSize = 10.sp, color = Color(0xFF6B7280))
+                                    Text("IntelliSpace Status", fontSize = 10.sp, color = Color(0xFF6B7280))
                                     Text("Indexed", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
                                 }
                             }
@@ -697,11 +697,11 @@ fun MyFilesScreen(
         AlertDialog(
             onDismissRequest = { docToDelete = null },
             title = {
-                Text("Remove from AI Vault?", fontWeight = FontWeight.Bold)
+                Text("Remove from IntelliSpace?", fontWeight = FontWeight.Bold)
             },
             text = {
                 Text(
-                    "Are you sure you want to remove \"${doc.title}\" from the AI Vault? The file on your phone will not be deleted.",
+                    "Are you sure you want to remove \"${doc.title}\" from the IntelliSpace? The file on your phone will not be deleted.",
                     fontSize = 14.sp,
                     color = Color(0xFF4B5563)
                 )
@@ -714,7 +714,7 @@ fun MyFilesScreen(
                         coroutineScope.launch {
                             val res = docRepo.deleteDocument(toDelete.id)
                             res.onSuccess {
-                                Toast.makeText(context, "\"${toDelete.title}\" removed from vault", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "\"${toDelete.title}\" removed from IntelliSpace", Toast.LENGTH_SHORT).show()
                                 loadVault()
                             }.onFailure { err ->
                                 Toast.makeText(context, "Failed: ${err.message}", Toast.LENGTH_SHORT).show()
@@ -760,7 +760,7 @@ fun MyFilesScreen(
 
                 IconButton(onClick = {
                     refreshTrigger++
-                    if (selectedSource == StorageSourceTab.AI_VAULT) loadVault()
+                    if (selectedSource == StorageSourceTab.INTELLISPACE) loadVault()
                 }) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
@@ -805,7 +805,7 @@ fun MyFilesScreen(
                     }
                 }
 
-                // Storage Source Selector: Device Files vs AI Vault
+                // Storage Source Selector: Device Files vs IntelliSpace
                 item {
                     Row(
                         modifier = Modifier
@@ -852,8 +852,8 @@ fun MyFilesScreen(
                             }
                         }
 
-                        // AI Vault Tab
-                        val isVaultSelected = selectedSource == StorageSourceTab.AI_VAULT
+                        // IntelliSpace Tab
+                        val isVaultSelected = selectedSource == StorageSourceTab.INTELLISPACE
                         val vaultTabBg by animateColorAsState(
                             targetValue = if (isVaultSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
                             animationSpec = tween(260),
@@ -869,7 +869,7 @@ fun MyFilesScreen(
                                 .weight(1f)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(vaultTabBg)
-                                .clickable { selectedSource = StorageSourceTab.AI_VAULT }
+                                .clickable { selectedSource = StorageSourceTab.INTELLISPACE }
                                 .padding(vertical = 10.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -882,7 +882,7 @@ fun MyFilesScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "AI Vault ($vaultFilesCount)",
+                                    text = "IntelliSpace ($vaultFilesCount)",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = vaultTextColor
@@ -999,10 +999,10 @@ fun MyFilesScreen(
                     }
                 } else {
                     // ==========================================
-                    // FULL AI VAULT TAB INTEGRATION
+                    // FULL INTELLISPACE TAB INTEGRATION
                     // ==========================================
 
-                    // Header & Upload to AI Vault Card
+                    // Header & Upload to IntelliSpace Card
                     item {
                         Column(
                             modifier = Modifier
@@ -1036,7 +1036,7 @@ fun MyFilesScreen(
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column {
                                         Text(
-                                            text = "AI Document Vault",
+                                            text = "IntelliSpace Documents",
                                             fontSize = 17.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = Color(0xFF111827)
@@ -1050,7 +1050,7 @@ fun MyFilesScreen(
                                 }
                             }
 
-                            // Upload to Vault Button
+                            // Upload to IntelliSpace Button
                             Button(
                                 onClick = {
                                     uploadDocLauncher.launch(
@@ -1083,7 +1083,7 @@ fun MyFilesScreen(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = if (isUploadingToVault) "Uploading & Extracting..." else if (isUploadingToVault) uploadProgressMessage.ifBlank { "Moving to AI Vault..." } else "Select & Move Documents to AI Vault",
+                                        text = if (isUploadingToVault) "Uploading & Extracting..." else if (isUploadingToVault) uploadProgressMessage.ifBlank { "Moving to IntelliSpace..." } else "Select & Move Documents to IntelliSpace",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.sp
                                     )
@@ -1099,7 +1099,7 @@ fun MyFilesScreen(
                         }
                     }
 
-                    // Vault Documents List Header
+                    // IntelliSpace Documents List Header
                     item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1107,7 +1107,7 @@ fun MyFilesScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "Vault Documents (${vaultDocuments.size})",
+                                text = "IntelliSpace Documents (${vaultDocuments.size})",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF111827)
@@ -1122,7 +1122,7 @@ fun MyFilesScreen(
                         }
                     }
 
-                    // Empty State or List of Vault Documents
+                    // Empty State or List of IntelliSpace Documents
                     if (vaultDocuments.isEmpty() && !isVaultLoading) {
                         item {
                             Column(
@@ -1143,7 +1143,7 @@ fun MyFilesScreen(
                                 )
                                 Spacer(modifier = Modifier.height(10.dp))
                                 Text(
-                                    text = "Your AI Vault is Empty",
+                                    text = "Your IntelliSpace is Empty",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp,
                                     color = Color(0xFF1F2937)
@@ -1179,8 +1179,8 @@ fun MyFilesScreen(
                                             fileType = "${doc.format} Document",
                                             createdDate = doc.created_at ?: "Recent",
                                             modifiedDate = doc.created_at ?: "Recent",
-                                            category = "AI Vault",
-                                            location = doc.location.ifBlank { "AI Vault Storage" },
+                                            category = "IntelliSpace",
+                                            location = doc.location.ifBlank { "IntelliSpace Storage" },
                                             priority = when (doc.priority?.uppercase()) {
                                                 "IMPORTANT" -> PriorityLevel.IMPORTANT
                                                 "NORMAL" -> PriorityLevel.NORMAL
@@ -1232,7 +1232,7 @@ fun MyFilesScreen(
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "Your device documents are kept strictly local by default. Documents only enter the AI Vault when you explicitly tap 'Add to AI Vault'.",
+                                        text = "Your device documents are kept strictly local by default. Documents only enter the IntelliSpace when you explicitly tap 'Add to IntelliSpace'.",
                                         fontSize = 12.sp,
                                         color = Color(0xFF166534),
                                         lineHeight = 17.sp
@@ -1242,7 +1242,7 @@ fun MyFilesScreen(
                         }
                     }
 
-                    // AI Vault Capabilities Card
+                    // IntelliSpace Capabilities Card
                     item {
                         Column(
                             modifier = Modifier
@@ -1254,7 +1254,7 @@ fun MyFilesScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Text(
-                                text = "AI Vault Capabilities",
+                                text = "IntelliSpace Capabilities",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF111827)
@@ -1359,7 +1359,7 @@ fun VaultDocumentCard(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete from Vault",
+                        contentDescription = "Delete from IntelliSpace",
                         tint = Color(0xFFEF4444),
                         modifier = Modifier.size(18.dp)
                     )

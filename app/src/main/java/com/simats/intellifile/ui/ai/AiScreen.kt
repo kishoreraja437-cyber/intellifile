@@ -107,7 +107,7 @@ data class AiFileResult(
     val id: Int? = null,
     val page: Int? = null,
     val snippet: String? = null,
-    val source: String = "AI Vault", // "Device Files" or "AI Vault"
+    val source: String = "IntelliSpace", // "Device Files" or "IntelliSpace"
     val uriString: String? = null,
     val filePath: String? = null,
     val fileUrl: String? = null,
@@ -909,7 +909,7 @@ fun AiFileCard(
                 !file.filePath.isNullOrBlank() -> file.filePath
                 !file.uriString.isNullOrBlank() -> file.uriString
                 file.source == "Device Files" -> "Internal Storage / Documents"
-                else -> "AI Vault / Cloud Storage"
+                else -> "IntelliSpace / Cloud Storage"
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,

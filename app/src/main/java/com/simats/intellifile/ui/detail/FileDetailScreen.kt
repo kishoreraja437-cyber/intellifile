@@ -247,13 +247,13 @@ fun FileDetailScreen(
                         tint = Color(0xFF10B981)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Add to AI Vault?", fontWeight = FontWeight.Bold)
+                    Text("Add to IntelliSpace?", fontWeight = FontWeight.Bold)
                 }
             },
             text = {
                 Text(
                     "IntelliFile keeps your files strictly local on your phone by default.\n\n" +
-                            "Uploading \"${fileData.fileName}\" to the AI Vault enables deep text extraction, " +
+                            "Uploading \"${fileData.fileName}\" to the IntelliSpace enables deep text extraction, " +
                             "semantic question answering, and AI summarization. Do you want to proceed with uploading this specific file?",
                     fontSize = 14.sp,
                     lineHeight = 20.sp,
@@ -282,15 +282,15 @@ fun FileDetailScreen(
                                     fileName = fileData.fileName,
                                     isSynced = true
                                 )
-                                Toast.makeText(context, "${fileData.fileName} uploaded to AI Vault successfully!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "${fileData.fileName} uploaded to IntelliSpace successfully!", Toast.LENGTH_SHORT).show()
                             }.onFailure { err ->
-                                Toast.makeText(context, "AI Vault upload failed: ${err.message}", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "IntelliSpace upload failed: ${err.message}", Toast.LENGTH_LONG).show()
                             }
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("Upload to Vault")
+                    Text("Upload to IntelliSpace")
                 }
             },
             dismissButton = {
@@ -391,7 +391,7 @@ fun FileDetailScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // AI Vault Status Card
+            // IntelliSpace Status Card
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -418,7 +418,7 @@ fun FileDetailScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = if (isVaultSynced) "In AI Vault (Server Synced)" else "Device File (Local Only)",
+                                text = if (isVaultSynced) "In IntelliSpace (Server Synced)" else "Device File (Local Only)",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (isVaultSynced) Color(0xFF1E40AF) else Color(0xFF374151)
@@ -448,7 +448,7 @@ fun FileDetailScreen(
                                     strokeWidth = 2.dp
                                 )
                             } else {
-                                Text("Add to Vault", fontSize = 12.sp)
+                                Text("Add to IntelliSpace", fontSize = 12.sp)
                             }
                         }
                     }

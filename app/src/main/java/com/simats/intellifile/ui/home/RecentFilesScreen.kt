@@ -172,9 +172,9 @@ fun RecentFilesScreen(
 
             if (successCount > 0) {
                 val msg = if (successCount == 1) {
-                    "1 file moved to AI Vault successfully!"
+                    "1 file moved to IntelliSpace successfully!"
                 } else {
-                    "$successCount files moved to AI Vault successfully!"
+                    "$successCount files moved to IntelliSpace successfully!"
                 }
                 Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                 selectedFiles.clear()
@@ -186,7 +186,7 @@ fun RecentFilesScreen(
         }
     }
 
-    // Confirmation Dialog for moving files to AI Vault
+    // Confirmation Dialog for moving files to IntelliSpace
     if (showVaultConfirmDialog) {
         AlertDialog(
             onDismissRequest = { if (!isMovingToVault) showVaultConfirmDialog = false },
@@ -199,7 +199,7 @@ fun RecentFilesScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Move ${selectedFiles.size} File${if (selectedFiles.size > 1) "s" else ""} to AI Vault?",
+                        text = "Move ${selectedFiles.size} File${if (selectedFiles.size > 1) "s" else ""} to IntelliSpace?",
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -207,14 +207,14 @@ fun RecentFilesScreen(
             text = {
                 Column {
                     Text(
-                        text = "Moving ${selectedFiles.size} document${if (selectedFiles.size > 1) "s" else ""} into the AI Vault enables complete text extraction, semantic RAG search, AI summarization, and interactive Q&A.",
+                        text = "Moving ${selectedFiles.size} document${if (selectedFiles.size > 1) "s" else ""} into the IntelliSpace enables complete text extraction, semantic RAG search, AI summarization, and interactive Q&A.",
                         fontSize = 14.sp,
                         lineHeight = 20.sp,
                         color = Color(0xFF374151)
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "Selected for AI Vault:",
+                        text = "Selected for IntelliSpace:",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF111827)
@@ -248,7 +248,7 @@ fun RecentFilesScreen(
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(
-                        text = if (selectedFiles.size > 2) "Move ${selectedFiles.size} Files" else "Move to Vault",
+                        text = if (selectedFiles.size > 2) "Move ${selectedFiles.size} Files" else "Move to IntelliSpace",
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -261,13 +261,13 @@ fun RecentFilesScreen(
         )
     }
 
-    // Modal Progress Dialog while moving batch files to AI Vault
+    // Modal Progress Dialog while moving batch files to IntelliSpace
     if (isMovingToVault) {
         AlertDialog(
             onDismissRequest = { /* Non-dismissible while processing */ },
             title = {
                 Text(
-                    text = "Moving to AI Vault...",
+                    text = "Moving to IntelliSpace...",
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 )
@@ -549,7 +549,7 @@ fun RecentFilesScreen(
         }
         }
 
-        // Floating Bottom Action Bar for Multi-selection & Move to AI Vault
+        // Floating Bottom Action Bar for Multi-selection & Move to IntelliSpace
         AnimatedVisibility(
             visible = isMultiSelectMode && selectedFiles.isNotEmpty(),
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
@@ -578,7 +578,7 @@ fun RecentFilesScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = if (selectedFiles.size > 2) "Ready for batch AI Vault move" else "Ready to move into AI Vault",
+                            text = if (selectedFiles.size > 2) "Ready for batch IntelliSpace move" else "Ready to move into IntelliSpace",
                             fontSize = 12.sp,
                             color = Color(0xFF6B7280)
                         )
@@ -599,9 +599,9 @@ fun RecentFilesScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (selectedFiles.size > 2) "Move ${selectedFiles.size} to Vault"
-                            else if (selectedFiles.size == 2) "Move 2 to Vault"
-                            else "Move to Vault",
+                            text = if (selectedFiles.size > 2) "Move ${selectedFiles.size} to IntelliSpace"
+                            else if (selectedFiles.size == 2) "Move 2 to IntelliSpace"
+                            else "Move to IntelliSpace",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
                             color = Color.White

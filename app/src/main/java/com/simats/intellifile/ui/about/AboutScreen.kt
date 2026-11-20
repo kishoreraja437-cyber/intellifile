@@ -72,7 +72,7 @@ fun AboutScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "IntelliFile prioritizes your privacy by keeping your files stored locally on your device by default. Documents are only transmitted to our servers when you explicitly choose 'Add to AI Vault'.",
+                        text = "IntelliFile prioritizes your privacy by keeping your files stored locally on your device by default. Documents are only transmitted to our servers when you explicitly choose 'Add to IntelliSpace'.",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 18.sp

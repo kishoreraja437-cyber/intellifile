@@ -34,7 +34,7 @@ class MyFilesViewModel(application: Application) : AndroidViewModel(application)
 
     fun setTab(tab: StorageSourceTab) {
         _uiState.value = _uiState.value.copy(selectedTab = tab)
-        if (tab == StorageSourceTab.AI_VAULT && _uiState.value.vaultDocuments.isEmpty()) {
+        if (tab == StorageSourceTab.INTELLISPACE && _uiState.value.vaultDocuments.isEmpty()) {
             loadVaultDocuments()
         }
     }

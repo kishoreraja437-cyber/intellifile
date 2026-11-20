@@ -80,7 +80,7 @@ object AiChatIntentDetector {
 
     /**
      * Classifies the user's prompt into one of the core AI Chat intents:
-     * - FILE_SEARCH: Search actual files across mobile & AI vault and display file cards.
+     * - FILE_SEARCH: Search actual files across mobile & IntelliSpace and display file cards.
      * - FILE_OPEN: Open the requested file directly.
      * - FILE_TYPE_FILTER: Search files by specific format/type.
      * - APP_DATA_QUERY: Live queries about user's IntelliFile data, counts, priorities.
@@ -175,7 +175,7 @@ object AiChatIntentDetector {
             return AiUserIntent.FileTypeFilter(normalizedFmt)
         }
 
-        // 6. FILE_SEARCH: Natural Language & Content File Search (Mobile & AI Vault)
+        // 6. FILE_SEARCH: Natural Language & Content File Search (Mobile & IntelliSpace)
         // e.g. "Find assignment.pdf", "Find my college assignment", "Show the PDF containing machine learning notes",
         // "Find the document where I wrote about Python", "I forgot the filename, but it contains information about cloud computing"
         val isSearchIntent = lower.startsWith("find") ||

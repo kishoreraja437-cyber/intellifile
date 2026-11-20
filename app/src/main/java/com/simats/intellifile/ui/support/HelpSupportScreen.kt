@@ -42,7 +42,7 @@ data class FaqItem(
 val faqList = listOf(
     FaqItem(
         question = "How do I select files or folders?",
-        answer = "You can browse and select files directly from the My Files screen under the Device Files tab or AI Vault tab. You can also grant storage access to choose specific folders, or use the in-app document picker to view, filter, and organize your files."
+        answer = "You can browse and select files directly from the My Files screen under the Device Files tab or IntelliSpace tab. You can also grant storage access to choose specific folders, or use the in-app document picker to view, filter, and organize your files."
     ),
     FaqItem(
         question = "How are AI priorities determined?",
@@ -54,7 +54,7 @@ val faqList = listOf(
     ),
     FaqItem(
         question = "How does IntelliFile protect my privacy?",
-        answer = "IntelliFile processes your local files securely on-device and uses end-to-end encrypted connections when syncing with the cloud AI Vault. Your personal documents are never shared with third parties or used to train public AI models."
+        answer = "IntelliFile processes your local files securely on-device and uses end-to-end encrypted connections when syncing with the cloud IntelliSpace. Your personal documents are never shared with third parties or used to train public AI models."
     )
 )
 
