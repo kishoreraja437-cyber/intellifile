@@ -213,6 +213,7 @@ fun MainScreen(
 
     val sessionManager = remember { com.simats.intellifile.data.session.SessionManager(context) }
     val chatViewModel: com.simats.intellifile.ui.ai.ChatViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val priorityUpdateVersion by chatViewModel.priorityUpdateVersion.collectAsState()
 
     var selectedTab by remember { mutableStateOf(BottomNavItem.HOME) }
 
@@ -931,6 +932,7 @@ fun MainScreen(
                         else -> when (selectedTab) {
 
                             BottomNavItem.HOME -> HomeScreen(
+                                priorityUpdateVersion = priorityUpdateVersion,
                                 externalSearchQuery = homeVoiceSearchQuery,
 
                                 onSeeAllClick = { isRecentFilesOpen = true },
@@ -1059,45 +1061,28 @@ fun MainScreen(
                             )
 
                             BottomNavItem.FILES -> MyFilesScreen(
-
+                                priorityUpdateVersion = priorityUpdateVersion,
                                 onBackClick = { handleGoBack() },
-
                                 onMicClick = { isVoiceAssistantOpen = true },
-
                                 onQuickAccessClick = { priorityLevel ->
-
                                     savedPriorityFilter = when (priorityLevel) {
-
                                         PriorityLevel.IMPORTANT -> PriorityFilter.IMPORTANT
-
                                         PriorityLevel.NORMAL -> PriorityFilter.NORMAL
-
                                         PriorityLevel.LOW -> PriorityFilter.LOW
-
                                     }
-
                                     selectedTab = BottomNavItem.SAVED
-
                                 },
-
                                 onNavigateToAiChat = { _ ->
-
                                     selectedTab = BottomNavItem.AI
-
                                 },
-
                                 onOpenFile = { fileDetail ->
-
                                     selectedDetailFile = fileDetail
-
                                     isDocumentViewerOpen = true
-
                                 }
-
                             )
 
                             BottomNavItem.SAVED -> SavedScreen(
-
+                                priorityUpdateVersion = priorityUpdateVersion,
                                 initialFilter = savedPriorityFilter,
 
                                 onBackClick = { handleGoBack() },

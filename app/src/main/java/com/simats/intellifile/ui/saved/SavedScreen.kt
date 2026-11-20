@@ -81,6 +81,7 @@ enum class PriorityFilter(val label: String, val level: PriorityLevel?) {
 @Composable
 fun SavedScreen(
     modifier: Modifier = Modifier,
+    priorityUpdateVersion: Int = 0,
     initialFilter: PriorityFilter = PriorityFilter.ALL,
     onBackClick: () -> Unit = {},
     onOpenFile: (SavedFileItem) -> Unit = {},
@@ -110,7 +111,7 @@ fun SavedScreen(
     var moveProgressMessage by remember { mutableStateOf("") }
     var showVaultConfirmDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(refreshTrigger) {
+    LaunchedEffect(refreshTrigger, priorityUpdateVersion) {
         isLoading = true
         realFiles = LocalFileManager.getDeviceFiles(context)
         isLoading = false

@@ -99,6 +99,7 @@ enum class StorageSourceTab {
 @Composable
 fun MyFilesScreen(
     modifier: Modifier = Modifier,
+    priorityUpdateVersion: Int = 0,
     onBackClick: () -> Unit = {},
     onQuickAccessClick: (PriorityLevel) -> Unit = {},
     onNavigateToAiChat: (String) -> Unit = {},
@@ -180,7 +181,7 @@ fun MyFilesScreen(
     }
 
     // Query real local document files
-    LaunchedEffect(refreshTrigger) {
+    LaunchedEffect(refreshTrigger, priorityUpdateVersion) {
         isLoadingDeviceFiles = true
         realFiles = LocalFileManager.getDeviceFiles(context)
         isLoadingDeviceFiles = false

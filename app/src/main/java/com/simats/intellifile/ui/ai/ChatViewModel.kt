@@ -12,7 +12,10 @@ import com.simats.intellifile.R
 import com.simats.intellifile.data.chat.ChatEntity
 import com.simats.intellifile.data.chat.ChatRepository
 import com.simats.intellifile.data.manager.LocalFileManager
+import com.simats.intellifile.data.local.LocalFileDatabaseHelper
+import com.simats.intellifile.data.model.LocalFileItem
 import com.simats.intellifile.data.repository.AiRepository
+import com.simats.intellifile.data.repository.DocumentRepository
 import com.simats.intellifile.ui.home.PriorityLevel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -21,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -57,6 +61,84 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         )
     )
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
+
+    private val _priorityUpdateVersion = MutableStateFlow(0)
+    val priorityUpdateVersion: StateFlow<Int> = _priorityUpdateVersion.asStateFlow()
+
+    fun notifyPriorityUpdated() {
+        _priorityUpdateVersion.update { it + 1 }
+    }
+
+    private var pendingDisambiguation: Pair<List<LocalFileItem>, PriorityLevel>? = null
+
+    fun assignPriorityToFile(file: AiFileResult, targetPriority: PriorityLevel) {
+        viewModelScope.launch {
+            val context = getApplication<Application>().applicationContext
+            val dbHelper = LocalFileDatabaseHelper.getInstance(context)
+
+            withContext(Dispatchers.IO) {
+                if (!file.filePath.isNullOrBlank() && file.filePath != "Internal Storage") {
+                    dbHelper.setPriority(file.filePath, file.title, targetPriority)
+                }
+                if (!file.uriString.isNullOrBlank()) {
+                    dbHelper.setPriority(file.uriString, file.title, targetPriority)
+                }
+                dbHelper.setPriority(file.title, file.title, targetPriority)
+
+                val docId = file.id
+                if (docId != null && docId > 0) {
+                    try {
+                        DocumentRepository(context).setPriority(docId, targetPriority.name)
+                    } catch (_: Exception) {}
+                }
+            }
+
+            notifyPriorityUpdated()
+            pendingDisambiguation = null
+
+            val updatedCard = file.copy(
+                priority = targetPriority,
+                pendingPriorityAction = null
+            )
+
+            val confirmationMsg = "I have updated the priority of '**${file.title}**' to **${targetPriority.title}** as requested.\n\nYou can view and filter this file under the ${targetPriority.title} priority section on your Home Screen, My Files, and Saved screen."
+
+            val convId = _uiState.value.currentConversationId ?: "conv_${System.currentTimeMillis()}"
+            val title = _uiState.value.conversationTitle
+
+            chatRepository.ensureChatExists(convId, title)
+            chatRepository.saveAiMessage(convId, confirmationMsg, listOf(updatedCard))
+
+            _uiState.update { state ->
+                state.copy(
+                    currentConversationId = convId,
+                    messages = state.messages + ChatMessage.Ai(
+                        text = confirmationMsg,
+                        files = listOf(updatedCard)
+                    ),
+                    isThinking = false
+                )
+            }
+        }
+    }
+
+    fun assignPriorityToLocalFile(item: LocalFileItem, targetPriority: PriorityLevel) {
+        val card = AiFileResult(
+            id = if (item.id > 0) item.id.toInt() else null,
+            title = item.title,
+            format = item.format,
+            size = item.sizeFormatted,
+            dateText = item.dateText,
+            priority = targetPriority,
+            iconResId = getFormatIcon(item.format),
+            source = "Device Files",
+            uriString = item.uri.toString(),
+            filePath = item.path,
+            snippet = if (item.path.isNotBlank() && item.path != "Internal Storage") item.path else "Device Files",
+            pendingPriorityAction = null
+        )
+        assignPriorityToFile(card, targetPriority)
+    }
 
     init {
         startFreshChatOnLaunch()
@@ -270,6 +352,50 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun sendMessage(userPrompt: String) {
         val trimmed = userPrompt.trim()
         if (trimmed.isBlank() || _uiState.value.isThinking) return
+
+        val activeDisambiguation = pendingDisambiguation
+        if (activeDisambiguation != null && !trimmed.startsWith("mark", ignoreCase = true) && !trimmed.startsWith("set", ignoreCase = true) && !trimmed.startsWith("change", ignoreCase = true)) {
+            val (candidates, targetPriority) = activeDisambiguation
+            val lower = trimmed.lowercase().trim()
+            val matchedIndex = when {
+                lower in listOf("1", "first", "1st", "the first one", "the first", "option 1", "#1") -> 0
+                lower in listOf("2", "second", "2nd", "the second one", "the second", "option 2", "#2") -> 1
+                lower in listOf("3", "third", "3rd", "the third one", "the third", "option 3", "#3") -> 2
+                lower in listOf("4", "fourth", "4th", "the fourth one", "the fourth", "option 4", "#4") -> 3
+                lower in listOf("5", "fifth", "5th", "the fifth one", "the fifth", "option 5", "#5") -> 4
+                else -> {
+                    val num = lower.toIntOrNull()
+                    if (num != null && num in 1..candidates.size) {
+                        num - 1
+                    } else {
+                        candidates.indexOfFirst { candidate ->
+                            val pathLower = candidate.path.lowercase()
+                            pathLower.contains(lower) || lower.split(Regex("\\s+")).any { it.length >= 3 && pathLower.contains(it) }
+                        }
+                    }
+                }
+            }
+
+            if (matchedIndex in candidates.indices) {
+                pendingDisambiguation = null
+                val chosenItem = candidates[matchedIndex]
+                val userMsg = ChatMessage.User(trimmed)
+                _uiState.update { state ->
+                    state.copy(
+                        promptInput = "",
+                        messages = state.messages.filterNot { it == defaultGreeting } + userMsg,
+                        isThinking = false
+                    )
+                }
+                val existingConvId = _uiState.value.currentConversationId ?: "conv_${System.currentTimeMillis()}"
+                viewModelScope.launch {
+                    chatRepository.ensureChatExists(existingConvId, _uiState.value.conversationTitle)
+                    chatRepository.saveUserMessage(existingConvId, trimmed)
+                    assignPriorityToLocalFile(chosenItem, targetPriority)
+                }
+                return
+            }
+        }
 
         val existingConvId = _uiState.value.currentConversationId
         val isNewConversation = existingConvId == null
@@ -491,6 +617,143 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             messages = state.messages.filterNot { it == loadingMsg } + ChatMessage.Ai(replyText, allMatches),
                             isThinking = false
                         )
+                    }
+                }
+                is AiUserIntent.SetFilePriority -> {
+                    val requestedFileName = intent.fileName.trim()
+                    val targetPriority = intent.priority
+
+                    val allDeviceFiles = withContext(Dispatchers.IO) {
+                        try {
+                            LocalFileManager.getDeviceFiles(context)
+                        } catch (_: Exception) {
+                            emptyList<LocalFileItem>()
+                        }
+                    }
+
+                    // 1. Search for matching file in device storage (exact title match first)
+                    val exactMatches = allDeviceFiles.filter { f ->
+                        f.title.equals(requestedFileName, ignoreCase = true) ||
+                        f.title.substringBeforeLast('.').equals(requestedFileName, ignoreCase = true) ||
+                        f.title.substringBeforeLast('.').equals(requestedFileName.substringBeforeLast('.'), ignoreCase = true)
+                    }
+
+                    val matchingFiles = if (exactMatches.isNotEmpty()) {
+                        exactMatches
+                    } else {
+                        allDeviceFiles.filter { f ->
+                            f.title.contains(requestedFileName, ignoreCase = true) ||
+                            f.title.substringBeforeLast('.').contains(requestedFileName, ignoreCase = true)
+                        }
+                    }
+
+                    if (matchingFiles.isEmpty()) {
+                        pendingDisambiguation = null
+                        val errorText = "I couldn't find any file named '**$requestedFileName**' in your device storage.\n\nPlease check the file name and verify that storage access is granted, or make sure the file is saved in your device storage."
+
+                        val finalConvId = existingConvId ?: "conv_${System.currentTimeMillis()}"
+                        val finalTitle = generatedTitle
+                        chatRepository.ensureChatExists(finalConvId, finalTitle)
+                        chatRepository.saveUserMessage(finalConvId, trimmed)
+                        chatRepository.saveAiMessage(finalConvId, errorText, emptyList())
+
+                        _uiState.update { state ->
+                            state.copy(
+                                currentConversationId = finalConvId,
+                                conversationTitle = finalTitle,
+                                messages = state.messages.filterNot { it == loadingMsg } + ChatMessage.Ai(errorText, emptyList()),
+                                isThinking = false
+                            )
+                        }
+                    } else if (matchingFiles.size == 1) {
+                        pendingDisambiguation = null
+                        val targetFile = matchingFiles.first()
+
+                        withContext(Dispatchers.IO) {
+                            val dbHelper = LocalFileDatabaseHelper.getInstance(context)
+                            if (targetFile.path.isNotBlank() && targetFile.path != "Internal Storage") {
+                                dbHelper.setPriority(targetFile.path, targetFile.title, targetPriority)
+                            }
+                            dbHelper.setPriority(targetFile.uri.toString(), targetFile.title, targetPriority)
+                            dbHelper.setPriority(targetFile.title, targetFile.title, targetPriority)
+
+                            if (targetFile.vaultDocId != null && targetFile.vaultDocId > 0) {
+                                try {
+                                    DocumentRepository(context).setPriority(targetFile.vaultDocId, targetPriority.name)
+                                } catch (_: Exception) {}
+                            }
+                        }
+
+                        notifyPriorityUpdated()
+
+                        val updatedCard = AiFileResult(
+                            id = if (targetFile.id > 0) targetFile.id.toInt() else null,
+                            title = targetFile.title,
+                            format = targetFile.format,
+                            size = targetFile.sizeFormatted,
+                            dateText = targetFile.dateText,
+                            priority = targetPriority,
+                            iconResId = getFormatIcon(targetFile.format),
+                            source = "Device Files",
+                            uriString = targetFile.uri.toString(),
+                            filePath = targetFile.path,
+                            snippet = if (targetFile.path.isNotBlank() && targetFile.path != "Internal Storage") targetFile.path else "Device Files",
+                            pendingPriorityAction = null
+                        )
+
+                        val confirmationText = "I have marked '**${targetFile.title}**' as **${targetPriority.title}** priority.\n\nThe priority has been updated in your database and is immediately reflected on your Home Screen, My Files, and Saved screen."
+
+                        val finalConvId = existingConvId ?: "conv_${System.currentTimeMillis()}"
+                        val finalTitle = generatedTitle
+                        chatRepository.ensureChatExists(finalConvId, finalTitle)
+                        chatRepository.saveUserMessage(finalConvId, trimmed)
+                        chatRepository.saveAiMessage(finalConvId, confirmationText, listOf(updatedCard))
+
+                        _uiState.update { state ->
+                            state.copy(
+                                currentConversationId = finalConvId,
+                                conversationTitle = finalTitle,
+                                messages = state.messages.filterNot { it == loadingMsg } + ChatMessage.Ai(confirmationText, listOf(updatedCard)),
+                                isThinking = false
+                            )
+                        }
+                    } else {
+                        pendingDisambiguation = Pair(matchingFiles, targetPriority)
+
+                        val candidateCards = matchingFiles.mapIndexed { idx, item ->
+                            val locationText = if (item.path.isNotBlank() && item.path != "Internal Storage") item.path else item.uri.toString()
+                            AiFileResult(
+                                id = if (item.id > 0) item.id.toInt() else null,
+                                title = item.title,
+                                format = item.format,
+                                size = item.sizeFormatted,
+                                dateText = item.dateText,
+                                priority = item.priority,
+                                iconResId = getFormatIcon(item.format),
+                                source = "Device Files",
+                                uriString = item.uri.toString(),
+                                filePath = item.path,
+                                snippet = "Option ${idx + 1}: $locationText",
+                                pendingPriorityAction = targetPriority
+                            )
+                        }
+
+                        val disambiguationPrompt = "I found **${matchingFiles.size} files** named '**$requestedFileName**'. Please select which file you want to mark as **${targetPriority.title}** by tapping **Select** below, or reply with the option number:"
+
+                        val finalConvId = existingConvId ?: "conv_${System.currentTimeMillis()}"
+                        val finalTitle = generatedTitle
+                        chatRepository.ensureChatExists(finalConvId, finalTitle)
+                        chatRepository.saveUserMessage(finalConvId, trimmed)
+                        chatRepository.saveAiMessage(finalConvId, disambiguationPrompt, candidateCards)
+
+                        _uiState.update { state ->
+                            state.copy(
+                                currentConversationId = finalConvId,
+                                conversationTitle = finalTitle,
+                                messages = state.messages.filterNot { it == loadingMsg } + ChatMessage.Ai(disambiguationPrompt, candidateCards),
+                                isThinking = false
+                            )
+                        }
                     }
                 }
                 else -> {

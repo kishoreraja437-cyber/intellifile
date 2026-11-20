@@ -111,7 +111,8 @@ data class AiFileResult(
     val uriString: String? = null,
     val filePath: String? = null,
     val fileUrl: String? = null,
-    val category: String? = null
+    val category: String? = null,
+    val pendingPriorityAction: PriorityLevel? = null
 )
 
 private fun getFormatIcon(format: String?): Int {
@@ -261,6 +262,9 @@ fun AiScreen(
                                         files = message.files,
                                         isLoading = message.isLoading,
                                         onOpenFile = onOpenFile,
+                                        onSelectPriorityClick = { file, prio ->
+                                            chatViewModel.assignPriorityToFile(file, prio)
+                                        },
                                         onCopy = {
                                             clipboardManager.setText(AnnotatedString(message.text))
                                             Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
@@ -662,6 +666,7 @@ fun AiMessageBubble(
     files: List<AiFileResult>,
     isLoading: Boolean = false,
     onOpenFile: (AiFileResult) -> Unit,
+    onSelectPriorityClick: ((AiFileResult, PriorityLevel) -> Unit)? = null,
     onCopy: () -> Unit = {},
     onEdit: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -766,7 +771,14 @@ fun AiMessageBubble(
 
         if (files.isNotEmpty()) {
             files.forEach { file ->
-                AiFileCard(file = file, onOpenClick = { onOpenFile(file) })
+                val priorityAction = file.pendingPriorityAction
+                AiFileCard(
+                    file = file,
+                    onOpenClick = { onOpenFile(file) },
+                    onSelectPriorityClick = if (priorityAction != null && onSelectPriorityClick != null) {
+                        { onSelectPriorityClick(file, priorityAction) }
+                    } else null
+                )
             }
         }
 
@@ -831,6 +843,7 @@ fun MessageActionButton(
 fun AiFileCard(
     file: AiFileResult,
     onOpenClick: () -> Unit,
+    onSelectPriorityClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val iconRes = when (file.format.trim().removePrefix(".").uppercase()) {
@@ -957,6 +970,36 @@ fun AiFileCard(
         }
 
         Spacer(modifier = Modifier.width(8.dp))
+
+        if (file.pendingPriorityAction != null && onSelectPriorityClick != null) {
+            val prioColor = when (file.pendingPriorityAction) {
+                PriorityLevel.IMPORTANT -> Color(0xFFEF4444)
+                PriorityLevel.NORMAL -> Color(0xFFF59E0B)
+                PriorityLevel.LOW -> Color(0xFF10B981)
+            }
+            Button(
+                onClick = onSelectPriorityClick,
+                colors = ButtonDefaults.buttonColors(containerColor = prioColor),
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.height(34.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "Select",
+                    tint = Color.White,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Select",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+            Spacer(modifier = Modifier.width(6.dp))
+        }
 
         Button(
             onClick = onOpenClick,

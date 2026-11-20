@@ -1,6 +1,9 @@
 package com.simats.intellifile.ui.ai
 
+import com.simats.intellifile.ui.home.PriorityLevel
+
 sealed class AiUserIntent {
+    data class SetFilePriority(val fileName: String, val priority: PriorityLevel) : AiUserIntent()
     data class FileSearch(val query: String, val format: String? = null) : AiUserIntent()
     data class FileOpen(val targetName: String) : AiUserIntent()
     data class FileTypeFilter(val format: String) : AiUserIntent()
@@ -79,7 +82,105 @@ object AiChatIntentDetector {
     }
 
     /**
+     * Detects AI File Priority commands such as:
+     * - "Mark Resume.pdf as Important"
+     * - "Mark Notes.docx as Normal"
+     * - "Mark Old Project.pdf as Low"
+     * - "Set priority of Resume.pdf to Important"
+     * - "Change Notes.docx priority to Normal"
+     */
+    fun detectSetFilePriority(prompt: String): AiUserIntent.SetFilePriority? {
+        val clean = prompt.trim()
+        val prioRegex = "(?:important|high|urgent|normal|medium|regular|low)"
+
+        fun parsePriority(prioStr: String): PriorityLevel {
+            return when (prioStr.lowercase()) {
+                "important", "high", "urgent" -> PriorityLevel.IMPORTANT
+                "low" -> PriorityLevel.LOW
+                else -> PriorityLevel.NORMAL
+            }
+        }
+
+        fun cleanFileName(raw: String): String {
+            var fn = raw.trim()
+            fn = fn.trim('\'', '"', '`', '*', '_')
+            fn = fn.replace(Regex("^(?:the\\s+file|the\\s+document|my\\s+file|my\\s+document|the|my)\\s+", RegexOption.IGNORE_CASE), "")
+            fn = fn.trim('\'', '"', '`', '*', '_', '.', ',', '?', '!', ' ')
+            return fn
+        }
+
+        // 1. Mark <File> as/to/with <Priority> (e.g. "Mark Resume.pdf as Important", "Mark Notes.docx as Normal", "Mark Old Project.pdf as Low")
+        val markPattern = Regex(
+            "^(?:please\\s+)?(?:can\\s+you\\s+)?(?:could\\s+you\\s+)?mark\\s+(?:the\\s+)?(?:file\\s+|document\\s+)?(.+?)\\s+(?:as|to|with)?\\s*($prioRegex)(?:\\s+priority)?(?:\\s+level)?\\.?$",
+            RegexOption.IGNORE_CASE
+        )
+        markPattern.find(clean)?.let { m ->
+            val fn = cleanFileName(m.groupValues[1])
+            val prio = parsePriority(m.groupValues[2])
+            if (fn.isNotBlank()) return AiUserIntent.SetFilePriority(fn, prio)
+        }
+
+        // 2. Set/change/update priority of <File> to <Priority>
+        val prioOfPattern = Regex(
+            "^(?:please\\s+)?(?:can\\s+you\\s+)?(?:could\\s+you\\s+)?(?:set|change|update)\\s+(?:the\\s+)?priority\\s+(?:of|for)\\s+(?:the\\s+)?(?:file\\s+|document\\s+)?(.+?)\\s+to\\s+($prioRegex)(?:\\s+priority)?(?:\\s+level)?\\.?$",
+            RegexOption.IGNORE_CASE
+        )
+        prioOfPattern.find(clean)?.let { m ->
+            val fn = cleanFileName(m.groupValues[1])
+            val prio = parsePriority(m.groupValues[2])
+            if (fn.isNotBlank()) return AiUserIntent.SetFilePriority(fn, prio)
+        }
+
+        // 3. Set/change/update <File> priority to <Priority>
+        val filePrioPattern = Regex(
+            "^(?:please\\s+)?(?:can\\s+you\\s+)?(?:could\\s+you\\s+)?(?:set|change|update)\\s+(?:the\\s+)?(?:file\\s+|document\\s+)?(.+?)(?:'s)?\\s+priority\\s+to\\s+($prioRegex)(?:\\s+priority)?(?:\\s+level)?\\.?$",
+            RegexOption.IGNORE_CASE
+        )
+        filePrioPattern.find(clean)?.let { m ->
+            val fn = cleanFileName(m.groupValues[1])
+            val prio = parsePriority(m.groupValues[2])
+            if (fn.isNotBlank()) return AiUserIntent.SetFilePriority(fn, prio)
+        }
+
+        // 4. Set/change/update <File> to/as <Priority>
+        val setToPattern = Regex(
+            "^(?:please\\s+)?(?:can\\s+you\\s+)?(?:could\\s+you\\s+)?(?:set|change|update)\\s+(?:the\\s+)?(?:file\\s+|document\\s+)?(.+?)\\s+(?:to|as)\\s+($prioRegex)(?:\\s+priority)?(?:\\s+level)?\\.?$",
+            RegexOption.IGNORE_CASE
+        )
+        setToPattern.find(clean)?.let { m ->
+            val fn = cleanFileName(m.groupValues[1])
+            val prio = parsePriority(m.groupValues[2])
+            if (fn.isNotBlank()) return AiUserIntent.SetFilePriority(fn, prio)
+        }
+
+        // 5. Make <File> <Priority>
+        val makePattern = Regex(
+            "^(?:please\\s+)?(?:can\\s+you\\s+)?(?:could\\s+you\\s+)?make\\s+(?:the\\s+)?(?:file\\s+|document\\s+)?(.+?)\\s+(?:as\\s+)?($prioRegex)(?:\\s+priority)?(?:\\s+level)?\\.?$",
+            RegexOption.IGNORE_CASE
+        )
+        makePattern.find(clean)?.let { m ->
+            val fn = cleanFileName(m.groupValues[1])
+            val prio = parsePriority(m.groupValues[2])
+            if (fn.isNotBlank()) return AiUserIntent.SetFilePriority(fn, prio)
+        }
+
+        // 6. Assign <Priority> priority to <File>
+        val assignPattern = Regex(
+            "^(?:please\\s+)?(?:can\\s+you\\s+)?(?:could\\s+you\\s+)?assign\\s+(?:the\\s+)?(?:priority\\s+)?($prioRegex)(?:\\s+priority)?\\s+to\\s+(?:the\\s+)?(?:file\\s+|document\\s+)?(.+?)\\.?$",
+            RegexOption.IGNORE_CASE
+        )
+        assignPattern.find(clean)?.let { m ->
+            val prio = parsePriority(m.groupValues[1])
+            val fn = cleanFileName(m.groupValues[2])
+            if (fn.isNotBlank()) return AiUserIntent.SetFilePriority(fn, prio)
+        }
+
+        return null
+    }
+
+    /**
      * Classifies the user's prompt into one of the core AI Chat intents:
+     * - SET_FILE_PRIORITY: Set or update actual device file priority.
      * - FILE_SEARCH: Search actual files across mobile & IntelliSpace and display file cards.
      * - FILE_OPEN: Open the requested file directly.
      * - FILE_TYPE_FILTER: Search files by specific format/type.
@@ -90,6 +191,12 @@ object AiChatIntentDetector {
     fun detect(prompt: String): AiUserIntent {
         val clean = prompt.trim()
         val lower = clean.lowercase()
+
+        // 0. AI File Priority Command (Priority 1 Check)
+        val prioCmd = detectSetFilePriority(clean)
+        if (prioCmd != null) {
+            return prioCmd
+        }
 
         // 1. Check for document summary / explanation / analysis -> DOCUMENT_QUERY
         if (containsAny(

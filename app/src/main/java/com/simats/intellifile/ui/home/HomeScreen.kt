@@ -227,6 +227,8 @@ fun HomeScreen(
 
     modifier: Modifier = Modifier,
 
+    priorityUpdateVersion: Int = 0,
+
     externalSearchQuery: String = "",
 
     onSeeAllClick: () -> Unit = {},
@@ -389,7 +391,7 @@ fun HomeScreen(
 
     // Query real document files asynchronously from storage
 
-    LaunchedEffect(refreshTrigger) {
+    LaunchedEffect(refreshTrigger, priorityUpdateVersion) {
 
         isLoading = true
 

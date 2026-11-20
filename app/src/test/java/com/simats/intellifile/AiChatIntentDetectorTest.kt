@@ -156,4 +156,40 @@ class AiChatIntentDetectorTest {
         val search = intent as AiUserIntent.FileSearch
         assertEquals("cloud computing notes", search.query)
     }
+
+    @Test
+    fun testSetFilePriority_markResumePdfAsImportant() {
+        val intent = AiChatIntentDetector.detect("Mark Resume.pdf as Important")
+        assertTrue("Expected SetFilePriority, got: $intent", intent is AiUserIntent.SetFilePriority)
+        val setPriority = intent as AiUserIntent.SetFilePriority
+        assertEquals("Resume.pdf", setPriority.fileName)
+        assertEquals(com.simats.intellifile.ui.home.PriorityLevel.IMPORTANT, setPriority.priority)
+    }
+
+    @Test
+    fun testSetFilePriority_markNotesDocxAsNormal() {
+        val intent = AiChatIntentDetector.detect("Mark Notes.docx as Normal")
+        assertTrue("Expected SetFilePriority, got: $intent", intent is AiUserIntent.SetFilePriority)
+        val setPriority = intent as AiUserIntent.SetFilePriority
+        assertEquals("Notes.docx", setPriority.fileName)
+        assertEquals(com.simats.intellifile.ui.home.PriorityLevel.NORMAL, setPriority.priority)
+    }
+
+    @Test
+    fun testSetFilePriority_markOldProjectPdfAsLow() {
+        val intent = AiChatIntentDetector.detect("Mark Old Project.pdf as Low")
+        assertTrue("Expected SetFilePriority, got: $intent", intent is AiUserIntent.SetFilePriority)
+        val setPriority = intent as AiUserIntent.SetFilePriority
+        assertEquals("Old Project.pdf", setPriority.fileName)
+        assertEquals(com.simats.intellifile.ui.home.PriorityLevel.LOW, setPriority.priority)
+    }
+
+    @Test
+    fun testSetFilePriority_setProjectReportPriorityToImportant() {
+        val intent = AiChatIntentDetector.detect("Set Project Report.pdf priority to Important")
+        assertTrue("Expected SetFilePriority, got: $intent", intent is AiUserIntent.SetFilePriority)
+        val setPriority = intent as AiUserIntent.SetFilePriority
+        assertEquals("Project Report.pdf", setPriority.fileName)
+        assertEquals(com.simats.intellifile.ui.home.PriorityLevel.IMPORTANT, setPriority.priority)
+    }
 }
