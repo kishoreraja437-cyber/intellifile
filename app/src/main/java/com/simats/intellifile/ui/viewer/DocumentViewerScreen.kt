@@ -111,6 +111,7 @@ fun DocumentViewerScreen(
     fileUriString: String = "",
     fileFormat: String = "PDF",
     totalPages: Int = 1,
+    documentId: Int? = null,
     showSaveConfirmation: Boolean = false,
     onBackClick: () -> Unit = {},
     onShareClick: () -> Unit = {},
@@ -144,6 +145,7 @@ fun DocumentViewerScreen(
             fileName = fileName,
             filePath = filePath,
             fileUriString = fileUriString,
+            documentId = documentId,
             onBackClick = onBackClick,
             onShareClick = onShareClick
         )

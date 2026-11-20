@@ -107,4 +107,37 @@ object RetrofitClient {
             initializedBaseUrl = ""
         }
     }
+
+    /**
+     * Returns an OkHttpClient configured with authentication and tunneling headers for direct downloads.
+     */
+    fun getOkHttpClient(context: Context): OkHttpClient {
+        val sessionManager = SessionManager(context)
+        val authInterceptor = Interceptor { chain ->
+            val original = chain.request()
+            val builder = original.newBuilder()
+                .header("Accept", "*/*")
+                .header("ngrok-skip-browser-warning", "true")
+                .header("User-Agent", "IntelliFile-Android")
+
+            val token = sessionManager.getToken()
+            if (!token.isNullOrBlank()) {
+                builder.header("Authorization", "Bearer $token")
+                builder.header("X-Authorization", "Bearer $token")
+            }
+            val userId = sessionManager.getUserId()
+            if (userId > 0) {
+                builder.header("X-User-Id", userId.toString())
+            }
+            chain.proceed(builder.build())
+        }
+
+        return OkHttpClient.Builder()
+            .addInterceptor(authInterceptor)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
 }

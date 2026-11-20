@@ -68,6 +68,7 @@ fun PPTViewerScreen(
     fileName: String = "Presentation.pptx",
     filePath: String = "",
     fileUriString: String = "",
+    documentId: Int? = null,
     onBackClick: () -> Unit = {},
     onShareClick: (() -> Unit)? = null,
     viewModel: PPTViewerViewModel = viewModel()
@@ -92,12 +93,13 @@ fun PPTViewerScreen(
     }
 
     // Load presentation
-    LaunchedEffect(filePath, fileUriString, fileName) {
+    LaunchedEffect(filePath, fileUriString, fileName, documentId) {
         viewModel.loadPresentation(
             context = context,
             uriString = fileUriString,
             filePath = filePath,
-            fileName = fileName
+            fileName = fileName,
+            documentId = documentId
         )
     }
 

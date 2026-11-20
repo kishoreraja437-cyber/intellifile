@@ -3,9 +3,11 @@ package com.simats.intellifile.ui.viewer.ppt
 import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
+import android.util.Log
 import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.simats.intellifile.data.repository.DocumentRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 data class PPTViewerUiState(
     val isLoading: Boolean = true,
@@ -57,22 +60,26 @@ class PPTViewerViewModel(application: Application) : AndroidViewModel(applicatio
     private var currentUriString: String = ""
     private var currentFilePath: String = ""
     private var currentFileName: String = ""
+    private var currentDocumentId: Int? = null
 
     private var slideRenderJob: Job? = null
     private var thumbnailJob: Job? = null
 
     /**
-     * Loads the presentation using the visual PowerPoint engine.
+     * Loads the presentation using LibreOffice rendering when available,
+     * seamlessly falling back to the local high-fidelity OpenXML engine if offline.
      */
     fun loadPresentation(
         context: Context,
         uriString: String,
         filePath: String,
-        fileName: String
+        fileName: String,
+        documentId: Int? = null
     ) {
         currentUriString = uriString
         currentFilePath = filePath
         currentFileName = fileName
+        currentDocumentId = documentId
 
         _uiState.update {
             it.copy(
@@ -84,14 +91,47 @@ class PPTViewerViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         viewModelScope.launch(Dispatchers.IO) {
-            val result = PPTDocumentHandler.loadPresentation(
-                context = context,
-                uriString = uriString,
-                path = filePath,
-                fileName = fileName
-            )
+            var presentationDoc: PPTDocument? = null
 
-            result.onSuccess { doc ->
+            // Strategy 1: Automatic high-accuracy LibreOffice rendering via backend
+            try {
+                val docRepo = DocumentRepository(context)
+                val conversionResult = docRepo.convertPresentationToPdf(
+                    documentId = documentId,
+                    filePath = filePath,
+                    uriString = uriString,
+                    fileName = fileName
+                )
+
+                if (conversionResult.isSuccess) {
+                    val pdfFile = conversionResult.getOrNull()
+                    if (pdfFile != null && pdfFile.exists() && pdfFile.length() > 0) {
+                        val pdfDocResult = PPTDocumentHandler.loadPresentationFromPdf(pdfFile, fileName)
+                        if (pdfDocResult.isSuccess) {
+                            presentationDoc = pdfDocResult.getOrNull()
+                            Log.d("PPTViewerViewModel", "Rendered presentation via LibreOffice PDF: ${presentationDoc?.totalSlides} slides")
+                        }
+                    }
+                } else {
+                    Log.w("PPTViewerViewModel", "LibreOffice conversion notice: ${conversionResult.exceptionOrNull()?.message}")
+                }
+            } catch (e: Exception) {
+                Log.w("PPTViewerViewModel", "LibreOffice conversion unavailable, falling back to local engine: ${e.message}")
+            }
+
+            // Strategy 2: Local High-Fidelity OpenXML Engine fallback
+            val finalResult = if (presentationDoc != null) {
+                Result.success(presentationDoc)
+            } else {
+                PPTDocumentHandler.loadPresentation(
+                    context = context,
+                    uriString = uriString,
+                    path = filePath,
+                    fileName = fileName
+                )
+            }
+
+            finalResult.onSuccess { doc ->
                 // Render first slide bitmap
                 val firstBmp = PPTDocumentHandler.renderSlideBitmap(0, scale = 1.5f)
 
@@ -311,7 +351,7 @@ class PPTViewerViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun retry(context: Context) {
         if (currentUriString.isNotBlank() || currentFilePath.isNotBlank() || currentFileName.isNotBlank()) {
-            loadPresentation(context, currentUriString, currentFilePath, currentFileName)
+            loadPresentation(context, currentUriString, currentFilePath, currentFileName, currentDocumentId)
         }
     }
 

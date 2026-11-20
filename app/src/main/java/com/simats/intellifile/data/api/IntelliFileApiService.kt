@@ -350,5 +350,28 @@ interface IntelliFileApiService {
 
     ): Response<GenericResponse>
 
+
+
+    // --- PowerPoint Conversion via LibreOffice ---
+
+    @FormUrlEncoded
+    @POST("documents/convert_ppt.php")
+    suspend fun convertPptDocument(
+        @Field("document_id") documentId: Int
+    ): Response<PptConversionResponse>
+
+    @FormUrlEncoded
+    @POST("documents/convert_ppt.php")
+    suspend fun convertPptByPath(
+        @Field("file_path") filePath: String
+    ): Response<PptConversionResponse>
+
+    @Multipart
+    @POST("documents/convert_ppt.php")
+    suspend fun convertPptFile(
+        @Part file: MultipartBody.Part
+    ): Response<PptConversionResponse>
+
 }
+
 

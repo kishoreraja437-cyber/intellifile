@@ -9,8 +9,10 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.Build
+import android.os.ParcelFileDescriptor
 import android.text.Layout
 import android.text.SpannableStringBuilder
 import android.text.StaticLayout
@@ -168,11 +170,78 @@ object PPTDocumentHandler {
     @Volatile
     private var activeDocument: PPTDocument? = null
 
+    @Volatile
+    private var pdfRenderer: PdfRenderer? = null
+
+    @Volatile
+    private var pdfFileDescriptor: ParcelFileDescriptor? = null
+
+    private var isUsingPdfRenderer = false
     private var isUsingNativeEngine = false
 
     // High-resolution bitmap caches
     private val slideCache = LruCache<Int, Bitmap>(20)
     private val thumbnailCache = LruCache<Int, Bitmap>(100)
+
+    /**
+     * Loads the presentation from a LibreOffice-converted PDF.
+     * Preserves 100% of the original slide background colors, themes, templates, images,
+     * fonts, shapes, tables, charts, and layouts with exact aspect ratio and slide order.
+     */
+    fun loadPresentationFromPdf(
+        pdfFile: File,
+        originalTitle: String
+    ): Result<PPTDocument> = renderLock.withLock {
+        close()
+        try {
+            val pfd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY)
+            val renderer = PdfRenderer(pfd)
+            val pageCount = renderer.pageCount
+            if (pageCount == 0) {
+                renderer.close()
+                pfd.close()
+                return Result.failure(Exception("Converted presentation PDF contains no pages."))
+            }
+
+            pdfFileDescriptor = pfd
+            pdfRenderer = renderer
+            isUsingPdfRenderer = true
+            isUsingNativeEngine = false
+
+            // Derive aspect ratio from first slide
+            val firstPage = renderer.openPage(0)
+            val w = firstPage.width.toFloat()
+            val h = firstPage.height.toFloat()
+            val ratio = if (h > 0f) w / h else (16f / 9f)
+            firstPage.close()
+
+            val slideInfos = (0 until pageCount).map { i ->
+                PPTSlideInfo(
+                    slideIndex = i,
+                    slideNumber = i + 1,
+                    title = "Slide ${i + 1}",
+                    extractedText = "",
+                    notes = ""
+                )
+            }
+
+            val docTitle = originalTitle.substringBeforeLast('.').ifBlank { "Presentation" }
+            val doc = PPTDocument(
+                title = docTitle,
+                totalSlides = pageCount,
+                aspectRatio = ratio,
+                slides = slideInfos,
+                sourcePath = pdfFile.absolutePath
+            )
+
+            activeDocument = doc
+            Log.d(TAG, "Successfully loaded presentation from LibreOffice PDF: $pageCount slides, ratio=$ratio")
+            Result.success(doc)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed loading presentation from PDF", e)
+            Result.failure(e)
+        }
+    }
 
     /**
      * Loads the presentation.
@@ -337,6 +406,28 @@ object PPTDocumentHandler {
     fun renderSlideBitmap(slideIndex: Int, scale: Float = 1.5f): Bitmap? = renderLock.withLock {
         slideCache.get(slideIndex)?.let { return it }
 
+        // Path 0: LibreOffice Converted PDF Renderer (Highest Fidelity)
+        if (isUsingPdfRenderer) {
+            val renderer = pdfRenderer ?: return null
+            if (slideIndex !in 0 until renderer.pageCount) return null
+            return try {
+                val page = renderer.openPage(slideIndex)
+                val baseW = page.width
+                val baseH = page.height
+                val targetW = (baseW * scale).toInt().coerceAtLeast(1)
+                val targetH = (baseH * scale).toInt().coerceAtLeast(1)
+                val bmp = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+                bmp.eraseColor(android.graphics.Color.WHITE)
+                page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                page.close()
+                slideCache.put(slideIndex, bmp)
+                bmp
+            } catch (e: Exception) {
+                Log.e(TAG, "Error rendering PDF slide $slideIndex", e)
+                null
+            }
+        }
+
         // Path A: Native OpenXML Engine (100% Free, Zero Watermark)
         if (isUsingNativeEngine) {
             val pres = nativePresentation ?: return null
@@ -386,6 +477,26 @@ object PPTDocumentHandler {
      */
     fun renderThumbnailBitmap(slideIndex: Int, scale: Float = 0.25f): Bitmap? = renderLock.withLock {
         thumbnailCache.get(slideIndex)?.let { return it }
+
+        // Path 0: LibreOffice Converted PDF Renderer (Highest Fidelity)
+        if (isUsingPdfRenderer) {
+            val renderer = pdfRenderer ?: return null
+            if (slideIndex !in 0 until renderer.pageCount) return null
+            return try {
+                val page = renderer.openPage(slideIndex)
+                val targetW = (page.width * scale).toInt().coerceAtLeast(1)
+                val targetH = (page.height * scale).toInt().coerceAtLeast(1)
+                val thumb = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+                thumb.eraseColor(android.graphics.Color.WHITE)
+                page.render(thumb, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                page.close()
+                thumbnailCache.put(slideIndex, thumb)
+                thumb
+            } catch (e: Exception) {
+                Log.e(TAG, "Error rendering PDF thumbnail for slide $slideIndex", e)
+                null
+            }
+        }
 
         if (isUsingNativeEngine) {
             val pres = nativePresentation ?: return null
@@ -1407,6 +1518,16 @@ object PPTDocumentHandler {
      * Frees memory and cleans up presentation engines.
      */
     fun close() = renderLock.withLock {
+        try {
+            pdfRenderer?.close()
+        } catch (_: Exception) {}
+        try {
+            pdfFileDescriptor?.close()
+        } catch (_: Exception) {}
+        pdfRenderer = null
+        pdfFileDescriptor = null
+        isUsingPdfRenderer = false
+
         try {
             activePresentation?.dispose()
         } catch (_: Exception) {}

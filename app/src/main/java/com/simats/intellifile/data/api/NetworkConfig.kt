@@ -35,7 +35,7 @@ object NetworkConfig {
         if (cleaned.startsWith("file:") || cleaned.startsWith("content:") || cleaned.startsWith("/")) {
             return if (cleaned.startsWith("/")) "file://$cleaned" else cleaned
         }
-        if (cleaned.contains("localhost") || cleaned.contains("127.0.0.1") || cleaned.contains("10.0.2.2") || cleaned.contains("172.23.176.96")) {
+        if (cleaned.contains("localhost") || cleaned.contains("127.0.0.1") || cleaned.contains("10.0.2.2") || cleaned.contains("172.23.176.96") || cleaned.contains("devtunnels.ms")) {
             val path = cleaned.substringAfter("/intellifile_backend/", "").ifBlank {
                 cleaned.substringAfter("uploads/", "uploads/")
             }.trimStart('/')

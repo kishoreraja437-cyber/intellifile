@@ -557,3 +557,15 @@ data class UpdateFcmTokenRequest(
     @SerializedName("user_id") val user_id: Int? = null,
     @SerializedName("email") val email: String? = null
 )
+
+data class PptConversionResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("message") val message: String? = null,
+    @SerializedName("pdfUrl") val pdfUrl: String? = null,
+    @SerializedName("pdfPath") val pdfPath: String? = null,
+    @SerializedName("fileName") val fileName: String? = null,
+    @SerializedName("totalPages") val totalPages: Int? = null,
+    @SerializedName("cached") val cached: Boolean? = null,
+    @SerializedName("error") val error: String? = null
+)
+
