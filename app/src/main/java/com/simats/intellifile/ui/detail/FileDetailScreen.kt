@@ -16,9 +16,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Visibility
@@ -357,8 +357,8 @@ fun FileDetailScreen(
 
                 IconButton(onClick = onMoreOptionsClick) {
                     Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "More Options",
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Options",
                         tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
