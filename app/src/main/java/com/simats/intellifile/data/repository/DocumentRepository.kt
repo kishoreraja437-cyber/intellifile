@@ -29,33 +29,78 @@ class DocumentRepository(private val context: Context) {
         category: String? = null,
         priority: String? = null
     ): Result<DocumentDto> {
+        val safeFileName = fileName.substringAfterLast('/').substringAfterLast('\\').trim().ifBlank { "document" }
+        val cleanName = safeFileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val tempFile = File(context.cacheDir, "vault_upload_${System.currentTimeMillis()}_$cleanName")
+
         return try {
-            // Resolve file for upload
-            val uploadFile: File = if (filePath.isNotBlank() && File(filePath).exists()) {
-                File(filePath)
-            } else if (uriString.isNotBlank()) {
-                // Copy stream to cache for upload
-                val uri = Uri.parse(uriString)
-                val tempFile = File(context.cacheDir, fileName.ifBlank { "upload_doc" })
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    FileOutputStream(tempFile).use { output ->
-                        input.copyTo(output)
+            var streamOpened = false
+
+            // Strategy 1: ContentResolver via uriString (safest across all Android versions)
+            if (uriString.isNotBlank()) {
+                try {
+                    val uri = Uri.parse(uriString)
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        FileOutputStream(tempFile).use { output ->
+                            input.copyTo(output)
+                            streamOpened = true
+                        }
                     }
-                }
-                tempFile
-            } else {
-                return Result.failure(Exception("Cannot locate file content for upload."))
+                } catch (_: Exception) {}
             }
 
-            val mimeType = LocalFileManager.resolveMimeType(fileName)
-            val requestFile = uploadFile.asRequestBody(mimeType.toMediaTypeOrNull())
-            val filePart = MultipartBody.Part.createFormData("document", fileName, requestFile)
+            // Strategy 2: Direct file copy if accessible
+            if ((!streamOpened || tempFile.length() <= 0L) && filePath.isNotBlank() && filePath != "Internal Storage") {
+                try {
+                    val directFile = File(filePath)
+                    if (directFile.exists() && directFile.canRead()) {
+                        directFile.inputStream().use { input ->
+                            FileOutputStream(tempFile).use { output ->
+                                input.copyTo(output)
+                                streamOpened = true
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // Strategy 3: MediaStore lookup matching fileName or path
+            if (!streamOpened || tempFile.length() <= 0L) {
+                try {
+                    val deviceFiles = LocalFileManager.getDeviceFiles(context)
+                    val matchedItem = deviceFiles.firstOrNull {
+                        it.title.equals(fileName, ignoreCase = true) ||
+                        it.title.equals(safeFileName, ignoreCase = true) ||
+                        (filePath.isNotBlank() && it.path == filePath) ||
+                        (uriString.isNotBlank() && it.uri.toString() == uriString)
+                    }
+                    if (matchedItem != null && matchedItem.uri != Uri.EMPTY) {
+                        context.contentResolver.openInputStream(matchedItem.uri)?.use { input ->
+                            FileOutputStream(tempFile).use { output ->
+                                input.copyTo(output)
+                                streamOpened = true
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            if (!streamOpened || !tempFile.exists() || tempFile.length() <= 0L) {
+                return Result.failure(Exception("Cannot read file content. Please check that storage access is granted."))
+            }
+
+            val mimeType = LocalFileManager.resolveMimeType(safeFileName)
+            val requestFile = tempFile.asRequestBody(mimeType.toMediaTypeOrNull())
+            val filePart = MultipartBody.Part.createFormData("document", safeFileName, requestFile)
 
             val sessionManager = SessionManager(context)
-            val userId = sessionManager.getUserId()
-            val userIdPart = if (userId > 0) userId.toString().toRequestBody("text/plain".toMediaTypeOrNull()) else null
-            val titlePart = fileName.toRequestBody("text/plain".toMediaTypeOrNull())
-            val categoryPart = category?.takeIf { it.isNotBlank() }?.toRequestBody("text/plain".toMediaTypeOrNull())
+            var userId = sessionManager.getUserId()
+            if (userId <= 0) {
+                userId = sessionManager.getCachedProfile()?.id ?: 1
+            }
+            val userIdPart = userId.toString().toRequestBody("text/plain".toMediaTypeOrNull())
+            val titlePart = safeFileName.toRequestBody("text/plain".toMediaTypeOrNull())
+            val categoryPart = (category?.takeIf { it.isNotBlank() } ?: "Document").toRequestBody("text/plain".toMediaTypeOrNull())
             val priorityPart = priority?.takeIf { it.isNotBlank() }?.toRequestBody("text/plain".toMediaTypeOrNull())
 
             val response = api.uploadDocument(
@@ -74,6 +119,12 @@ class DocumentRepository(private val context: Context) {
             }
         } catch (e: Exception) {
             Result.failure(e)
+        } finally {
+            try {
+                if (tempFile.exists()) {
+                    tempFile.delete()
+                }
+            } catch (_: Exception) {}
         }
     }
 

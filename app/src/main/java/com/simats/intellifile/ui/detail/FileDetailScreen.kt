@@ -93,9 +93,14 @@ fun FileDetailScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val docRepository = remember { DocumentRepository(context) }
+    val dbHelper = remember { LocalFileDatabaseHelper.getInstance(context) }
     var isUploadingToVault by remember { mutableStateOf(false) }
     var selectedPriority by remember(fileData.priority) { mutableStateOf(fileData.priority) }
-    var isVaultSynced by remember(fileData.isVaultSynced) { mutableStateOf(fileData.isVaultSynced) }
+    var isVaultSynced by remember(fileData.isVaultSynced, fileData.path, fileData.uriString, fileData.fileName) {
+        val key = if (fileData.path.isNotBlank()) fileData.path else fileData.uriString
+        val meta = dbHelper.getMetadata(key) ?: dbHelper.getMetadata(fileData.fileName)
+        mutableStateOf(fileData.isVaultSynced || (meta?.isVaultSynced == true))
+    }
     var showVaultConfirmDialog by remember { mutableStateOf(false) }
     var showOpenOptionsDialog by remember { mutableStateOf(false) }
 
@@ -274,15 +279,30 @@ fun FileDetailScreen(
                                 priority = selectedPriority?.name
                             )
                             isUploadingToVault = false
-                            result.onSuccess {
+                            result.onSuccess { doc ->
                                 isVaultSynced = true
                                 val key = if (fileData.path.isNotBlank()) fileData.path else fileData.uriString
-                                LocalFileDatabaseHelper.getInstance(context).setVaultStatus(
+                                dbHelper.setVaultStatus(
                                     uriOrPath = key,
                                     fileName = fileData.fileName,
-                                    isSynced = true
+                                    isSynced = true,
+                                    vaultDocId = doc.id
                                 )
-                                Toast.makeText(context, "${fileData.fileName} uploaded to IntelliSpace successfully!", Toast.LENGTH_SHORT).show()
+                                if (fileData.uriString.isNotBlank()) {
+                                    dbHelper.setVaultStatus(
+                                        uriOrPath = fileData.uriString,
+                                        fileName = fileData.fileName,
+                                        isSynced = true,
+                                        vaultDocId = doc.id
+                                    )
+                                }
+                                dbHelper.setVaultStatus(
+                                    uriOrPath = fileData.fileName,
+                                    fileName = fileData.fileName,
+                                    isSynced = true,
+                                    vaultDocId = doc.id
+                                )
+                                Toast.makeText(context, "${fileData.fileName} added to IntelliSpace successfully!", Toast.LENGTH_SHORT).show()
                             }.onFailure { err ->
                                 Toast.makeText(context, "IntelliSpace upload failed: ${err.message}", Toast.LENGTH_LONG).show()
                             }
