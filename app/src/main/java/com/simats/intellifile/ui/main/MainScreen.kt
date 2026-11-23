@@ -6,6 +6,8 @@ import androidx.activity.compose.BackHandler
 
 import androidx.compose.animation.AnimatedContent
 
+import androidx.compose.animation.core.Animatable
+
 import androidx.compose.animation.core.Spring
 
 import androidx.compose.animation.core.animateDpAsState
@@ -40,6 +42,8 @@ import androidx.compose.foundation.border
 
 import androidx.compose.foundation.clickable
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
+
 import androidx.compose.foundation.layout.*
 
 import androidx.compose.foundation.shape.CircleShape
@@ -50,6 +54,8 @@ import androidx.compose.material.icons.Icons
 
 import androidx.compose.material.icons.filled.AutoAwesome
 
+import androidx.compose.material.icons.filled.Bookmark
+
 import androidx.compose.material.icons.filled.Favorite
 
 import androidx.compose.material.icons.filled.Folder
@@ -59,6 +65,8 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 
 import androidx.compose.material.icons.outlined.AutoAwesome
+
+import androidx.compose.material.icons.outlined.BookmarkBorder
 
 import androidx.compose.material.icons.outlined.FavoriteBorder
 
@@ -85,6 +93,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 
 import androidx.compose.ui.draw.shadow
+
+import androidx.compose.ui.geometry.Offset
+
+import androidx.compose.ui.geometry.Size
 
 import androidx.compose.ui.graphics.Brush
 
@@ -185,11 +197,11 @@ enum class BottomNavItem(
 
     HOME("Home", Icons.Default.Home, Icons.Outlined.Home),
 
-    AI("AI", Icons.Default.AutoAwesome, Icons.Outlined.AutoAwesome),
-
     FILES("Files", Icons.Default.Folder, Icons.Outlined.Folder),
 
-    SAVED("Saved", Icons.Default.Favorite, Icons.Outlined.FavoriteBorder),
+    AI("AI", Icons.Default.AutoAwesome, Icons.Outlined.AutoAwesome),
+
+    SAVED("Saved", Icons.Default.Bookmark, Icons.Outlined.BookmarkBorder),
 
     PROFILE("Profile", Icons.Default.Person, Icons.Outlined.Person)
 
@@ -1249,7 +1261,28 @@ fun BottomNavigationBar(
     onTabSelected: (BottomNavItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val items = BottomNavItem.entries
+    val items = remember { BottomNavItem.entries }
+    val selectedIndex = items.indexOf(selectedTab).coerceAtLeast(0)
+
+    // Smooth physics-based gliding index for liquid wave & highlight transitions across tabs
+    val animatedIndex by animateFloatAsState(
+        targetValue = selectedIndex.toFloat(),
+        animationSpec = spring(
+            dampingRatio = 0.74f,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "bottomNavWaveIndex"
+    )
+
+    // Expanding ripple animation state triggered when tab selection changes
+    val rippleProgress = remember { Animatable(0f) }
+    LaunchedEffect(selectedTab) {
+        rippleProgress.snapTo(0f)
+        rippleProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing)
+        )
+    }
 
     Box(
         modifier = modifier
@@ -1257,62 +1290,136 @@ fun BottomNavigationBar(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Floating Rounded Glass Pill Container with Smooth Physics Slider
-        BoxWithConstraints(
+        // Floating Rounded White Pill Container with Subtle Aqua Shadow
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(68.dp)
-                .shadow(8.dp, RoundedCornerShape(32.dp))
+                .height(72.dp)
+                .shadow(
+                    elevation = 10.dp,
+                    shape = RoundedCornerShape(32.dp),
+                    spotColor = Color(0x3800C2A8),
+                    ambientColor = Color(0x1800C2A8)
+                )
                 .clip(RoundedCornerShape(32.dp))
                 .background(Color.White)
-                .border(1.dp, Color(0xFFE2EEF8), RoundedCornerShape(32.dp))
+                .border(1.dp, Color(0xFFD8F1F4), RoundedCornerShape(32.dp))
         ) {
-            val totalWidth = maxWidth
-            val tabCount = items.size
-            val tabWidth = totalWidth / tabCount
-            val selectedIndex = items.indexOf(selectedTab).coerceAtLeast(0)
+            // 1. Canvas Layer: Liquid Wave Contour, Subtle Ripple Ring & Floating Droplets
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val tabWidth = size.width / items.size
+                val waveCenterX = tabWidth * (animatedIndex + 0.5f)
+                val crestHeight = 22.dp.toPx()
+                val waveSpan = tabWidth * 1.55f
 
-            // Smooth physics-based continuous animated index for gliding slider
-            val animatedIndex by animateFloatAsState(
-                targetValue = selectedIndex.toFloat(),
-                animationSpec = spring(
-                    dampingRatio = 0.74f, // Fluid bounce without excess oscillation
-                    stiffness = Spring.StiffnessMediumLow // Smooth, responsive glide
-                ),
-                label = "navSliderPosition"
-            )
-
-            // Dynamic velocity / delta for elastic fluid stretch
-            val delta = (selectedIndex - animatedIndex)
-            val absDelta = kotlin.math.abs(delta).coerceAtMost(1.5f)
-            val basePillWidth = 44.dp
-            val dynamicWidth = basePillWidth + (14.dp * absDelta).coerceAtMost(16.dp)
-
-            // Exact center coordinates for the sliding pill
-            val indicatorCenterX = tabWidth * (animatedIndex + 0.5f)
-            val indicatorLeft = indicatorCenterX - (dynamicWidth / 2f)
-
-            // 1. Sliding Glowing Gradient Pill (The Smooth Slider Effect)
-            Box(
-                modifier = Modifier
-                    .offset(x = indicatorLeft, y = 8.dp)
-                    .size(width = dynamicWidth, height = 38.dp)
-                    .shadow(
-                        elevation = 6.dp,
-                        shape = RoundedCornerShape(20.dp),
-                        spotColor = Color(0xFF00C2A8),
-                        ambientColor = Color(0x3300C2A8)
+                // (a) Ambient soft aqua glow wave (background layer)
+                val bgPath = Path().apply {
+                    val bgSpan = tabWidth * 1.9f
+                    val bgHeight = 16.dp.toPx()
+                    moveTo((waveCenterX - bgSpan).coerceAtLeast(0f), size.height)
+                    cubicTo(
+                        x1 = waveCenterX - bgSpan * 0.55f, y1 = size.height,
+                        x2 = waveCenterX - bgSpan * 0.32f, y2 = size.height - bgHeight,
+                        x3 = waveCenterX, y3 = size.height - bgHeight
                     )
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(
-                                Color(0xFF00C2A8),
-                                Color(0xFF55A9AF)
-                            )
-                        )
+                    cubicTo(
+                        x1 = waveCenterX + bgSpan * 0.32f, y1 = size.height - bgHeight,
+                        x2 = waveCenterX + bgSpan * 0.55f, y2 = size.height,
+                        x3 = (waveCenterX + bgSpan).coerceAtMost(size.width), y3 = size.height
                     )
-            )
+                    lineTo(size.width, size.height)
+                    lineTo(0f, size.height)
+                    close()
+                }
+                drawPath(
+                    path = bgPath,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0x3300C2A8),
+                            Color(0x1400C2A8),
+                            Color.Transparent
+                        ),
+                        startY = size.height - 20.dp.toPx(),
+                        endY = size.height
+                    )
+                )
+
+                // (b) Primary vibrant liquid wave contour (foreground wave matching reference design)
+                val wavePath = Path().apply {
+                    moveTo((waveCenterX - waveSpan).coerceAtLeast(0f), size.height)
+                    cubicTo(
+                        x1 = waveCenterX - waveSpan * 0.5f, y1 = size.height,
+                        x2 = waveCenterX - waveSpan * 0.26f, y2 = size.height - crestHeight,
+                        x3 = waveCenterX, y3 = size.height - crestHeight
+                    )
+                    cubicTo(
+                        x1 = waveCenterX + waveSpan * 0.26f, y1 = size.height - crestHeight,
+                        x2 = waveCenterX + waveSpan * 0.5f, y2 = size.height,
+                        x3 = (waveCenterX + waveSpan).coerceAtMost(size.width), y3 = size.height
+                    )
+                    lineTo(size.width, size.height)
+                    lineTo(0f, size.height)
+                    close()
+                }
+                drawPath(
+                    path = wavePath,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0x9900C2A8),
+                            Color(0xDD00C2A8),
+                            Color(0xFF00C2A8)
+                        ),
+                        startY = size.height - crestHeight,
+                        endY = size.height
+                    )
+                )
+
+                // (c) Subtle expanding ripple animation below selected icon
+                if (rippleProgress.value > 0f && rippleProgress.value < 1f) {
+                    val progress = rippleProgress.value
+                    val rippleRadiusPx = 10.dp.toPx() + (26.dp.toPx() * progress)
+                    val rippleAlpha = (1f - progress) * 0.55f
+                    val strokeWidth = 2.dp.toPx() * (1f - progress * 0.6f)
+
+                    drawOval(
+                        color = Color(0xFF00C2A8).copy(alpha = rippleAlpha),
+                        topLeft = Offset(
+                            x = waveCenterX - rippleRadiusPx,
+                            y = (size.height - 18.dp.toPx()) - (rippleRadiusPx * 0.45f)
+                        ),
+                        size = Size(
+                            width = rippleRadiusPx * 2f,
+                            height = rippleRadiusPx * 0.9f
+                        ),
+                        style = Stroke(width = strokeWidth)
+                    )
+                }
+
+                // (d) Subtle floating aqua droplets/bubbles near active icon
+                val dropletAlpha = (1f - kotlin.math.abs(animatedIndex - selectedIndex)).coerceIn(0f, 1f)
+                if (dropletAlpha > 0.05f) {
+                    drawCircle(
+                        color = Color(0xFF00C2A8).copy(alpha = 0.55f * dropletAlpha),
+                        radius = 3.dp.toPx(),
+                        center = Offset(waveCenterX - 22.dp.toPx(), 22.dp.toPx())
+                    )
+                    drawCircle(
+                        color = Color(0xFF00C2A8).copy(alpha = 0.45f * dropletAlpha),
+                        radius = 3.5.dp.toPx(),
+                        center = Offset(waveCenterX + 20.dp.toPx(), 25.dp.toPx())
+                    )
+                    drawCircle(
+                        color = Color(0xFF00C2A8).copy(alpha = 0.35f * dropletAlpha),
+                        radius = 2.dp.toPx(),
+                        center = Offset(waveCenterX - 14.dp.toPx(), 36.dp.toPx())
+                    )
+                    drawCircle(
+                        color = Color(0xFF00C2A8).copy(alpha = 0.4f * dropletAlpha),
+                        radius = 2.dp.toPx(),
+                        center = Offset(waveCenterX + 16.dp.toPx(), 38.dp.toPx())
+                    )
+                }
+            }
 
             // 2. Interactive Navigation Tabs Row
             Row(
@@ -1325,28 +1432,61 @@ fun BottomNavigationBar(
                 items.forEach { item ->
                     val isSelected = item == selectedTab
 
+                    // Smooth spring bounce upward for active icon
+                    val bounceOffset by animateDpAsState(
+                        targetValue = if (isSelected) (-8).dp else 0.dp,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
+                        label = "bounceOffset_${item.title}"
+                    )
+
+                    // Spring scale for icon
                     val iconScale by animateFloatAsState(
-                        targetValue = if (isSelected) 1.15f else 1.0f,
+                        targetValue = if (isSelected) 1.18f else 1.0f,
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioMediumBouncy,
                             stiffness = Spring.StiffnessMedium
                         ),
-                        label = "iconScale"
+                        label = "iconScale_${item.title}"
                     )
 
-                    val textScale by animateFloatAsState(
+                    // Soft circular highlight alpha & scale behind active icon
+                    val highlightAlpha by animateFloatAsState(
+                        targetValue = if (isSelected) 1f else 0f,
+                        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                        label = "highlightAlpha_${item.title}"
+                    )
+                    val highlightScale by animateFloatAsState(
+                        targetValue = if (isSelected) 1f else 0.5f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
+                        label = "highlightScale_${item.title}"
+                    )
+
+                    // Active icon: Dusky Aqua (0xFF00C2A8); Inactive: Dark Teal (0xFF134E5E)
+                    val iconTint by animateColorAsState(
+                        targetValue = if (isSelected) Color(0xFF00C2A8) else Color(0xFF134E5E),
+                        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                        label = "iconTint_${item.title}"
+                    )
+
+                    // Active text: Bold Dusky Aqua (0xFF0D9488); Inactive: Dark Teal (0xFF134E5E)
+                    val labelColor by animateColorAsState(
+                        targetValue = if (isSelected) Color(0xFF0D9488) else Color(0xFF134E5E),
+                        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                        label = "labelColor_${item.title}"
+                    )
+                    val labelScale by animateFloatAsState(
                         targetValue = if (isSelected) 1.05f else 1.0f,
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioMediumBouncy,
                             stiffness = Spring.StiffnessMedium
                         ),
-                        label = "textScale"
-                    )
-
-                    val iconTint by animateColorAsState(
-                        targetValue = if (isSelected) Color.White else Color(0xFF64748B),
-                        animationSpec = tween(220, easing = FastOutSlowInEasing),
-                        label = "iconTint"
+                        label = "labelScale_${item.title}"
                     )
 
                     Box(
@@ -1354,35 +1494,66 @@ fun BottomNavigationBar(
                             .weight(1f)
                             .fillMaxHeight()
                             .clip(RoundedCornerShape(24.dp))
-                            .clickable { onTabSelected(item) },
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                onTabSelected(item)
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
+                            // Icon Box with smooth spring bounce upward and soft aqua highlight
                             Box(
-                                modifier = Modifier.size(38.dp),
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .offset(y = bounceOffset),
                                 contentAlignment = Alignment.Center
                             ) {
+                                // Soft aqua circular highlight behind active icon
+                                if (highlightAlpha > 0.01f) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(42.dp)
+                                            .graphicsLayer(
+                                                scaleX = highlightScale,
+                                                scaleY = highlightScale,
+                                                alpha = highlightAlpha
+                                            )
+                                            .background(
+                                                brush = Brush.radialGradient(
+                                                    colors = listOf(
+                                                        Color(0x4000C2A8),
+                                                        Color(0x1800C2A8),
+                                                        Color.Transparent
+                                                    )
+                                                ),
+                                                shape = CircleShape
+                                            )
+                                    )
+                                }
+
                                 Icon(
-                                    imageVector = if (item == BottomNavItem.AI) Icons.Default.AutoAwesome else if (isSelected) item.selectedIcon else item.unselectedIcon,
+                                    imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
                                     contentDescription = item.title,
                                     tint = iconTint,
                                     modifier = Modifier
-                                        .size(20.dp)
+                                        .size(24.dp)
                                         .graphicsLayer(scaleX = iconScale, scaleY = iconScale)
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(2.dp))
+                            Spacer(modifier = Modifier.height(1.dp))
 
                             Text(
                                 text = item.title,
                                 fontSize = 11.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isSelected) Color(0xFF0D9488) else Color(0xFF64748B),
-                                modifier = Modifier.graphicsLayer(scaleX = textScale, scaleY = textScale)
+                                color = labelColor,
+                                modifier = Modifier.graphicsLayer(scaleX = labelScale, scaleY = labelScale)
                             )
                         }
                     }
