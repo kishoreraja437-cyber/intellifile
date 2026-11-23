@@ -946,11 +946,11 @@ fun MainScreen(
                             transitionSpec = {
                                 val forward = targetState.ordinal > initialState.ordinal
                                 if (forward) {
-                                    (slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { (it * 0.12f).toInt() } + fadeIn(tween(260)))
-                                        .togetherWith(slideOutHorizontally(tween(220, easing = FastOutSlowInEasing)) { -(it * 0.12f).toInt() } + fadeOut(tween(180)))
+                                    (slideInHorizontally(tween(220, easing = FastOutSlowInEasing)) { (it * 0.08f).toInt() } + fadeIn(tween(200)))
+                                        .togetherWith(slideOutHorizontally(tween(180, easing = FastOutSlowInEasing)) { -(it * 0.08f).toInt() } + fadeOut(tween(160)))
                                 } else {
-                                    (slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { -(it * 0.12f).toInt() } + fadeIn(tween(260)))
-                                        .togetherWith(slideOutHorizontally(tween(220, easing = FastOutSlowInEasing)) { (it * 0.12f).toInt() } + fadeOut(tween(180)))
+                                    (slideInHorizontally(tween(220, easing = FastOutSlowInEasing)) { -(it * 0.08f).toInt() } + fadeIn(tween(200)))
+                                        .togetherWith(slideOutHorizontally(tween(180, easing = FastOutSlowInEasing)) { (it * 0.08f).toInt() } + fadeOut(tween(160)))
                                 }
                             },
                             label = "tabScreenSlideTransition"
@@ -1264,12 +1264,12 @@ fun BottomNavigationBar(
     val items = remember { BottomNavItem.entries }
     val selectedIndex = items.indexOf(selectedTab).coerceAtLeast(0)
 
-    // Smooth physics-based gliding index for liquid wave & highlight transitions across tabs
+    // Ultra-smooth physics glide for the liquid wave across tabs
     val animatedIndex by animateFloatAsState(
         targetValue = selectedIndex.toFloat(),
         animationSpec = spring(
-            dampingRatio = 0.74f,
-            stiffness = Spring.StiffnessMediumLow
+            dampingRatio = 0.82f, // Gentle, controlled settle with zero harsh snap
+            stiffness = 550f      // Responsive, fluid gliding without dragging lag
         ),
         label = "bottomNavWaveIndex"
     )
@@ -1280,9 +1280,13 @@ fun BottomNavigationBar(
         rippleProgress.snapTo(0f)
         rippleProgress.animateTo(
             targetValue = 1f,
-            animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing)
+            animationSpec = tween(durationMillis = 500, easing = FastOutSlowInEasing)
         )
     }
+
+    // Reusable Path objects to avoid frame-by-frame heap allocations during animation
+    val bgPath = remember { Path() }
+    val wavePath = remember { Path() }
 
     Box(
         modifier = modifier
@@ -1296,7 +1300,7 @@ fun BottomNavigationBar(
                 .fillMaxWidth()
                 .height(72.dp)
                 .shadow(
-                    elevation = 10.dp,
+                    elevation = 8.dp,
                     shape = RoundedCornerShape(32.dp),
                     spotColor = Color(0x3800C2A8),
                     ambientColor = Color(0x1800C2A8)
@@ -1305,7 +1309,7 @@ fun BottomNavigationBar(
                 .background(Color.White)
                 .border(1.dp, Color(0xFFD8F1F4), RoundedCornerShape(32.dp))
         ) {
-            // 1. Canvas Layer: Liquid Wave Contour, Subtle Ripple Ring & Floating Droplets
+            // 1. Canvas Layer: Zero-Allocation Fluid Liquid Wave & Expanding Ripple Ring
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val tabWidth = size.width / items.size
                 val waveCenterX = tabWidth * (animatedIndex + 0.5f)
@@ -1313,24 +1317,27 @@ fun BottomNavigationBar(
                 val waveSpan = tabWidth * 1.55f
 
                 // (a) Ambient soft aqua glow wave (background layer)
-                val bgPath = Path().apply {
-                    val bgSpan = tabWidth * 1.9f
-                    val bgHeight = 16.dp.toPx()
-                    moveTo((waveCenterX - bgSpan).coerceAtLeast(0f), size.height)
-                    cubicTo(
-                        x1 = waveCenterX - bgSpan * 0.55f, y1 = size.height,
-                        x2 = waveCenterX - bgSpan * 0.32f, y2 = size.height - bgHeight,
-                        x3 = waveCenterX, y3 = size.height - bgHeight
-                    )
-                    cubicTo(
-                        x1 = waveCenterX + bgSpan * 0.32f, y1 = size.height - bgHeight,
-                        x2 = waveCenterX + bgSpan * 0.55f, y2 = size.height,
-                        x3 = (waveCenterX + bgSpan).coerceAtMost(size.width), y3 = size.height
-                    )
-                    lineTo(size.width, size.height)
-                    lineTo(0f, size.height)
-                    close()
-                }
+                val bgSpan = tabWidth * 1.85f
+                val bgHeight = 15.dp.toPx()
+                val bgStartX = (waveCenterX - bgSpan).coerceAtLeast(0f)
+                val bgEndX = (waveCenterX + bgSpan).coerceAtMost(size.width)
+
+                bgPath.reset()
+                bgPath.moveTo(0f, size.height)
+                bgPath.lineTo(bgStartX, size.height)
+                bgPath.cubicTo(
+                    bgStartX + bgSpan * 0.45f, size.height,
+                    waveCenterX - bgSpan * 0.28f, size.height - bgHeight,
+                    waveCenterX, size.height - bgHeight
+                )
+                bgPath.cubicTo(
+                    waveCenterX + bgSpan * 0.28f, size.height - bgHeight,
+                    bgEndX - bgSpan * 0.45f, size.height,
+                    bgEndX, size.height
+                )
+                bgPath.lineTo(size.width, size.height)
+                bgPath.close()
+
                 drawPath(
                     path = bgPath,
                     brush = Brush.verticalGradient(
@@ -1344,23 +1351,26 @@ fun BottomNavigationBar(
                     )
                 )
 
-                // (b) Primary vibrant liquid wave contour (foreground wave matching reference design)
-                val wavePath = Path().apply {
-                    moveTo((waveCenterX - waveSpan).coerceAtLeast(0f), size.height)
-                    cubicTo(
-                        x1 = waveCenterX - waveSpan * 0.5f, y1 = size.height,
-                        x2 = waveCenterX - waveSpan * 0.26f, y2 = size.height - crestHeight,
-                        x3 = waveCenterX, y3 = size.height - crestHeight
-                    )
-                    cubicTo(
-                        x1 = waveCenterX + waveSpan * 0.26f, y1 = size.height - crestHeight,
-                        x2 = waveCenterX + waveSpan * 0.5f, y2 = size.height,
-                        x3 = (waveCenterX + waveSpan).coerceAtMost(size.width), y3 = size.height
-                    )
-                    lineTo(size.width, size.height)
-                    lineTo(0f, size.height)
-                    close()
-                }
+                // (b) Primary vibrant liquid wave contour (foreground wave)
+                val waveStartX = (waveCenterX - waveSpan).coerceAtLeast(0f)
+                val waveEndX = (waveCenterX + waveSpan).coerceAtMost(size.width)
+
+                wavePath.reset()
+                wavePath.moveTo(0f, size.height)
+                wavePath.lineTo(waveStartX, size.height)
+                wavePath.cubicTo(
+                    waveStartX + waveSpan * 0.42f, size.height,
+                    waveCenterX - waveSpan * 0.24f, size.height - crestHeight,
+                    waveCenterX, size.height - crestHeight
+                )
+                wavePath.cubicTo(
+                    waveCenterX + waveSpan * 0.24f, size.height - crestHeight,
+                    waveEndX - waveSpan * 0.42f, size.height,
+                    waveEndX, size.height
+                )
+                wavePath.lineTo(size.width, size.height)
+                wavePath.close()
+
                 drawPath(
                     path = wavePath,
                     brush = Brush.verticalGradient(
@@ -1374,12 +1384,12 @@ fun BottomNavigationBar(
                     )
                 )
 
-                // (c) Subtle expanding ripple animation below selected icon
-                if (rippleProgress.value > 0f && rippleProgress.value < 1f) {
-                    val progress = rippleProgress.value
-                    val rippleRadiusPx = 10.dp.toPx() + (26.dp.toPx() * progress)
-                    val rippleAlpha = (1f - progress) * 0.55f
-                    val strokeWidth = 2.dp.toPx() * (1f - progress * 0.6f)
+                // (c) Expanding subtle ripple animation below selected icon
+                val rippleVal = rippleProgress.value
+                if (rippleVal in 0.001f..0.999f) {
+                    val rippleRadiusPx = 10.dp.toPx() + (26.dp.toPx() * rippleVal)
+                    val rippleAlpha = (1f - rippleVal) * 0.5f
+                    val strokeWidth = 2.dp.toPx() * (1f - rippleVal * 0.6f)
 
                     drawOval(
                         color = Color(0xFF00C2A8).copy(alpha = rippleAlpha),
@@ -1395,7 +1405,7 @@ fun BottomNavigationBar(
                     )
                 }
 
-                // (d) Subtle floating aqua droplets/bubbles near active icon
+                // (d) Subtle floating aqua droplets near active icon
                 val dropletAlpha = (1f - kotlin.math.abs(animatedIndex - selectedIndex)).coerceIn(0f, 1f)
                 if (dropletAlpha > 0.05f) {
                     drawCircle(
@@ -1436,18 +1446,18 @@ fun BottomNavigationBar(
                     val bounceOffset by animateDpAsState(
                         targetValue = if (isSelected) (-8).dp else 0.dp,
                         animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessMediumLow
+                            dampingRatio = 0.65f, // Responsive bouncy feel
+                            stiffness = 750f       // Quick, natural settle
                         ),
                         label = "bounceOffset_${item.title}"
                     )
 
                     // Spring scale for icon
                     val iconScale by animateFloatAsState(
-                        targetValue = if (isSelected) 1.18f else 1.0f,
+                        targetValue = if (isSelected) 1.16f else 1.0f,
                         animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessMedium
+                            dampingRatio = 0.68f,
+                            stiffness = 750f
                         ),
                         label = "iconScale_${item.title}"
                     )
@@ -1455,14 +1465,14 @@ fun BottomNavigationBar(
                     // Soft circular highlight alpha & scale behind active icon
                     val highlightAlpha by animateFloatAsState(
                         targetValue = if (isSelected) 1f else 0f,
-                        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
                         label = "highlightAlpha_${item.title}"
                     )
                     val highlightScale by animateFloatAsState(
                         targetValue = if (isSelected) 1f else 0.5f,
                         animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessMediumLow
+                            dampingRatio = 0.7f,
+                            stiffness = 700f
                         ),
                         label = "highlightScale_${item.title}"
                     )
@@ -1470,24 +1480,26 @@ fun BottomNavigationBar(
                     // Active icon: Dusky Aqua (0xFF00C2A8); Inactive: Dark Teal (0xFF134E5E)
                     val iconTint by animateColorAsState(
                         targetValue = if (isSelected) Color(0xFF00C2A8) else Color(0xFF134E5E),
-                        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
                         label = "iconTint_${item.title}"
                     )
 
                     // Active text: Bold Dusky Aqua (0xFF0D9488); Inactive: Dark Teal (0xFF134E5E)
                     val labelColor by animateColorAsState(
                         targetValue = if (isSelected) Color(0xFF0D9488) else Color(0xFF134E5E),
-                        animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
                         label = "labelColor_${item.title}"
                     )
                     val labelScale by animateFloatAsState(
                         targetValue = if (isSelected) 1.05f else 1.0f,
                         animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessMedium
+                            dampingRatio = 0.7f,
+                            stiffness = 700f
                         ),
                         label = "labelScale_${item.title}"
                     )
+
+                    val interactionSource = remember(item) { MutableInteractionSource() }
 
                     Box(
                         modifier = Modifier
@@ -1495,7 +1507,7 @@ fun BottomNavigationBar(
                             .fillMaxHeight()
                             .clip(RoundedCornerShape(24.dp))
                             .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
+                                interactionSource = interactionSource,
                                 indication = null
                             ) {
                                 onTabSelected(item)
@@ -1506,35 +1518,35 @@ fun BottomNavigationBar(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
-                            // Icon Box with smooth spring bounce upward and soft aqua highlight
+                            // Icon Box with GPU-accelerated graphicsLayer translation (zero recomposition/relayout)
                             Box(
                                 modifier = Modifier
                                     .size(42.dp)
-                                    .offset(y = bounceOffset),
+                                    .graphicsLayer {
+                                        translationY = bounceOffset.toPx()
+                                    },
                                 contentAlignment = Alignment.Center
                             ) {
-                                // Soft aqua circular highlight behind active icon
-                                if (highlightAlpha > 0.01f) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(42.dp)
-                                            .graphicsLayer(
-                                                scaleX = highlightScale,
-                                                scaleY = highlightScale,
-                                                alpha = highlightAlpha
-                                            )
-                                            .background(
-                                                brush = Brush.radialGradient(
-                                                    colors = listOf(
-                                                        Color(0x4000C2A8),
-                                                        Color(0x1800C2A8),
-                                                        Color.Transparent
-                                                    )
-                                                ),
-                                                shape = CircleShape
-                                            )
-                                    )
-                                }
+                                // Soft aqua circular highlight behind active icon (deferred to draw layer)
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .graphicsLayer {
+                                            scaleX = highlightScale
+                                            scaleY = highlightScale
+                                            alpha = highlightAlpha
+                                        }
+                                        .background(
+                                            brush = Brush.radialGradient(
+                                                colors = listOf(
+                                                    Color(0x4000C2A8),
+                                                    Color(0x1800C2A8),
+                                                    Color.Transparent
+                                                )
+                                            ),
+                                            shape = CircleShape
+                                        )
+                                )
 
                                 Icon(
                                     imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
@@ -1542,7 +1554,10 @@ fun BottomNavigationBar(
                                     tint = iconTint,
                                     modifier = Modifier
                                         .size(24.dp)
-                                        .graphicsLayer(scaleX = iconScale, scaleY = iconScale)
+                                        .graphicsLayer {
+                                            scaleX = iconScale
+                                            scaleY = iconScale
+                                        }
                                 )
                             }
 
@@ -1553,7 +1568,10 @@ fun BottomNavigationBar(
                                 fontSize = 11.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                 color = labelColor,
-                                modifier = Modifier.graphicsLayer(scaleX = labelScale, scaleY = labelScale)
+                                modifier = Modifier.graphicsLayer {
+                                    scaleX = labelScale
+                                    scaleY = labelScale
+                                }
                             )
                         }
                     }
