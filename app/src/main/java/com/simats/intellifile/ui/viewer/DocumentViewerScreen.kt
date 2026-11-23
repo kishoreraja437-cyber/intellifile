@@ -187,7 +187,7 @@ fun DocumentViewerScreen(
     var isFullscreenSlideshow by remember { mutableStateOf(false) }
 
     fun openWithExternalApp() {
-        try {
+        try {  
             var fileToOpen: java.io.File? = null
             if (filePath.isNotBlank()) {
                 val f = java.io.File(filePath)
