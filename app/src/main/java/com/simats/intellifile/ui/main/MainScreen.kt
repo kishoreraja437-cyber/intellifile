@@ -929,7 +929,21 @@ fun MainScreen(
 
 
 
-                        else -> when (selectedTab) {
+                        else -> AnimatedContent(
+                            targetState = selectedTab,
+                            transitionSpec = {
+                                val forward = targetState.ordinal > initialState.ordinal
+                                if (forward) {
+                                    (slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { (it * 0.12f).toInt() } + fadeIn(tween(260)))
+                                        .togetherWith(slideOutHorizontally(tween(220, easing = FastOutSlowInEasing)) { -(it * 0.12f).toInt() } + fadeOut(tween(180)))
+                                } else {
+                                    (slideInHorizontally(tween(260, easing = FastOutSlowInEasing)) { -(it * 0.12f).toInt() } + fadeIn(tween(260)))
+                                        .togetherWith(slideOutHorizontally(tween(220, easing = FastOutSlowInEasing)) { (it * 0.12f).toInt() } + fadeOut(tween(180)))
+                                }
+                            },
+                            label = "tabScreenSlideTransition"
+                        ) { tab ->
+                            when (tab) {
 
                             BottomNavItem.HOME -> HomeScreen(
                                 priorityUpdateVersion = priorityUpdateVersion,
@@ -1178,6 +1192,7 @@ fun MainScreen(
                             )
 
                         }
+                        }
 
                     }
 
@@ -1229,75 +1244,89 @@ fun MainScreen(
 
 
 @Composable
-
 fun BottomNavigationBar(
-
     selectedTab: BottomNavItem,
-
     onTabSelected: (BottomNavItem) -> Unit,
-
     modifier: Modifier = Modifier
-
 ) {
-
     val items = BottomNavItem.entries
 
-
-
     Box(
-
         modifier = modifier
-
             .fillMaxWidth()
-
             .padding(horizontal = 16.dp, vertical = 8.dp),
-
         contentAlignment = Alignment.Center
-
     ) {
-
-        // Floating Rounded Glass Pill Container
-
-        Box(
-
+        // Floating Rounded Glass Pill Container with Smooth Physics Slider
+        BoxWithConstraints(
             modifier = Modifier
-
                 .fillMaxWidth()
-
                 .height(68.dp)
-
                 .shadow(8.dp, RoundedCornerShape(32.dp))
-
                 .clip(RoundedCornerShape(32.dp))
-
                 .background(Color.White)
-
                 .border(1.dp, Color(0xFFE2EEF8), RoundedCornerShape(32.dp))
-
         ) {
+            val totalWidth = maxWidth
+            val tabCount = items.size
+            val tabWidth = totalWidth / tabCount
+            val selectedIndex = items.indexOf(selectedTab).coerceAtLeast(0)
 
-            Row(
+            // Smooth physics-based continuous animated index for gliding slider
+            val animatedIndex by animateFloatAsState(
+                targetValue = selectedIndex.toFloat(),
+                animationSpec = spring(
+                    dampingRatio = 0.74f, // Fluid bounce without excess oscillation
+                    stiffness = Spring.StiffnessMediumLow // Smooth, responsive glide
+                ),
+                label = "navSliderPosition"
+            )
 
+            // Dynamic velocity / delta for elastic fluid stretch
+            val delta = (selectedIndex - animatedIndex)
+            val absDelta = kotlin.math.abs(delta).coerceAtMost(1.5f)
+            val basePillWidth = 44.dp
+            val dynamicWidth = basePillWidth + (14.dp * absDelta).coerceAtMost(16.dp)
+
+            // Exact center coordinates for the sliding pill
+            val indicatorCenterX = tabWidth * (animatedIndex + 0.5f)
+            val indicatorLeft = indicatorCenterX - (dynamicWidth / 2f)
+
+            // 1. Sliding Glowing Gradient Pill (The Smooth Slider Effect)
+            Box(
                 modifier = Modifier
+                    .offset(x = indicatorLeft, y = 8.dp)
+                    .size(width = dynamicWidth, height = 38.dp)
+                    .shadow(
+                        elevation = 6.dp,
+                        shape = RoundedCornerShape(20.dp),
+                        spotColor = Color(0xFF00C2A8),
+                        ambientColor = Color(0x3300C2A8)
+                    )
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color(0xFF00C2A8),
+                                Color(0xFF55A9AF)
+                            )
+                        )
+                    )
+            )
 
+            // 2. Interactive Navigation Tabs Row
+            Row(
+                modifier = Modifier
                     .fillMaxSize()
-
                     .padding(horizontal = 4.dp),
-
                 verticalAlignment = Alignment.CenterVertically,
-
                 horizontalArrangement = Arrangement.SpaceAround
-
             ) {
-
                 items.forEach { item ->
-
                     val isSelected = item == selectedTab
 
-
-
                     val iconScale by animateFloatAsState(
-                        targetValue = if (isSelected) 1.14f else 1.0f,
+                        targetValue = if (isSelected) 1.15f else 1.0f,
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioMediumBouncy,
                             stiffness = Spring.StiffnessMedium
@@ -1305,131 +1334,62 @@ fun BottomNavigationBar(
                         label = "iconScale"
                     )
 
-                    val pillSize by animateDpAsState(
-                        targetValue = if (isSelected) 38.dp else 30.dp,
+                    val textScale by animateFloatAsState(
+                        targetValue = if (isSelected) 1.05f else 1.0f,
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessMediumLow
+                            stiffness = Spring.StiffnessMedium
                         ),
-                        label = "pillSize"
+                        label = "textScale"
                     )
 
                     val iconTint by animateColorAsState(
                         targetValue = if (isSelected) Color.White else Color(0xFF64748B),
-                        animationSpec = tween(220),
+                        animationSpec = tween(220, easing = FastOutSlowInEasing),
                         label = "iconTint"
                     )
 
-
-
                     Box(
-
                         modifier = Modifier
-
                             .weight(1f)
-
                             .fillMaxHeight()
-
                             .clip(RoundedCornerShape(24.dp))
-
                             .clickable { onTabSelected(item) },
-
                         contentAlignment = Alignment.Center
-
                     ) {
-
                         Column(
-
                             horizontalAlignment = Alignment.CenterHorizontally,
-
                             verticalArrangement = Arrangement.Center
-
                         ) {
-
                             Box(
-
-                                modifier = Modifier
-
-                                    .size(pillSize)
-
-                                    .clip(CircleShape)
-
-                                    .background(
-
-                                        if (isSelected) {
-
-                                            Brush.linearGradient(
-
-                                                colors = listOf(
-
-                                                    Color(0xFF00C2A8),
-
-                                                    Color(0xFF55A9AF)
-
-                                                )
-
-                                            )
-
-                                        } else {
-
-                                            Brush.linearGradient(colors = listOf(Color.Transparent, Color.Transparent))
-
-                                        }
-
-                                    ),
-
+                                modifier = Modifier.size(38.dp),
                                 contentAlignment = Alignment.Center
-
                             ) {
-
                                 Icon(
-
                                     imageVector = if (item == BottomNavItem.AI) Icons.Default.AutoAwesome else if (isSelected) item.selectedIcon else item.unselectedIcon,
-
                                     contentDescription = item.title,
-
                                     tint = iconTint,
-
                                     modifier = Modifier
-
                                         .size(20.dp)
-
                                         .graphicsLayer(scaleX = iconScale, scaleY = iconScale)
-
                                 )
-
                             }
-
-
 
                             Spacer(modifier = Modifier.height(2.dp))
 
-
-
                             Text(
-
                                 text = item.title,
-
                                 fontSize = 11.sp,
-
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-
-                                color = if (isSelected) Color(0xFF0D9488) else Color(0xFF64748B)
-
+                                color = if (isSelected) Color(0xFF0D9488) else Color(0xFF64748B),
+                                modifier = Modifier.graphicsLayer(scaleX = textScale, scaleY = textScale)
                             )
-
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }
 
 
