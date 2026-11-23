@@ -73,6 +73,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.simats.intellifile.data.local.LocalFileDatabaseHelper
 import com.simats.intellifile.data.manager.LocalFileManager
 import com.simats.intellifile.data.model.DocumentDto
@@ -180,13 +183,6 @@ fun MyFilesScreen(
         }
     }
 
-    // Query real local document files
-    LaunchedEffect(refreshTrigger, priorityUpdateVersion) {
-        isLoadingDeviceFiles = true
-        realFiles = LocalFileManager.getDeviceFiles(context)
-        isLoadingDeviceFiles = false
-    }
-
     // Function to load IntelliSpace documents
     fun loadVault() {
         coroutineScope.launch {
@@ -201,7 +197,30 @@ fun MyFilesScreen(
         }
     }
 
-    // Load vault docs when switching to IntelliSpace tab
+    // Automatically refresh on resume whenever files are added, modified, or deleted across screens
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refreshTrigger++
+                loadVault()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    // Query real local document files and all stored IntelliSpace files
+    LaunchedEffect(refreshTrigger, priorityUpdateVersion) {
+        isLoadingDeviceFiles = true
+        realFiles = LocalFileManager.getDeviceFiles(context)
+        isLoadingDeviceFiles = false
+        loadVault()
+    }
+
+    // Ensure vault docs are refreshed when switching to IntelliSpace tab
     LaunchedEffect(selectedSource) {
         if (selectedSource == StorageSourceTab.INTELLISPACE) {
             loadVault()
@@ -267,7 +286,15 @@ fun MyFilesScreen(
     val lowCount = remember(realFiles) { realFiles.count { it.priority == PriorityLevel.LOW } }
     val unprioritizedCount = remember(realFiles) { realFiles.count { it.priority == null } }
 
-    val vaultFilesCount = vaultDocuments.size.coerceAtLeast(realFiles.count { it.isVaultSynced })
+    // Deduplicate vault documents by title (case-insensitive) to accurately count stored files without duplicates
+    val distinctVaultDocs = remember(vaultDocuments) {
+        vaultDocuments.distinctBy { it.title.trim().lowercase() }
+    }
+    val vaultFilesCount = if (distinctVaultDocs.isNotEmpty()) {
+        distinctVaultDocs.size
+    } else {
+        realFiles.count { it.isVaultSynced }
+    }
     val totalPrioritized = importantCount + normalCount + lowCount
 
     val importantSweep = if (totalPrioritized > 0) (importantCount.toFloat() / totalPrioritized) * 360f else 0f
@@ -1108,7 +1135,7 @@ fun MyFilesScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "IntelliSpace Documents (${vaultDocuments.size})",
+                                text = "IntelliSpace Documents ($vaultFilesCount)",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF111827)
@@ -1124,7 +1151,7 @@ fun MyFilesScreen(
                     }
 
                     // Empty State or List of IntelliSpace Documents
-                    if (vaultDocuments.isEmpty() && !isVaultLoading) {
+                    if (distinctVaultDocs.isEmpty() && !isVaultLoading) {
                         item {
                             Column(
                                 modifier = Modifier
@@ -1160,7 +1187,7 @@ fun MyFilesScreen(
                             }
                         }
                     } else {
-                        items(vaultDocuments) { doc ->
+                        items(distinctVaultDocs, key = { it.id }) { doc ->
                             VaultDocumentCard(
                                 doc = doc,
                                 isLoadingFile = resolvingDocId == doc.id,

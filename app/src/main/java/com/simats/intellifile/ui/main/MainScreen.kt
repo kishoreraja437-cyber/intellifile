@@ -12,6 +12,8 @@ import androidx.compose.animation.core.Spring
 
 import androidx.compose.animation.core.animateDpAsState
 
+import androidx.compose.animation.core.animateFloat
+
 import androidx.compose.animation.core.animateFloatAsState
 
 import androidx.compose.animation.core.spring
@@ -25,6 +27,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -33,6 +39,7 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.ui.graphics.StrokeCap
 
 import androidx.compose.foundation.Canvas
 
@@ -1268,8 +1275,8 @@ fun BottomNavigationBar(
     val animatedIndex by animateFloatAsState(
         targetValue = selectedIndex.toFloat(),
         animationSpec = spring(
-            dampingRatio = 0.82f, // Gentle, controlled settle with zero harsh snap
-            stiffness = 550f      // Responsive, fluid gliding without dragging lag
+            dampingRatio = 0.80f, // Gentle, controlled settle with zero harsh snap
+            stiffness = 500f      // Responsive, fluid gliding across tabs
         ),
         label = "bottomNavWaveIndex"
     )
@@ -1284,41 +1291,81 @@ fun BottomNavigationBar(
         )
     }
 
+    // Gentle continuous floating motion for aquatic bubbles
+    val infiniteTransition = rememberInfiniteTransition(label = "bubbleTransition")
+    val bubblePhase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 6.28318f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "bubblePhase"
+    )
+
     // Reusable Path objects to avoid frame-by-frame heap allocations during animation
     val bgPath = remember { Path() }
     val wavePath = remember { Path() }
+    val crestOutlinePath = remember { Path() }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .navigationBarsPadding(),
         contentAlignment = Alignment.Center
     ) {
-        // Floating Rounded White Pill Container with Subtle Aqua Shadow
+        // Floating Dark Aquatic Capsule Pill with Luminous Glowing Neon Cyan Border
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(72.dp)
+                .height(74.dp)
                 .shadow(
-                    elevation = 8.dp,
-                    shape = RoundedCornerShape(32.dp),
-                    spotColor = Color(0x3800C2A8),
-                    ambientColor = Color(0x1800C2A8)
+                    elevation = 14.dp,
+                    shape = RoundedCornerShape(37.dp),
+                    spotColor = Color(0x9900FFE0),
+                    ambientColor = Color(0x6600E5FF)
                 )
-                .clip(RoundedCornerShape(32.dp))
-                .background(Color.White)
-                .border(1.dp, Color(0xFFD8F1F4), RoundedCornerShape(32.dp))
+                .clip(RoundedCornerShape(37.dp))
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF04222B),
+                            Color(0xFF02171E),
+                            Color(0xFF011116)
+                        )
+                    )
+                )
+                .border(
+                    width = 1.8.dp,
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color(0xFF00C2A8),
+                            Color(0xFF00FFE0),
+                            Color(0xFF00E5FF),
+                            Color(0xFF00FFE0),
+                            Color(0xFF00C2A8)
+                        )
+                    ),
+                    shape = RoundedCornerShape(37.dp)
+                )
         ) {
-            // 1. Canvas Layer: Zero-Allocation Fluid Liquid Wave & Expanding Ripple Ring
+            // 1. Canvas Layer: Zero-Allocation Fluid Liquid Wave, Glowing Crest, Bubbles & Ripple
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val tabWidth = size.width / items.size
                 val waveCenterX = tabWidth * (animatedIndex + 0.5f)
-                val crestHeight = 22.dp.toPx()
-                val waveSpan = tabWidth * 1.55f
+                val crestHeight = 29.dp.toPx()
+                val baseStreamHeight = 7.dp.toPx()
+                val waveSpan = tabWidth * 1.32f
 
-                // (a) Ambient soft aqua glow wave (background layer)
-                val bgSpan = tabWidth * 1.85f
-                val bgHeight = 15.dp.toPx()
+                val crestY = size.height - crestHeight
+                val baseY = size.height - baseStreamHeight
+                val waveStartX = (waveCenterX - waveSpan).coerceAtLeast(0f)
+                val waveEndX = (waveCenterX + waveSpan).coerceAtMost(size.width)
+
+                // (a) Ambient soft aqua glow wave (depth layer)
+                val bgSpan = tabWidth * 1.65f
+                val bgHeight = 18.dp.toPx()
                 val bgStartX = (waveCenterX - bgSpan).coerceAtLeast(0f)
                 val bgEndX = (waveCenterX + bgSpan).coerceAtMost(size.width)
 
@@ -1327,11 +1374,11 @@ fun BottomNavigationBar(
                 bgPath.lineTo(bgStartX, size.height)
                 bgPath.cubicTo(
                     bgStartX + bgSpan * 0.45f, size.height,
-                    waveCenterX - bgSpan * 0.28f, size.height - bgHeight,
+                    waveCenterX - bgSpan * 0.25f, size.height - bgHeight,
                     waveCenterX, size.height - bgHeight
                 )
                 bgPath.cubicTo(
-                    waveCenterX + bgSpan * 0.28f, size.height - bgHeight,
+                    waveCenterX + bgSpan * 0.25f, size.height - bgHeight,
                     bgEndX - bgSpan * 0.45f, size.height,
                     bgEndX, size.height
                 )
@@ -1342,32 +1389,31 @@ fun BottomNavigationBar(
                     path = bgPath,
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color(0x3300C2A8),
-                            Color(0x1400C2A8),
+                            Color(0x4000FFE0),
+                            Color(0x1500C2A8),
                             Color.Transparent
                         ),
-                        startY = size.height - 20.dp.toPx(),
+                        startY = size.height - 24.dp.toPx(),
                         endY = size.height
                     )
                 )
 
-                // (b) Primary vibrant liquid wave contour (foreground wave)
-                val waveStartX = (waveCenterX - waveSpan).coerceAtLeast(0f)
-                val waveEndX = (waveCenterX + waveSpan).coerceAtMost(size.width)
-
+                // (b) Primary vibrant liquid wave contour (foreground fluid body)
                 wavePath.reset()
                 wavePath.moveTo(0f, size.height)
-                wavePath.lineTo(waveStartX, size.height)
+                wavePath.lineTo(0f, baseY)
+                wavePath.lineTo(waveStartX, baseY)
                 wavePath.cubicTo(
-                    waveStartX + waveSpan * 0.42f, size.height,
-                    waveCenterX - waveSpan * 0.24f, size.height - crestHeight,
-                    waveCenterX, size.height - crestHeight
+                    waveStartX + waveSpan * 0.40f, baseY,
+                    waveCenterX - waveSpan * 0.22f, crestY,
+                    waveCenterX, crestY
                 )
                 wavePath.cubicTo(
-                    waveCenterX + waveSpan * 0.24f, size.height - crestHeight,
-                    waveEndX - waveSpan * 0.42f, size.height,
-                    waveEndX, size.height
+                    waveCenterX + waveSpan * 0.22f, crestY,
+                    waveEndX - waveSpan * 0.40f, baseY,
+                    waveEndX, baseY
                 )
+                wavePath.lineTo(size.width, baseY)
                 wavePath.lineTo(size.width, size.height)
                 wavePath.close()
 
@@ -1375,24 +1421,61 @@ fun BottomNavigationBar(
                     path = wavePath,
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color(0x9900C2A8),
-                            Color(0xDD00C2A8),
-                            Color(0xFF00C2A8)
+                            Color(0xEE00FFE0),
+                            Color(0xBB00C2A8),
+                            Color(0x66007A8A),
+                            Color(0x18003B46)
                         ),
-                        startY = size.height - crestHeight,
+                        startY = crestY,
                         endY = size.height
                     )
                 )
 
-                // (c) Expanding subtle ripple animation below selected icon
+                // (c) Glowing neon illuminated crest line
+                crestOutlinePath.reset()
+                crestOutlinePath.moveTo(0f, baseY)
+                crestOutlinePath.lineTo(waveStartX, baseY)
+                crestOutlinePath.cubicTo(
+                    waveStartX + waveSpan * 0.40f, baseY,
+                    waveCenterX - waveSpan * 0.22f, crestY,
+                    waveCenterX, crestY
+                )
+                crestOutlinePath.cubicTo(
+                    waveCenterX + waveSpan * 0.22f, crestY,
+                    waveEndX - waveSpan * 0.40f, baseY,
+                    waveEndX, baseY
+                )
+                crestOutlinePath.lineTo(size.width, baseY)
+
+                drawPath(
+                    path = crestOutlinePath,
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color(0x3300FFE0),
+                            Color(0x8800FFE0),
+                            Color(0xFF00FFE0),
+                            Color(0xFF00FFE0),
+                            Color(0x8800FFE0),
+                            Color(0x3300FFE0)
+                        ),
+                        startX = waveStartX,
+                        endX = waveEndX
+                    ),
+                    style = Stroke(
+                        width = 2.2.dp.toPx(),
+                        cap = StrokeCap.Round
+                    )
+                )
+
+                // (d) Expanding subtle ripple animation below selected icon
                 val rippleVal = rippleProgress.value
                 if (rippleVal in 0.001f..0.999f) {
-                    val rippleRadiusPx = 10.dp.toPx() + (26.dp.toPx() * rippleVal)
-                    val rippleAlpha = (1f - rippleVal) * 0.5f
+                    val rippleRadiusPx = 10.dp.toPx() + (28.dp.toPx() * rippleVal)
+                    val rippleAlpha = (1f - rippleVal) * 0.55f
                     val strokeWidth = 2.dp.toPx() * (1f - rippleVal * 0.6f)
 
                     drawOval(
-                        color = Color(0xFF00C2A8).copy(alpha = rippleAlpha),
+                        color = Color(0xFF00FFE0).copy(alpha = rippleAlpha),
                         topLeft = Offset(
                             x = waveCenterX - rippleRadiusPx,
                             y = (size.height - 18.dp.toPx()) - (rippleRadiusPx * 0.45f)
@@ -1405,29 +1488,69 @@ fun BottomNavigationBar(
                     )
                 }
 
-                // (d) Subtle floating aqua droplets near active icon
-                val dropletAlpha = (1f - kotlin.math.abs(animatedIndex - selectedIndex)).coerceIn(0f, 1f)
-                if (dropletAlpha > 0.05f) {
-                    drawCircle(
-                        color = Color(0xFF00C2A8).copy(alpha = 0.55f * dropletAlpha),
-                        radius = 3.dp.toPx(),
-                        center = Offset(waveCenterX - 22.dp.toPx(), 22.dp.toPx())
+                // (e) Bioluminescent floating bubbles with specular reflections around active icon
+                val bubbleTransitionAlpha = (1f - (kotlin.math.abs(animatedIndex - selectedIndex)).coerceIn(0f, 1f) * 0.6f)
+                if (bubbleTransitionAlpha > 0.05f) {
+                    // Bubble definition: xOffsetDp, yDp, radiusDp, phaseOffset, baseAlpha
+                    val bubbleConfigs = listOf(
+                        // Bubble 1: to the left of the icon
+                        Triple(-20f, 22f, 3.4f) to Pair(0.0f, 0.90f),
+                        // Bubble 2: to upper right of the icon
+                        Triple(18f, 17f, 3.8f) to Pair(1.2f, 0.90f),
+                        // Bubble 3: tiny bubble upper-left
+                        Triple(-14f, 14f, 2.0f) to Pair(2.4f, 0.75f),
+                        // Bubble 4: medium bubble right near crest
+                        Triple(23f, 31f, 4.6f) to Pair(0.8f, 0.85f),
+                        // Bubble 5: lower-left bubble
+                        Triple(-24f, 35f, 3.0f) to Pair(1.9f, 0.70f),
+                        // Bubble 6: small lower-right bubble
+                        Triple(16f, 39f, 2.2f) to Pair(3.1f, 0.65f)
                     )
-                    drawCircle(
-                        color = Color(0xFF00C2A8).copy(alpha = 0.45f * dropletAlpha),
-                        radius = 3.5.dp.toPx(),
-                        center = Offset(waveCenterX + 20.dp.toPx(), 25.dp.toPx())
-                    )
-                    drawCircle(
-                        color = Color(0xFF00C2A8).copy(alpha = 0.35f * dropletAlpha),
-                        radius = 2.dp.toPx(),
-                        center = Offset(waveCenterX - 14.dp.toPx(), 36.dp.toPx())
-                    )
-                    drawCircle(
-                        color = Color(0xFF00C2A8).copy(alpha = 0.4f * dropletAlpha),
-                        radius = 2.dp.toPx(),
-                        center = Offset(waveCenterX + 16.dp.toPx(), 38.dp.toPx())
-                    )
+
+                    bubbleConfigs.forEach { (geometry, timing) ->
+                        val (xOffDp, yDp, rDp) = geometry
+                        val (phaseOff, baseAlpha) = timing
+                        val rPx = rDp.dp.toPx()
+
+                        // Gentle sinusoidal floating drift
+                        val driftY = (kotlin.math.sin((bubblePhase + phaseOff).toDouble()).toFloat()) * 2.2f.dp.toPx()
+                        val driftX = (kotlin.math.cos(((bubblePhase * 0.7f) + phaseOff).toDouble()).toFloat()) * 1.2f.dp.toPx()
+                        val bCenter = Offset(
+                            x = waveCenterX + xOffDp.dp.toPx() + driftX,
+                            y = yDp.dp.toPx() + driftY
+                        )
+                        val effAlpha = baseAlpha * bubbleTransitionAlpha
+
+                        // Soft translucent aqua inner glow
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    Color(0x6000FFE0).copy(alpha = effAlpha * 0.6f),
+                                    Color(0x2000C2A8).copy(alpha = effAlpha * 0.3f),
+                                    Color.Transparent
+                                ),
+                                center = bCenter,
+                                radius = rPx * 1.25f
+                            ),
+                            radius = rPx,
+                            center = bCenter
+                        )
+
+                        // Glowing neon cyan outer stroke ring
+                        drawCircle(
+                            color = Color(0xFF00FFE0).copy(alpha = effAlpha),
+                            radius = rPx,
+                            center = bCenter,
+                            style = Stroke(width = 1.2.dp.toPx())
+                        )
+
+                        // Specular glass highlight reflection on top-left of bubble
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.85f * effAlpha),
+                            radius = rPx * 0.28f,
+                            center = bCenter + Offset(-rPx * 0.32f, -rPx * 0.32f)
+                        )
+                    }
                 }
             }
 
@@ -1435,7 +1558,7 @@ fun BottomNavigationBar(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 4.dp),
+                    .padding(horizontal = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceAround
             ) {
@@ -1444,7 +1567,7 @@ fun BottomNavigationBar(
 
                     // Smooth spring bounce upward for active icon
                     val bounceOffset by animateDpAsState(
-                        targetValue = if (isSelected) (-8).dp else 0.dp,
+                        targetValue = if (isSelected) (-6).dp else 0.dp,
                         animationSpec = spring(
                             dampingRatio = 0.65f, // Responsive bouncy feel
                             stiffness = 750f       // Quick, natural settle
@@ -1454,7 +1577,7 @@ fun BottomNavigationBar(
 
                     // Spring scale for icon
                     val iconScale by animateFloatAsState(
-                        targetValue = if (isSelected) 1.16f else 1.0f,
+                        targetValue = if (isSelected) 1.14f else 1.0f,
                         animationSpec = spring(
                             dampingRatio = 0.68f,
                             stiffness = 750f
@@ -1477,21 +1600,21 @@ fun BottomNavigationBar(
                         label = "highlightScale_${item.title}"
                     )
 
-                    // Active icon: Dusky Aqua (0xFF00C2A8); Inactive: Dark Teal (0xFF134E5E)
+                    // Active icon: Radiant glowing aqua (0xFF00FFE0); Inactive: Crisp White (0xF2FFFFFF)
                     val iconTint by animateColorAsState(
-                        targetValue = if (isSelected) Color(0xFF00C2A8) else Color(0xFF134E5E),
+                        targetValue = if (isSelected) Color(0xFF00FFE0) else Color(0xF2FFFFFF),
                         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
                         label = "iconTint_${item.title}"
                     )
 
-                    // Active text: Bold Dusky Aqua (0xFF0D9488); Inactive: Dark Teal (0xFF134E5E)
+                    // Active text: Bold White (0xFFFFFFFF); Inactive: Clean White (0xCCFFFFFF)
                     val labelColor by animateColorAsState(
-                        targetValue = if (isSelected) Color(0xFF0D9488) else Color(0xFF134E5E),
+                        targetValue = if (isSelected) Color(0xFFFFFFFF) else Color(0xCCFFFFFF),
                         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
                         label = "labelColor_${item.title}"
                     )
                     val labelScale by animateFloatAsState(
-                        targetValue = if (isSelected) 1.05f else 1.0f,
+                        targetValue = if (isSelected) 1.04f else 1.0f,
                         animationSpec = spring(
                             dampingRatio = 0.7f,
                             stiffness = 700f
@@ -1518,7 +1641,7 @@ fun BottomNavigationBar(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
-                            // Icon Box with GPU-accelerated graphicsLayer translation (zero recomposition/relayout)
+                            // Icon Box with GPU-accelerated graphicsLayer translation
                             Box(
                                 modifier = Modifier
                                     .size(42.dp)
@@ -1527,7 +1650,7 @@ fun BottomNavigationBar(
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
-                                // Soft aqua circular highlight behind active icon (deferred to draw layer)
+                                // Soft aqua circular highlight behind active icon
                                 Box(
                                     modifier = Modifier
                                         .size(42.dp)
@@ -1539,8 +1662,8 @@ fun BottomNavigationBar(
                                         .background(
                                             brush = Brush.radialGradient(
                                                 colors = listOf(
-                                                    Color(0x4000C2A8),
-                                                    Color(0x1800C2A8),
+                                                    Color(0x6000FFE0),
+                                                    Color(0x2000C2A8),
                                                     Color.Transparent
                                                 )
                                             ),
@@ -1561,7 +1684,7 @@ fun BottomNavigationBar(
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(1.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
 
                             Text(
                                 text = item.title,
