@@ -31,6 +31,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
 import kotlin.math.pow
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -709,40 +710,55 @@ fun VoiceAssistantModal(
             onDismiss()
         },
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = Color(0xFF02171E),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        dragHandle = { BottomSheetDefaults.DragHandle() },
+        dragHandle = {
+            BottomSheetDefaults.DragHandle(
+                color = Color(0xFF265D6B)
+            )
+        },
         modifier = modifier
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF074957),
+                            Color(0xFF042D37),
+                            Color(0xFF02171E)
+                        )
+                    )
+                )
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header Bar
+            // Minimal Sleek Header Bar
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Image(painter = painterResource(id = R.drawable.voice_amoeba_orb), contentDescription = "IntelliFile Voice Assistant", modifier = Modifier.size(30.dp))
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "IntelliFile Voice Assistant",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Navigation · File Search · AI Chat",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (voiceState == AssistantVoiceState.LISTENING) Color(0xFF00E5FF)
+                                else if (voiceState == AssistantVoiceState.SPEAKING) Color(0xFF00C2A8)
+                                else Color(0xFF55A9AF)
+                            )
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "IntelliFile AI Voice",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFB0D0D7)
+                    )
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -755,8 +771,8 @@ fun VoiceAssistantModal(
                         Icon(
                             imageVector = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
                             contentDescription = if (isMuted) "Unmute" else "Mute",
-                            tint = if (isMuted) Color.Gray else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(22.dp)
+                            tint = if (isMuted) Color.Gray else Color(0xFF8EAFB7),
+                            modifier = Modifier.size(20.dp)
                         )
                     }
 
@@ -769,7 +785,8 @@ fun VoiceAssistantModal(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = Color(0xFF8EAFB7),
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
@@ -795,11 +812,19 @@ fun VoiceAssistantModal(
                         )
                     }
                 } else {
-                    // Central Voice Visualizer Orb
+                    // Central Voice Visualizer Orb matching exact design
                     item {
                         VoiceWaveOrb(
                             state = voiceState,
                             soundRms = soundLevelRms,
+                            statusText = when {
+                                userSpeechText.isNotBlank() -> "\"$userSpeechText\""
+                                assistantReplyText.isNotBlank() && voiceState == AssistantVoiceState.SPEAKING -> assistantReplyText
+                                voiceState == AssistantVoiceState.LISTENING -> "Listening... Speak now to search files, open apps, or ask AI"
+                                voiceState == AssistantVoiceState.PROCESSING -> "Recognizing speech..."
+                                voiceState == AssistantVoiceState.ERROR -> "Sorry, I didn't catch that. Tap the mic to try again."
+                                else -> "Tap the microphone or say a command to get started"
+                            },
                             onClick = {
                                 if (voiceState == AssistantVoiceState.LISTENING) {
                                     speechRecognizer?.stopListening()
@@ -808,32 +833,6 @@ fun VoiceAssistantModal(
                                 }
                             }
                         )
-                    }
-
-                    // Status Indicator with Smooth Animated Content
-                    item {
-                        AnimatedContent(
-                            targetState = statusMessage,
-                            transitionSpec = {
-                                (fadeIn(animationSpec = tween(260)) + slideInVertically(animationSpec = tween(260)) { -it / 3 })
-                                    .togetherWith(fadeOut(animationSpec = tween(180)) + slideOutVertically(animationSpec = tween(180)) { it / 3 })
-                            },
-                            label = "statusTransition"
-                        ) { msg ->
-                            Text(
-                                text = msg,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = when (voiceState) {
-                                    AssistantVoiceState.LISTENING -> MaterialTheme.colorScheme.primary
-                                    AssistantVoiceState.PROCESSING -> Color(0xFFE6A700)
-                                    AssistantVoiceState.SPEAKING -> Color(0xFF00C2A8)
-                                    AssistantVoiceState.ERROR -> MaterialTheme.colorScheme.error
-                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                textAlign = TextAlign.Center
-                            )
-                        }
                     }
 
                     // User Spoken Transcript with Smooth Entry
@@ -872,7 +871,7 @@ fun VoiceAssistantModal(
                                 text = "Found Files (${foundDeviceFiles.size})",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = Color.White,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(top = 4.dp)
@@ -898,7 +897,7 @@ fun VoiceAssistantModal(
                                 text = "IntelliSpace Files (${attachedAiFiles.size})",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = Color.White,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(top = 4.dp)
@@ -949,7 +948,7 @@ fun VoiceAssistantModal(
                                     text = "Suggested voice commands:",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = Color(0xFF8EAFB7)
                                 )
 
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -969,7 +968,8 @@ fun VoiceAssistantModal(
                                     items(samplePrompts) { prompt ->
                                         Surface(
                                             shape = RoundedCornerShape(16.dp),
-                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                            color = Color(0x330A4C5A),
+                                            border = BorderStroke(1.dp, Color(0x2200E5FF)),
                                             modifier = Modifier.clickable {
                                                 userSpeechText = prompt
                                                 executeCommand(prompt)
@@ -982,14 +982,14 @@ fun VoiceAssistantModal(
                                                 Icon(
                                                     imageVector = Icons.Outlined.AutoAwesome,
                                                     contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    tint = Color(0xFF00E5FF),
                                                     modifier = Modifier.size(14.dp)
                                                 )
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Text(
                                                     text = prompt,
                                                     fontSize = 12.sp,
-                                                    color = MaterialTheme.colorScheme.onSurface
+                                                    color = Color.White
                                                 )
                                             }
                                         }
@@ -1009,7 +1009,8 @@ fun VoiceAssistantModal(
                     .fillMaxWidth()
                     .height(44.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .background(Color(0x44011419))
+                    .border(1.dp, Color(0x3300E5FF), CircleShape)
                     .padding(horizontal = 14.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1021,13 +1022,14 @@ fun VoiceAssistantModal(
                         Text(
                             text = "Type command or question...",
                             fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            color = Color(0xFF5A8590)
                         )
                     }
                     BasicTextField(
                         value = manualInputText,
                         onValueChange = { manualInputText = it },
                         singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 13.sp),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -1047,7 +1049,7 @@ fun VoiceAssistantModal(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = "Send Command",
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = Color(0xFF00E5FF),
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -1068,17 +1070,19 @@ fun VoiceAssistantModal(
                             onOpenInAiChat(currentConversationId)
                         },
                         shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, Color(0x4400E5FF)),
                         colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.primary
+                            contentColor = Color(0xFF00E5FF)
                         )
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Chat,
                             contentDescription = "Chat",
+                            tint = Color(0xFF00E5FF),
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "Open in AI Chat", fontSize = 13.sp)
+                        Text(text = "Open in AI Chat", fontSize = 13.sp, color = Color.White)
                     }
                 } else {
                     Spacer(modifier = Modifier.width(1.dp))
@@ -1118,7 +1122,7 @@ fun VoiceAssistantModal(
                                     alpha = bottomMicHaloAlpha
                                 )
                                 .clip(CircleShape)
-                                .background(Color(0xFF26E07F))
+                                .background(Color(0xFF00E5FF))
                         )
                     }
 
@@ -1129,9 +1133,9 @@ fun VoiceAssistantModal(
                             .background(
                                 Brush.linearGradient(
                                     colors = if (voiceState == AssistantVoiceState.LISTENING) {
-                                        listOf(Color(0xFF26E07F), Color(0xFF00C2A8))
+                                        listOf(Color(0xFF00E5FF), Color(0xFF00C2A8))
                                     } else {
-                                        listOf(MaterialTheme.colorScheme.primary, Color(0xFF00C2A8))
+                                        listOf(Color(0xFF00C2A8), Color(0xFF063E4B))
                                     }
                                 )
                             )
@@ -1183,7 +1187,8 @@ fun LocalDeviceFileResultCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+            .background(Color(0x33052A33))
+            .border(1.dp, Color(0x2200E5FF), RoundedCornerShape(14.dp))
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1200,7 +1205,7 @@ fun LocalDeviceFileResultCard(
                 text = item.title,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = Color.White,
                 maxLines = 1
             )
             Row(
@@ -1215,7 +1220,7 @@ fun LocalDeviceFileResultCard(
                         text = "Device Files",
                         fontSize = 9.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF1B8A4E),
+                        color = Color(0xFF26E07F),
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                     )
                 }
@@ -1223,7 +1228,7 @@ fun LocalDeviceFileResultCard(
                 Text(
                     text = "${item.format} • ${item.sizeFormatted} • ${item.dateText}",
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color(0xFF8EAFB7)
                 )
             }
         }
@@ -1235,7 +1240,7 @@ fun LocalDeviceFileResultCard(
             shape = RoundedCornerShape(10.dp),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
             modifier = Modifier.height(32.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00A389))
         ) {
             Text(text = "Open", fontSize = 12.sp, color = Color.White)
         }
@@ -1246,6 +1251,7 @@ fun LocalDeviceFileResultCard(
 fun VoiceWaveOrb(
     state: AssistantVoiceState,
     soundRms: Float,
+    statusText: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1267,18 +1273,18 @@ fun VoiceWaveOrb(
         initialValue = 0f,
         targetValue = (2 * PI).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(2600, easing = LinearEasing),
+            animation = tween(2400, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "wavePhase"
     )
 
-    // Concentric acoustic wave ripple scale & fade
+    // Acoustic wave ripple scale & fade
     val rippleScale by infiniteTransition.animateFloat(
         initialValue = 0.95f,
-        targetValue = 1.32f,
+        targetValue = 1.35f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1600, easing = FastOutSlowInEasing),
+            animation = tween(1500, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "rippleScale"
@@ -1287,31 +1293,17 @@ fun VoiceWaveOrb(
         initialValue = 0.50f,
         targetValue = 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1600, easing = FastOutSlowInEasing),
+            animation = tween(1500, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "rippleAlpha"
     )
 
-    // Smooth continuous rotating effect
-    val orbRotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = if (state == AssistantVoiceState.PROCESSING) 3000 else 6000,
-                easing = LinearEasing
-            ),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "orbRotation"
-    )
-
     // Dynamic voice amplitude surge from live mic input RMS
     val voiceAudioSurge = if (state == AssistantVoiceState.LISTENING) {
-        (soundRms.coerceIn(0f, 10f) / 10f) * 0.32f
+        (soundRms.coerceIn(0f, 10f) / 10f) * 0.35f
     } else if (state == AssistantVoiceState.SPEAKING) {
-        0.20f
+        0.22f
     } else {
         0f
     }
@@ -1322,23 +1314,10 @@ fun VoiceWaveOrb(
         label = "animatedVoiceSurge"
     )
 
-    val targetAuraColor = when (state) {
-        AssistantVoiceState.LISTENING -> Color(0xFF26E07F)
-        AssistantVoiceState.PROCESSING -> Color(0xFF00E5FF)
-        AssistantVoiceState.SPEAKING -> Color(0xFF00C2A8)
-        AssistantVoiceState.ERROR -> Color(0xFFEF4444)
-        else -> Color(0xFF55A9AF)
-    }
-    val auraColor by animateColorAsState(
-        targetValue = targetAuraColor,
-        animationSpec = tween(400, easing = FastOutSlowInEasing),
-        label = "auraColor"
-    )
-
     val targetOrbScale = when (state) {
         AssistantVoiceState.LISTENING -> 1.05f
         AssistantVoiceState.SPEAKING -> 1.03f
-        AssistantVoiceState.PROCESSING -> 0.97f
+        AssistantVoiceState.PROCESSING -> 0.98f
         else -> 1.0f
     }
     val orbScale by animateFloatAsState(
@@ -1350,32 +1329,32 @@ fun VoiceWaveOrb(
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
-        // Main Interactive Voice Visualizer (compact 130.dp size with smooth scale)
+        // 1. Glowing Microphone Orb (Centered, Clean, Upright)
         Box(
             modifier = Modifier
-                .size(130.dp)
+                .size(105.dp)
                 .graphicsLayer(scaleX = orbScale, scaleY = orbScale)
                 .clickable { onClick() },
             contentAlignment = Alignment.Center
         ) {
-            // 1. Acoustic Ripple Glow Pulse (active when Listening or Speaking)
+            // Acoustic Ripple Glow Pulse (active when Listening or Speaking)
             if (state == AssistantVoiceState.LISTENING || state == AssistantVoiceState.SPEAKING) {
                 Canvas(
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer(
-                            scaleX = rippleScale + animatedVoiceSurge * 0.5f,
-                            scaleY = rippleScale + animatedVoiceSurge * 0.5f,
-                            alpha = rippleAlpha
+                            scaleX = rippleScale + animatedVoiceSurge * 0.45f,
+                            scaleY = rippleScale + animatedVoiceSurge * 0.45f,
+                            alpha = rippleAlpha * 0.7f
                         )
                 ) {
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                auraColor.copy(alpha = 0.45f),
-                                Color(0xFF00E5FF).copy(alpha = 0.15f),
+                                Color(0xFF00E5FF).copy(alpha = 0.5f),
+                                Color(0xFF00C2A8).copy(alpha = 0.2f),
                                 Color.Transparent
                             )
                         )
@@ -1383,99 +1362,58 @@ fun VoiceWaveOrb(
                 }
             }
 
-            // 2. Concentric Sinusoidal Harmonic Wave Rings (Wavey Effect)
-            Canvas(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer(
-                        translationY = hoverOffset,
-                        rotationZ = orbRotation * 0.4f
-                    )
-            ) {
-                val cx = size.width / 2f
-                val cy = size.height / 2f
-                val baseRadius = size.width * 0.39f
-
-                // Outer Sinusoidal Wave Ring
-                val outerPath = Path()
-                val numPoints = 72
-                for (i in 0..numPoints) {
-                    val theta = (i.toFloat() / numPoints) * 2f * PI.toFloat()
-                    val wavePerturbation = sin(5f * theta + wavePhase) * (2.5f + animatedVoiceSurge * 10f)
-                    val r = (baseRadius * 1.15f + wavePerturbation + animatedVoiceSurge * 12f)
-                    val px = cx + r * cos(theta)
-                    val py = cy + r * sin(theta)
-                    if (i == 0) outerPath.moveTo(px, py) else outerPath.lineTo(px, py)
-                }
-                outerPath.close()
-
-                drawPath(
-                    path = outerPath,
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFF00E5FF).copy(alpha = if (state == AssistantVoiceState.LISTENING) 0.65f else 0.35f),
-                            auraColor.copy(alpha = 0.20f),
-                            Color.Transparent
-                        ),
-                        center = Offset(cx, cy),
-                        radius = size.width * 0.5f
-                    ),
-                    style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round)
-                )
-
-                // Inner Counter-Undulating Harmonic Wave Ring
-                val innerPath = Path()
-                for (i in 0..numPoints) {
-                    val theta = (i.toFloat() / numPoints) * 2f * PI.toFloat()
-                    val wavePerturbation = sin(6f * theta - wavePhase * 1.2f) * (2f + animatedVoiceSurge * 7f)
-                    val r = (baseRadius * 1.05f + wavePerturbation + animatedVoiceSurge * 6f)
-                    val px = cx + r * cos(theta)
-                    val py = cy + r * sin(theta)
-                    if (i == 0) innerPath.moveTo(px, py) else innerPath.lineTo(px, py)
-                }
-                innerPath.close()
-
-                drawPath(
-                    path = innerPath,
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            auraColor.copy(alpha = if (state == AssistantVoiceState.LISTENING) 0.75f else 0.40f),
-                            Color(0xFF00C2A8).copy(alpha = 0.25f),
-                            Color.Transparent
-                        ),
-                        center = Offset(cx, cy),
-                        radius = size.width * 0.46f
-                    ),
-                    style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
-                )
-            }
-
-            // 3. Compact Voice Assistant Orb (kept upright and breathing naturally)
             Box(
                 modifier = Modifier
-                    .size(100.dp)
+                    .size(92.dp)
                     .graphicsLayer(
                         translationY = hoverOffset,
-                        scaleX = 1f + animatedVoiceSurge * 0.14f,
-                        scaleY = 1f + animatedVoiceSurge * 0.14f
+                        scaleX = 1f + animatedVoiceSurge * 0.12f,
+                        scaleY = 1f + animatedVoiceSurge * 0.12f
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.voice_amoeba_orb),
-                    contentDescription = "IntelliFile Voice Assistant",
+                    painter = painterResource(id = R.drawable.voice_mic_orb),
+                    contentDescription = "Voice Assistant Microphone",
                     modifier = Modifier.fillMaxSize()
                 )
             }
         }
 
-        // 4. Fluid Sine-Wave Audio Ribbon Visualizer (Wavey Effect)
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // 2. Exact Glowing Sound Wave Ribbon Visualizer
         FluidVoiceWaveform(
             state = state,
             soundRms = soundRms,
-            auraColor = auraColor,
             wavePhase = wavePhase,
-            modifier = Modifier.padding(horizontal = 8.dp)
+            modifier = Modifier.fillMaxWidth(0.96f)
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // 3. Bold White Title: VOICE RECOGNITION
+        Text(
+            text = "VOICE RECOGNITION",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 2.5.sp,
+            color = Color.White,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 4. Clean Subtitle / Status / Transcript
+        Text(
+            text = statusText,
+            fontSize = 12.sp,
+            color = Color(0xFF8EAFB7),
+            textAlign = TextAlign.Center,
+            lineHeight = 17.sp,
+            modifier = Modifier
+                .fillMaxWidth(0.85f)
+                .padding(horizontal = 4.dp)
         )
     }
 }
@@ -1484,11 +1422,9 @@ fun VoiceWaveOrb(
 fun FluidVoiceWaveform(
     state: AssistantVoiceState,
     soundRms: Float,
-    auraColor: Color,
     wavePhase: Float,
     modifier: Modifier = Modifier
 ) {
-    // Dynamic amplitude based on voice state and mic volume
     val voiceSurge = when (state) {
         AssistantVoiceState.LISTENING -> (0.35f + (soundRms.coerceIn(0f, 10f) / 10f) * 0.65f)
         AssistantVoiceState.SPEAKING -> (0.72f + sin(wavePhase * 2.8f) * 0.18f)
@@ -1502,120 +1438,116 @@ fun FluidVoiceWaveform(
         label = "animatedAmp"
     )
 
-    Canvas(
-        modifier = modifier
-            .fillMaxWidth(0.92f)
-            .height(54.dp)
+    Box(
+        modifier = modifier.height(76.dp),
+        contentAlignment = Alignment.Center
     ) {
-        val width = size.width
-        val height = size.height
-        val midY = height / 2f
-        val maxWaveAmp = (height * 0.44f) * animatedAmp
-        val steps = 80
+        // Authentic Wave Image from user design
+        Image(
+            painter = painterResource(id = R.drawable.voice_recognition_wave),
+            contentDescription = "Voice Recognition Wave",
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer(
+                    scaleY = 0.86f + animatedAmp * 0.40f,
+                    scaleX = 0.98f + animatedAmp * 0.04f,
+                    alpha = 0.82f + animatedAmp * 0.18f
+                )
+        )
 
-        // Ribbon 1: Primary Cyan Wave Band (Overlapping upper & lower crests)
-        val path1 = Path()
-        val topPoints1 = ArrayList<Offset>(steps + 1)
-        val botPoints1 = ArrayList<Offset>(steps + 1)
-        for (i in 0..steps) {
-            val progress = i.toFloat() / steps
-            val x = progress * width
-            val envelope = sin(progress * PI.toFloat()).coerceAtLeast(0f).pow(1.5f)
-            val yTop = midY - sin(progress * 2f * PI.toFloat() * 1.8f + wavePhase) * maxWaveAmp * envelope
-            val yBot = midY + sin(progress * 2f * PI.toFloat() * 1.8f + wavePhase + (PI * 0.85).toFloat()) * (maxWaveAmp * 0.85f) * envelope
-            topPoints1.add(Offset(x, yTop))
-            botPoints1.add(Offset(x, yBot))
+        // Dynamic Wavy Ripples while speaking / listening
+        if (state == AssistantVoiceState.LISTENING || state == AssistantVoiceState.SPEAKING || state == AssistantVoiceState.PROCESSING) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val width = size.width
+                val height = size.height
+                val midY = height / 2f
+                val maxWaveAmp = (height * 0.38f) * animatedAmp
+                val steps = 80
+
+                // Dynamic Cyan Harmonic Ribbon
+                val path1 = Path()
+                val topPoints1 = ArrayList<Offset>(steps + 1)
+                val botPoints1 = ArrayList<Offset>(steps + 1)
+                for (i in 0..steps) {
+                    val progress = i.toFloat() / steps
+                    val x = progress * width
+                    val envelope = sin(progress * PI.toFloat()).coerceAtLeast(0f).pow(1.5f)
+                    val yTop = midY - sin(progress * 2f * PI.toFloat() * 1.8f + wavePhase) * maxWaveAmp * envelope
+                    val yBot = midY + sin(progress * 2f * PI.toFloat() * 1.8f + wavePhase + (PI * 0.85).toFloat()) * (maxWaveAmp * 0.85f) * envelope
+                    topPoints1.add(Offset(x, yTop))
+                    botPoints1.add(Offset(x, yBot))
+                }
+                path1.moveTo(topPoints1[0].x, topPoints1[0].y)
+                for (i in 1..steps) path1.lineTo(topPoints1[i].x, topPoints1[i].y)
+                for (i in steps downTo 0) path1.lineTo(botPoints1[i].x, botPoints1[i].y)
+                path1.close()
+
+                drawPath(
+                    path = path1,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF00E5FF).copy(alpha = 0.35f * animatedAmp.coerceIn(0.2f, 1f)),
+                            Color(0xFF00C2A8).copy(alpha = 0.15f * animatedAmp.coerceIn(0.2f, 1f)),
+                            Color(0xFF007A87).copy(alpha = 0.25f * animatedAmp.coerceIn(0.2f, 1f))
+                        ),
+                        startY = midY - maxWaveAmp,
+                        endY = midY + maxWaveAmp
+                    )
+                )
+
+                // Dynamic Aqua Harmonic Ribbon
+                val path2 = Path()
+                val topPoints2 = ArrayList<Offset>(steps + 1)
+                val botPoints2 = ArrayList<Offset>(steps + 1)
+                for (i in 0..steps) {
+                    val progress = i.toFloat() / steps
+                    val x = progress * width
+                    val envelope = sin(progress * PI.toFloat()).coerceAtLeast(0f).pow(1.5f)
+                    val yTop = midY - sin(progress * 2f * PI.toFloat() * 2.6f - wavePhase * 1.2f + 1.2f) * (maxWaveAmp * 0.80f) * envelope
+                    val yBot = midY + sin(progress * 2f * PI.toFloat() * 2.6f - wavePhase * 1.2f + 1.2f + (PI * 0.8f).toFloat()) * (maxWaveAmp * 0.72f) * envelope
+                    topPoints2.add(Offset(x, yTop))
+                    botPoints2.add(Offset(x, yBot))
+                }
+                path2.moveTo(topPoints2[0].x, topPoints2[0].y)
+                for (i in 1..steps) path2.lineTo(topPoints2[i].x, topPoints2[i].y)
+                for (i in steps downTo 0) path2.lineTo(botPoints2[i].x, botPoints2[i].y)
+                path2.close()
+
+                drawPath(
+                    path = path2,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF00C2A8).copy(alpha = 0.30f * animatedAmp.coerceIn(0.2f, 1f)),
+                            Color(0xFF00E5FF).copy(alpha = 0.12f * animatedAmp.coerceIn(0.2f, 1f)),
+                            Color(0xFF55A9AF).copy(alpha = 0.20f * animatedAmp.coerceIn(0.2f, 1f))
+                        ),
+                        startY = midY - maxWaveAmp,
+                        endY = midY + maxWaveAmp
+                    )
+                )
+
+                // Luminous Center Wave Spine
+                val spinePath = Path()
+                for (i in 0..steps) {
+                    val progress = i.toFloat() / steps
+                    val x = progress * width
+                    val envelope = sin(progress * PI.toFloat()).coerceAtLeast(0f).pow(1.5f)
+                    val y = midY - sin(progress * 2f * PI.toFloat() * 2.2f + wavePhase) * (maxWaveAmp * 0.65f) * envelope
+                    if (i == 0) spinePath.moveTo(x, y) else spinePath.lineTo(x, y)
+                }
+
+                drawPath(
+                    path = spinePath,
+                    color = Color(0xFF00E5FF).copy(alpha = 0.40f * animatedAmp.coerceIn(0.2f, 1f)),
+                    style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
+                )
+                drawPath(
+                    path = spinePath,
+                    color = Color(0xFFE0FFFF).copy(alpha = 0.90f),
+                    style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
+                )
+            }
         }
-        path1.moveTo(topPoints1[0].x, topPoints1[0].y)
-        for (i in 1..steps) path1.lineTo(topPoints1[i].x, topPoints1[i].y)
-        for (i in steps downTo 0) path1.lineTo(botPoints1[i].x, botPoints1[i].y)
-        path1.close()
-
-        drawPath(
-            path = path1,
-            brush = Brush.verticalGradient(
-                colors = listOf(
-                    Color(0xFF00E5FF).copy(alpha = 0.45f * animatedAmp.coerceIn(0.2f, 1f)),
-                    Color(0xFF00C2A8).copy(alpha = 0.20f * animatedAmp.coerceIn(0.2f, 1f)),
-                    Color(0xFF007A87).copy(alpha = 0.35f * animatedAmp.coerceIn(0.2f, 1f))
-                ),
-                startY = midY - maxWaveAmp,
-                endY = midY + maxWaveAmp
-            )
-        )
-
-        // Ribbon 2: Counter-Harmonic Aqua Wave Band
-        val path2 = Path()
-        val topPoints2 = ArrayList<Offset>(steps + 1)
-        val botPoints2 = ArrayList<Offset>(steps + 1)
-        for (i in 0..steps) {
-            val progress = i.toFloat() / steps
-            val x = progress * width
-            val envelope = sin(progress * PI.toFloat()).coerceAtLeast(0f).pow(1.5f)
-            val yTop = midY - sin(progress * 2f * PI.toFloat() * 2.6f - wavePhase * 1.2f + 1.2f) * (maxWaveAmp * 0.82f) * envelope
-            val yBot = midY + sin(progress * 2f * PI.toFloat() * 2.6f - wavePhase * 1.2f + 1.2f + (PI * 0.8f).toFloat()) * (maxWaveAmp * 0.75f) * envelope
-            topPoints2.add(Offset(x, yTop))
-            botPoints2.add(Offset(x, yBot))
-        }
-        path2.moveTo(topPoints2[0].x, topPoints2[0].y)
-        for (i in 1..steps) path2.lineTo(topPoints2[i].x, topPoints2[i].y)
-        for (i in steps downTo 0) path2.lineTo(botPoints2[i].x, botPoints2[i].y)
-        path2.close()
-
-        drawPath(
-            path = path2,
-            brush = Brush.verticalGradient(
-                colors = listOf(
-                    Color(0xFF00C2A8).copy(alpha = 0.38f * animatedAmp.coerceIn(0.2f, 1f)),
-                    Color(0xFF00E5FF).copy(alpha = 0.15f * animatedAmp.coerceIn(0.2f, 1f)),
-                    Color(0xFF55A9AF).copy(alpha = 0.30f * animatedAmp.coerceIn(0.2f, 1f))
-                ),
-                startY = midY - maxWaveAmp,
-                endY = midY + maxWaveAmp
-            )
-        )
-
-        // Ridge Stroke Lines for Luminous Siri-Wave Edges
-        val strokePath1 = Path()
-        strokePath1.moveTo(topPoints1[0].x, topPoints1[0].y)
-        for (i in 1..steps) strokePath1.lineTo(topPoints1[i].x, topPoints1[i].y)
-        drawPath(
-            path = strokePath1,
-            color = Color(0xFF00E5FF).copy(alpha = 0.85f),
-            style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
-        )
-
-        val strokePath2 = Path()
-        strokePath2.moveTo(topPoints2[0].x, topPoints2[0].y)
-        for (i in 1..steps) strokePath2.lineTo(topPoints2[i].x, topPoints2[i].y)
-        drawPath(
-            path = strokePath2,
-            color = Color(0xFF00C2A8).copy(alpha = 0.75f),
-            style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
-        )
-
-        // Center Luminous Core Spine (Glowing bright cyan/white center line)
-        val spinePath = Path()
-        for (i in 0..steps) {
-            val progress = i.toFloat() / steps
-            val x = progress * width
-            val envelope = sin(progress * PI.toFloat()).coerceAtLeast(0f).pow(1.5f)
-            val y = midY - sin(progress * 2f * PI.toFloat() * 2.2f + wavePhase) * (maxWaveAmp * 0.65f) * envelope
-            if (i == 0) spinePath.moveTo(x, y) else spinePath.lineTo(x, y)
-        }
-
-        // Soft outer glow for spine
-        drawPath(
-            path = spinePath,
-            color = Color(0xFF00E5FF).copy(alpha = 0.35f * animatedAmp.coerceIn(0.2f, 1f)),
-            style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
-        )
-        // Sharp luminous core for spine
-        drawPath(
-            path = spinePath,
-            color = Color(0xFFE0FFFF).copy(alpha = 0.95f),
-            style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round)
-        )
     }
 }
 
@@ -1628,14 +1560,15 @@ fun UserSpeechCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .background(Color(0x33083B47))
+            .border(1.dp, Color(0x3300E5FF), RoundedCornerShape(16.dp))
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             imageVector = Icons.Default.FormatQuote,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = Color(0xFF00E5FF),
             modifier = Modifier.size(20.dp)
         )
         Spacer(modifier = Modifier.width(8.dp))
@@ -1643,7 +1576,7 @@ fun UserSpeechCard(
             text = text,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = Color.White
         )
     }
 }
@@ -1659,13 +1592,13 @@ fun AssistantAnswerCard(
     Card(
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+            containerColor = Color(0x4406333D)
         ),
         modifier = modifier
             .fillMaxWidth()
             .border(
                 1.dp,
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                Color(0x4400E5FF),
                 RoundedCornerShape(18.dp)
             )
     ) {
@@ -1679,7 +1612,7 @@ fun AssistantAnswerCard(
                     Icon(
                         imageVector = Icons.Default.AutoAwesome,
                         contentDescription = "AI",
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = Color(0xFF00E5FF),
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -1687,7 +1620,7 @@ fun AssistantAnswerCard(
                         text = "IntelliFile Answer",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = Color(0xFF00E5FF)
                     )
                 }
 
@@ -1700,7 +1633,7 @@ fun AssistantAnswerCard(
                     Icon(
                         imageVector = if (isSpeaking) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
                         contentDescription = if (isSpeaking) "Stop Speaking" else "Speak Again",
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = Color(0xFF00E5FF),
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -1711,7 +1644,7 @@ fun AssistantAnswerCard(
             Text(
                 text = replyText,
                 fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = Color.White,
                 lineHeight = 20.sp
             )
         }
@@ -1734,7 +1667,8 @@ fun VoiceAssistantFileCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+            .background(Color(0x33052A33))
+            .border(1.dp, Color(0x2200E5FF), RoundedCornerShape(14.dp))
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1751,7 +1685,7 @@ fun VoiceAssistantFileCard(
                 text = file.title,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = Color.White,
                 maxLines = 1
             )
             Row(
@@ -1760,13 +1694,13 @@ fun VoiceAssistantFileCard(
             ) {
                 Surface(
                     shape = RoundedCornerShape(4.dp),
-                    color = if (file.source == "Device Files") Color(0xFF26E07F).copy(alpha = 0.15f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                    color = Color(0xFF00E5FF).copy(alpha = 0.15f)
                 ) {
                     Text(
                         text = file.source,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (file.source == "Device Files") Color(0xFF1B8A4E) else MaterialTheme.colorScheme.primary,
+                        color = Color(0xFF00E5FF),
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                     )
                 }
@@ -1774,7 +1708,7 @@ fun VoiceAssistantFileCard(
                 Text(
                     text = "${file.format} • ${file.size}" + (if (file.page != null) " • Page ${file.page}" else ""),
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color(0xFF8EAFB7)
                 )
             }
         }
@@ -1786,7 +1720,7 @@ fun VoiceAssistantFileCard(
             shape = RoundedCornerShape(10.dp),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
             modifier = Modifier.height(32.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00A389))
         ) {
             Text(text = "Open", fontSize = 12.sp, color = Color.White)
         }
@@ -1800,7 +1734,8 @@ fun PermissionRequiredCard(
 ) {
     Card(
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(containerColor = Color(0x4406333D)),
+        border = BorderStroke(1.dp, Color(0x3300E5FF)),
         modifier = modifier.fillMaxWidth()
     ) {
         Column(
@@ -1811,13 +1746,13 @@ fun PermissionRequiredCard(
                 modifier = Modifier
                     .size(54.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                    .background(Color(0xFF00E5FF).copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Mic,
                     contentDescription = "Microphone",
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = Color(0xFF00E5FF),
                     modifier = Modifier.size(28.dp)
                 )
             }
@@ -1828,7 +1763,7 @@ fun PermissionRequiredCard(
                 text = "Microphone Access Required",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = Color.White
             )
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -1836,7 +1771,7 @@ fun PermissionRequiredCard(
             Text(
                 text = "IntelliFile needs microphone permission to listen to your voice commands, search documents, and give spoken answers.",
                 fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = Color(0xFF8EAFB7),
                 textAlign = TextAlign.Center
             )
 
