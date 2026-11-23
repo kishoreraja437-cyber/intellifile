@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
+import kotlin.math.pow
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -727,7 +728,7 @@ fun VoiceAssistantModal(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Image(painter = painterResource(id = R.drawable.voice_amoeba_orb), contentDescription = "Liquid AI", modifier = Modifier.size(30.dp))
+                    Image(painter = painterResource(id = R.drawable.voice_amoeba_orb), contentDescription = "IntelliFile Voice Assistant", modifier = Modifier.size(30.dp))
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
@@ -1449,21 +1450,20 @@ fun VoiceWaveOrb(
                 )
             }
 
-            // 3. Compact 3D Liquid AI Energy Orb with smooth rotating effect (no shining/shimmer glare)
+            // 3. Compact Voice Assistant Orb (kept upright and breathing naturally)
             Box(
                 modifier = Modifier
                     .size(100.dp)
                     .graphicsLayer(
                         translationY = hoverOffset,
-                        scaleX = 1f + animatedVoiceSurge * 0.15f,
-                        scaleY = 1f + animatedVoiceSurge * 0.15f,
-                        rotationZ = orbRotation
+                        scaleX = 1f + animatedVoiceSurge * 0.14f,
+                        scaleY = 1f + animatedVoiceSurge * 0.14f
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.voice_amoeba_orb),
-                    contentDescription = "Liquid AI Voice Assistant",
+                    contentDescription = "IntelliFile Voice Assistant",
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -1474,7 +1474,8 @@ fun VoiceWaveOrb(
             state = state,
             soundRms = soundRms,
             auraColor = auraColor,
-            wavePhase = wavePhase
+            wavePhase = wavePhase,
+            modifier = Modifier.padding(horizontal = 8.dp)
         )
     }
 }
@@ -1489,10 +1490,10 @@ fun FluidVoiceWaveform(
 ) {
     // Dynamic amplitude based on voice state and mic volume
     val voiceSurge = when (state) {
-        AssistantVoiceState.LISTENING -> (0.28f + (soundRms.coerceIn(0f, 10f) / 10f) * 0.72f)
-        AssistantVoiceState.SPEAKING -> 0.75f
-        AssistantVoiceState.PROCESSING -> 0.45f
-        else -> 0.18f
+        AssistantVoiceState.LISTENING -> (0.35f + (soundRms.coerceIn(0f, 10f) / 10f) * 0.65f)
+        AssistantVoiceState.SPEAKING -> (0.72f + sin(wavePhase * 2.8f) * 0.18f)
+        AssistantVoiceState.PROCESSING -> (0.40f + sin(wavePhase * 1.8f) * 0.10f)
+        else -> 0.16f
     }
 
     val animatedAmp by animateFloatAsState(
@@ -1503,38 +1504,118 @@ fun FluidVoiceWaveform(
 
     Canvas(
         modifier = modifier
-            .fillMaxWidth(0.65f)
-            .height(28.dp)
+            .fillMaxWidth(0.92f)
+            .height(54.dp)
     ) {
         val width = size.width
         val height = size.height
         val midY = height / 2f
-        val maxWaveAmp = (height * 0.42f) * animatedAmp
+        val maxWaveAmp = (height * 0.44f) * animatedAmp
+        val steps = 80
 
-        // 3 Layered Fluid Sine Waves with smooth tapering envelope
-        val waves = listOf(
-            Triple(2.0f, wavePhase, auraColor.copy(alpha = 0.85f)),
-            Triple(3.2f, -wavePhase * 0.9f + 1.2f, Color(0xFF00E5FF).copy(alpha = 0.60f)),
-            Triple(1.6f, wavePhase * 1.3f + 2.4f, Color(0xFF00C2A8).copy(alpha = 0.40f))
+        // Ribbon 1: Primary Cyan Wave Band (Overlapping upper & lower crests)
+        val path1 = Path()
+        val topPoints1 = ArrayList<Offset>(steps + 1)
+        val botPoints1 = ArrayList<Offset>(steps + 1)
+        for (i in 0..steps) {
+            val progress = i.toFloat() / steps
+            val x = progress * width
+            val envelope = sin(progress * PI.toFloat()).coerceAtLeast(0f).pow(1.5f)
+            val yTop = midY - sin(progress * 2f * PI.toFloat() * 1.8f + wavePhase) * maxWaveAmp * envelope
+            val yBot = midY + sin(progress * 2f * PI.toFloat() * 1.8f + wavePhase + (PI * 0.85).toFloat()) * (maxWaveAmp * 0.85f) * envelope
+            topPoints1.add(Offset(x, yTop))
+            botPoints1.add(Offset(x, yBot))
+        }
+        path1.moveTo(topPoints1[0].x, topPoints1[0].y)
+        for (i in 1..steps) path1.lineTo(topPoints1[i].x, topPoints1[i].y)
+        for (i in steps downTo 0) path1.lineTo(botPoints1[i].x, botPoints1[i].y)
+        path1.close()
+
+        drawPath(
+            path = path1,
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFF00E5FF).copy(alpha = 0.45f * animatedAmp.coerceIn(0.2f, 1f)),
+                    Color(0xFF00C2A8).copy(alpha = 0.20f * animatedAmp.coerceIn(0.2f, 1f)),
+                    Color(0xFF007A87).copy(alpha = 0.35f * animatedAmp.coerceIn(0.2f, 1f))
+                ),
+                startY = midY - maxWaveAmp,
+                endY = midY + maxWaveAmp
+            )
         )
 
-        val steps = 60
-        for ((freq, phase, color) in waves) {
-            val path = Path()
-            for (i in 0..steps) {
-                val progress = i.toFloat() / steps
-                val x = progress * width
-                // Windowing envelope so wave tapers smoothly to 0 at edges
-                val envelope = sin(progress * PI.toFloat()).coerceAtLeast(0f)
-                val y = midY + sin(progress * 2f * PI.toFloat() * freq + phase) * maxWaveAmp * envelope
-                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-            }
-            drawPath(
-                path = path,
-                color = color,
-                style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
-            )
+        // Ribbon 2: Counter-Harmonic Aqua Wave Band
+        val path2 = Path()
+        val topPoints2 = ArrayList<Offset>(steps + 1)
+        val botPoints2 = ArrayList<Offset>(steps + 1)
+        for (i in 0..steps) {
+            val progress = i.toFloat() / steps
+            val x = progress * width
+            val envelope = sin(progress * PI.toFloat()).coerceAtLeast(0f).pow(1.5f)
+            val yTop = midY - sin(progress * 2f * PI.toFloat() * 2.6f - wavePhase * 1.2f + 1.2f) * (maxWaveAmp * 0.82f) * envelope
+            val yBot = midY + sin(progress * 2f * PI.toFloat() * 2.6f - wavePhase * 1.2f + 1.2f + (PI * 0.8f).toFloat()) * (maxWaveAmp * 0.75f) * envelope
+            topPoints2.add(Offset(x, yTop))
+            botPoints2.add(Offset(x, yBot))
         }
+        path2.moveTo(topPoints2[0].x, topPoints2[0].y)
+        for (i in 1..steps) path2.lineTo(topPoints2[i].x, topPoints2[i].y)
+        for (i in steps downTo 0) path2.lineTo(botPoints2[i].x, botPoints2[i].y)
+        path2.close()
+
+        drawPath(
+            path = path2,
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFF00C2A8).copy(alpha = 0.38f * animatedAmp.coerceIn(0.2f, 1f)),
+                    Color(0xFF00E5FF).copy(alpha = 0.15f * animatedAmp.coerceIn(0.2f, 1f)),
+                    Color(0xFF55A9AF).copy(alpha = 0.30f * animatedAmp.coerceIn(0.2f, 1f))
+                ),
+                startY = midY - maxWaveAmp,
+                endY = midY + maxWaveAmp
+            )
+        )
+
+        // Ridge Stroke Lines for Luminous Siri-Wave Edges
+        val strokePath1 = Path()
+        strokePath1.moveTo(topPoints1[0].x, topPoints1[0].y)
+        for (i in 1..steps) strokePath1.lineTo(topPoints1[i].x, topPoints1[i].y)
+        drawPath(
+            path = strokePath1,
+            color = Color(0xFF00E5FF).copy(alpha = 0.85f),
+            style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+        )
+
+        val strokePath2 = Path()
+        strokePath2.moveTo(topPoints2[0].x, topPoints2[0].y)
+        for (i in 1..steps) strokePath2.lineTo(topPoints2[i].x, topPoints2[i].y)
+        drawPath(
+            path = strokePath2,
+            color = Color(0xFF00C2A8).copy(alpha = 0.75f),
+            style = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round)
+        )
+
+        // Center Luminous Core Spine (Glowing bright cyan/white center line)
+        val spinePath = Path()
+        for (i in 0..steps) {
+            val progress = i.toFloat() / steps
+            val x = progress * width
+            val envelope = sin(progress * PI.toFloat()).coerceAtLeast(0f).pow(1.5f)
+            val y = midY - sin(progress * 2f * PI.toFloat() * 2.2f + wavePhase) * (maxWaveAmp * 0.65f) * envelope
+            if (i == 0) spinePath.moveTo(x, y) else spinePath.lineTo(x, y)
+        }
+
+        // Soft outer glow for spine
+        drawPath(
+            path = spinePath,
+            color = Color(0xFF00E5FF).copy(alpha = 0.35f * animatedAmp.coerceIn(0.2f, 1f)),
+            style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
+        )
+        // Sharp luminous core for spine
+        drawPath(
+            path = spinePath,
+            color = Color(0xFFE0FFFF).copy(alpha = 0.95f),
+            style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round)
+        )
     }
 }
 
