@@ -443,18 +443,6 @@ fun DocumentViewerScreen(
         }
     }
 
-    if (showSaveConfirmation) {
-        SaveConfirmationDialog(
-            fileName = fileName,
-            onDismissRequest = onDismissSaveConfirmation,
-            onConfirmSave = {
-                isSaved = true
-                onConfirmSave()
-            },
-            onCancel = onDismissSaveConfirmation
-        )
-    }
-
     // Jump to Unit Dialog (Slide, Page, Row)
     if (showJumpDialog) {
         val unitLabel = when {
@@ -1330,17 +1318,7 @@ fun DocumentViewerScreen(
 
                     // Bottom Action Bar
                     DocumentBottomActionBar(
-                        isSaved = isSaved,
                         isLandscape = isLandscape,
-                        onSaveClick = {
-                            isSaved = true
-                            if (key.isNotBlank()) {
-                                LocalFileDatabaseHelper.getInstance(context).setBookmarked(key, fileName, true)
-                                Toast.makeText(context, "Saved to device collection", Toast.LENGTH_SHORT).show()
-                            }
-                            onConfirmSave()
-                            onSetPriorityClick()
-                        },
                         onThumbnailClick = {
                             if (totalUnitsCount > 1) {
                                 showJumpDialog = true
@@ -1348,11 +1326,7 @@ fun DocumentViewerScreen(
                                 onThumbnailClick()
                             }
                         },
-                        onShareClick = onShareClick,
-                        onMoreClick = {
-                            onMoreClick()
-                            onSetPriorityClick()
-                        }
+                        onShareClick = onShareClick
                     )
                 }
             }
@@ -3478,11 +3452,11 @@ private fun PlainTextViewer(
 // ==========================================
 @Composable
 fun DocumentBottomActionBar(
-    isSaved: Boolean,
-    onSaveClick: () -> Unit,
     onThumbnailClick: () -> Unit,
     onShareClick: () -> Unit,
-    onMoreClick: () -> Unit,
+    isSaved: Boolean = false,
+    onSaveClick: () -> Unit = {},
+    onMoreClick: () -> Unit = {},
     isLandscape: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -3499,13 +3473,16 @@ fun DocumentBottomActionBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = if (isLandscape) 3.dp else 10.dp),
-            horizontalArrangement = Arrangement.SpaceAround,
+                .padding(horizontal = 32.dp, vertical = if (isLandscape) 4.dp else 10.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable { onThumbnailClick() }
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onThumbnailClick() }
+                    .padding(horizontal = 20.dp, vertical = 6.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.GridView,
@@ -3524,7 +3501,10 @@ fun DocumentBottomActionBar(
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable { onShareClick() }
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onShareClick() }
+                    .padding(horizontal = 20.dp, vertical = 6.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Share,
@@ -3535,49 +3515,6 @@ fun DocumentBottomActionBar(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "Share",
-                    fontSize = 11.sp,
-                    color = Color(0xFF6B7280),
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(if (isSaved) Color(0xFF26E07F) else MaterialTheme.colorScheme.primary)
-                    .clickable { onSaveClick() }
-                    .padding(horizontal = 24.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = if (isSaved) Icons.Default.Check else Icons.Default.Save,
-                    contentDescription = "Save",
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (isSaved) "Saved" else "Save",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-            }
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.clickable { onMoreClick() }
-            ) {
-                Icon(
-                    imageVector = Icons.Default.MoreHoriz,
-                    contentDescription = "Priority",
-                    tint = Color(0xFF374151),
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Priority",
                     fontSize = 11.sp,
                     color = Color(0xFF6B7280),
                     fontWeight = FontWeight.Medium
