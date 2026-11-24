@@ -76,7 +76,8 @@ data class SavedFileItem(
     val iconResId: Int = R.drawable.pdf,
     val uriString: String = "",
     val path: String = "",
-    val isBookmarked: Boolean = false
+    val isBookmarked: Boolean = false,
+    val isVaultSynced: Boolean = false
 )
 
 enum class PriorityFilter(val label: String, val level: PriorityLevel?) {
@@ -150,7 +151,8 @@ fun SavedScreen(
                 iconResId = item.iconResId,
                 uriString = item.uri.toString(),
                 path = item.path,
-                isBookmarked = item.isBookmarked
+                isBookmarked = item.isBookmarked,
+                isVaultSynced = item.isVaultSynced
             )
         }
     }

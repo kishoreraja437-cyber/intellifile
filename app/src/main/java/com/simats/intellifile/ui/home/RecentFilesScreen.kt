@@ -111,7 +111,8 @@ fun RecentFilesScreen(
                 priority = item.priority,
                 iconResId = item.iconResId,
                 uriString = item.uri.toString(),
-                path = item.path
+                path = item.path,
+                isVaultSynced = item.isVaultSynced
             )
         }
     }

@@ -36,7 +36,8 @@ class DocumentRepository(private val context: Context) {
         uriString: String,
         fileName: String,
         category: String? = null,
-        priority: String? = null
+        priority: String? = null,
+        location: String? = null
     ): Result<DocumentDto> = withContext(Dispatchers.IO) {
         val safeFileName = fileName.substringAfterLast('/').substringAfterLast('\\').trim().ifBlank { "document" }
         val cleanName = safeFileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
@@ -143,12 +144,17 @@ class DocumentRepository(private val context: Context) {
             val categoryPart = (category?.takeIf { it.isNotBlank() } ?: "Document").toRequestBody("text/plain".toMediaTypeOrNull())
             val priorityPart = priority?.takeIf { it.isNotBlank() }?.toRequestBody("text/plain".toMediaTypeOrNull())
 
+            val effectiveLocation = location?.takeIf { it.isNotBlank() }
+                ?: (if (filePath.isNotBlank() && filePath != "Internal Storage") filePath else "Internal Storage")
+            val locationPart = effectiveLocation.toRequestBody("text/plain".toMediaTypeOrNull())
+
             val response = api.uploadDocument(
                 document = filePart,
                 category = categoryPart,
                 priority = priorityPart,
                 title = titlePart,
-                userId = userIdPart
+                userId = userIdPart,
+                location = locationPart
             )
 
             if (response.isSuccessful && response.body()?.success == true) {
@@ -161,6 +167,9 @@ class DocumentRepository(private val context: Context) {
                 }
                 if (uriString.isNotBlank() && uriString != primaryKey) {
                     dbHelper.setVaultStatus(uriString, safeFileName, true, doc.id)
+                }
+                if (effectiveLocation.isNotBlank() && effectiveLocation != primaryKey && effectiveLocation != "Internal Storage") {
+                    dbHelper.setVaultStatus(effectiveLocation, safeFileName, true, doc.id)
                 }
                 dbHelper.setVaultStatus(safeFileName, safeFileName, true, doc.id)
                 Result.success(doc)

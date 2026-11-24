@@ -154,7 +154,9 @@ interface IntelliFileApiService {
 
         @Part("title") title: RequestBody? = null,
 
-        @Part("user_id") userId: RequestBody? = null
+        @Part("user_id") userId: RequestBody? = null,
+
+        @Part("location") location: RequestBody? = null
 
     ): Response<DocumentUploadResponse>
 

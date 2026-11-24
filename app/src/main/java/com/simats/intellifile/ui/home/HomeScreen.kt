@@ -215,7 +215,9 @@ data class RecentFile(
 
     val uriString: String = "",
 
-    val path: String = ""
+    val path: String = "",
+
+    val isVaultSynced: Boolean = false
 
 )
 
@@ -445,7 +447,9 @@ fun HomeScreen(
 
                 uriString = item.uri.toString(),
 
-                path = item.path
+                path = item.path,
+
+                isVaultSynced = item.isVaultSynced
 
             )
 

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shield
@@ -26,6 +27,8 @@ import androidx.compose.material.icons.outlined.Adjust
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Folder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -96,10 +99,89 @@ fun FileDetailScreen(
     val dbHelper = remember { LocalFileDatabaseHelper.getInstance(context) }
     var isUploadingToVault by remember { mutableStateOf(false) }
     var selectedPriority by remember(fileData.priority) { mutableStateOf(fileData.priority) }
+
+    val effectivePath = fileData.path.takeIf { it.isNotBlank() && it != "Internal Storage" } ?: ""
+    val effectiveUri = fileData.uriString.takeIf { it.isNotBlank() } ?: ""
+    val key = when {
+        effectivePath.isNotBlank() -> effectivePath
+        effectiveUri.isNotBlank() -> effectiveUri
+        else -> fileData.fileName
+    }
+
     var isVaultSynced by remember(fileData.isVaultSynced, fileData.path, fileData.uriString, fileData.fileName) {
-        val key = if (fileData.path.isNotBlank()) fileData.path else fileData.uriString
-        val meta = dbHelper.getMetadata(key) ?: dbHelper.getMetadata(fileData.fileName)
+        val meta = (if (effectivePath.isNotBlank()) dbHelper.getMetadata(effectivePath) else null)
+            ?: (if (effectiveUri.isNotBlank()) dbHelper.getMetadata(effectiveUri) else null)
+            ?: dbHelper.getMetadata(fileData.fileName)
         mutableStateOf(fileData.isVaultSynced || (meta?.isVaultSynced == true))
+    }
+    var isCheckingVaultStatus by remember { mutableStateOf(false) }
+
+    // Live Server Synchronization (Requirement 1, 6, 7, 8, 9, 10):
+    // 1. Checks whether current file exists in IntelliSpace on the backend.
+    // 2. Uses unique identifier (vaultDocId or title + location/path) to prevent false duplicates.
+    // 3. If file was deleted from IntelliSpace, resets isVaultSynced to false to allow re-upload.
+    // 4. If file exists, sets isVaultSynced = true and updates SQLite cache.
+    LaunchedEffect(key, fileData.fileName) {
+        isCheckingVaultStatus = true
+        withContext(Dispatchers.IO) {
+            try {
+                val result = docRepository.getDocuments()
+                result.onSuccess { serverDocs ->
+                    val currentMeta = (if (effectivePath.isNotBlank()) dbHelper.getMetadata(effectivePath) else null)
+                        ?: (if (effectiveUri.isNotBlank()) dbHelper.getMetadata(effectiveUri) else null)
+                        ?: dbHelper.getMetadata(fileData.fileName)
+                    val savedDocId = currentMeta?.vaultDocId
+
+                    // Priority 1: Match by saved server document ID
+                    val matchedDoc = serverDocs.firstOrNull { doc ->
+                        savedDocId != null && doc.id == savedDocId
+                    } ?: serverDocs.firstOrNull { doc ->
+                        // Priority 2: Match by exact title AND matching location/path to distinguish identical names
+                        val titleMatches = doc.title.equals(fileData.fileName, ignoreCase = true)
+                        val locationMatches = when {
+                            effectivePath.isNotBlank() && doc.location.equals(effectivePath, ignoreCase = true) -> true
+                            effectivePath.isNotBlank() && doc.file_path?.contains(effectivePath) == true -> true
+                            fileData.location.isNotBlank() && fileData.location != "Internal Storage" && doc.location.equals(fileData.location, ignoreCase = true) -> true
+                            else -> false
+                        }
+                        titleMatches && locationMatches
+                    } ?: if (serverDocs.count { it.title.equals(fileData.fileName, ignoreCase = true) } == 1) {
+                        // Priority 3: Single matching document by title
+                        serverDocs.firstOrNull { it.title.equals(fileData.fileName, ignoreCase = true) }
+                    } else {
+                        null
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        if (matchedDoc != null) {
+                            isVaultSynced = true
+                            dbHelper.setVaultStatus(key, fileData.fileName, true, matchedDoc.id)
+                            if (effectivePath.isNotBlank()) {
+                                dbHelper.setVaultStatus(effectivePath, fileData.fileName, true, matchedDoc.id)
+                            }
+                            if (effectiveUri.isNotBlank()) {
+                                dbHelper.setVaultStatus(effectiveUri, fileData.fileName, true, matchedDoc.id)
+                            }
+                            dbHelper.setVaultStatus(fileData.fileName, fileData.fileName, true, matchedDoc.id)
+                        } else {
+                            // Document does not exist on server (deleted or never uploaded)
+                            isVaultSynced = false
+                            dbHelper.setVaultStatus(key, fileData.fileName, false, null)
+                            if (effectivePath.isNotBlank()) {
+                                dbHelper.setVaultStatus(effectivePath, fileData.fileName, false, null)
+                            }
+                            if (effectiveUri.isNotBlank()) {
+                                dbHelper.setVaultStatus(effectiveUri, fileData.fileName, false, null)
+                            }
+                            dbHelper.setVaultStatus(fileData.fileName, fileData.fileName, false, null)
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+            withContext(Dispatchers.Main) {
+                isCheckingVaultStatus = false
+            }
+        }
     }
     var showVaultConfirmDialog by remember { mutableStateOf(false) }
     var showOpenOptionsDialog by remember { mutableStateOf(false) }
@@ -272,25 +354,33 @@ fun FileDetailScreen(
                         isUploadingToVault = true
                         scope.launch {
                             val result = docRepository.uploadToVault(
-                                filePath = fileData.path,
-                                uriString = fileData.uriString,
+                                filePath = effectivePath,
+                                uriString = effectiveUri,
                                 fileName = fileData.fileName,
                                 category = fileData.category,
-                                priority = selectedPriority?.name
+                                priority = selectedPriority?.name,
+                                location = if (effectivePath.isNotBlank()) effectivePath else fileData.location
                             )
                             isUploadingToVault = false
                             result.onSuccess { doc ->
                                 isVaultSynced = true
-                                val key = if (fileData.path.isNotBlank()) fileData.path else fileData.uriString
                                 dbHelper.setVaultStatus(
                                     uriOrPath = key,
                                     fileName = fileData.fileName,
                                     isSynced = true,
                                     vaultDocId = doc.id
                                 )
-                                if (fileData.uriString.isNotBlank()) {
+                                if (effectivePath.isNotBlank()) {
                                     dbHelper.setVaultStatus(
-                                        uriOrPath = fileData.uriString,
+                                        uriOrPath = effectivePath,
+                                        fileName = fileData.fileName,
+                                        isSynced = true,
+                                        vaultDocId = doc.id
+                                    )
+                                }
+                                if (effectiveUri.isNotBlank()) {
+                                    dbHelper.setVaultStatus(
+                                        uriOrPath = effectiveUri,
                                         fileName = fileData.fileName,
                                         isSynced = true,
                                         vaultDocId = doc.id
@@ -452,16 +542,42 @@ fun FileDetailScreen(
                         }
                     }
 
-                    if (!isVaultSynced) {
+                    if (isVaultSynced) {
+                        Button(
+                            onClick = {},
+                            enabled = false,
+                            colors = ButtonDefaults.buttonColors(
+                                disabledContainerColor = Color(0xFFD1FAE5),
+                                disabledContentColor = Color(0xFF065F46)
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier.height(34.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(15.dp),
+                                tint = Color(0xFF059669)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Added to IntelliSpace",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF065F46)
+                            )
+                        }
+                    } else {
                         Button(
                             onClick = { showVaultConfirmDialog = true },
-                            enabled = !isUploadingToVault,
+                            enabled = !isUploadingToVault && !isCheckingVaultStatus,
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                             shape = RoundedCornerShape(10.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                             modifier = Modifier.height(34.dp)
                         ) {
-                            if (isUploadingToVault) {
+                            if (isUploadingToVault || isCheckingVaultStatus) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(16.dp),
                                     color = Color.White,

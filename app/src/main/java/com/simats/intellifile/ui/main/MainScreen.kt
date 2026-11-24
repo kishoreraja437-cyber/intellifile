@@ -507,7 +507,9 @@ fun MainScreen(
 
                                 uriString = file.uriString,
 
-                                path = file.path
+                                path = file.path,
+
+                                isVaultSynced = file.isVaultSynced
 
                             )
 
@@ -529,7 +531,9 @@ fun MainScreen(
 
                                 uriString = file.uriString,
 
-                                path = file.path
+                                path = file.path,
+
+                                isVaultSynced = file.isVaultSynced
 
                             )
 
@@ -930,7 +934,9 @@ fun MainScreen(
 
                                         uriString = file.uriString,
 
-                                        path = file.path
+                                        path = file.path,
+
+                                        isVaultSynced = file.isVaultSynced
 
                                     )
 
@@ -956,7 +962,9 @@ fun MainScreen(
 
                                         uriString = file.uriString,
 
-                                        path = file.path
+                                        path = file.path,
+
+                                        isVaultSynced = file.isVaultSynced
 
                                     )
 
@@ -1090,7 +1098,9 @@ fun MainScreen(
 
                                         uriString = file.uriString,
 
-                                        path = file.path
+                                        path = file.path,
+
+                                        isVaultSynced = file.isVaultSynced
 
                                     )
 
@@ -1118,7 +1128,9 @@ fun MainScreen(
 
                                         uriString = file.uriString,
 
-                                        path = file.path
+                                        path = file.path,
+
+                                        isVaultSynced = file.isVaultSynced
 
                                     )
 
