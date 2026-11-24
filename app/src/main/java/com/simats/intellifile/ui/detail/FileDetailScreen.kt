@@ -507,33 +507,21 @@ fun FileDetailScreen(
 
             // Priority Section Title
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSetPriorityClick() },
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Priority",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (selectedPriority != null) "(${selectedPriority?.title})" else "(Not Set)",
-                        fontSize = 13.sp,
-                        color = if (selectedPriority != null) selectedPriority!!.textColor else Color(0xFF6B7280),
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-
                 Text(
-                    text = "Change",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
+                    text = "Priority",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (selectedPriority != null) "(${selectedPriority?.title})" else "(Not Set)",
+                    fontSize = 13.sp,
+                    color = if (selectedPriority != null) selectedPriority!!.textColor else Color(0xFF6B7280),
+                    fontWeight = FontWeight.SemiBold
                 )
             }
 
