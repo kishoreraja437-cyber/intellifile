@@ -11,7 +11,9 @@ import com.simats.intellifile.ui.viewer.DocumentViewerScreen
 import com.simats.intellifile.ui.viewer.ppt.PPTViewerScreen
 
 import android.Manifest
+import android.app.Activity
 import android.app.Application
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -313,6 +315,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         handleIncomingIntent(intent, isInitial = true)
         enableEdgeToEdge()
 
@@ -403,9 +406,16 @@ class MainActivity : ComponentActivity() {
                     ) {
                         val externalDoc by externalDocumentState.collectAsState()
 
+                        LaunchedEffect(externalDoc) {
+                            if (externalDoc == null) {
+                                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                            }
+                        }
+
                         if (externalDoc != null) {
                             val doc = externalDoc!!
                             BackHandler {
+                                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                                 val shouldFinish = isOpenedFromExternalIntent && isTaskRoot
                                 externalDocumentState.value = null
                                 isOpenedFromExternalIntent = false
@@ -424,6 +434,7 @@ class MainActivity : ComponentActivity() {
                                     filePath = if (doc.uri.scheme?.equals(ContentResolver.SCHEME_FILE, ignoreCase = true) == true) doc.uri.path ?: "" else "",
                                     fileUriString = doc.uri.toString(),
                                     onBackClick = {
+                                        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                                         val shouldFinish = isOpenedFromExternalIntent && isTaskRoot
                                         externalDocumentState.value = null
                                         isOpenedFromExternalIntent = false
@@ -452,6 +463,7 @@ class MainActivity : ComponentActivity() {
                                     fileFormat = doc.fileFormat,
                                     totalPages = 1,
                                     onBackClick = {
+                                        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                                         val shouldFinish = isOpenedFromExternalIntent && isTaskRoot
                                         externalDocumentState.value = null
                                         isOpenedFromExternalIntent = false

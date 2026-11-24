@@ -1,6 +1,7 @@
 package com.simats.intellifile.ui.viewer
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -152,10 +153,15 @@ fun DocumentViewerScreen(
 
     DisposableEffect(filePath, fileUriString) {
         onDispose {
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             isSearchActive = false
             searchQuery = ""
         }
+    }
+
+    BackHandler {
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        onBackClick()
     }
 
     val effectiveFormat = remember(fileName, fileFormat) {
@@ -676,7 +682,7 @@ fun DocumentViewerScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 10.dp),
+                        .padding(horizontal = 8.dp, vertical = if (isLandscape) 2.dp else 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -684,7 +690,10 @@ fun DocumentViewerScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                     ) {
-                        IconButton(onClick = onBackClick) {
+                        IconButton(onClick = {
+                            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                            onBackClick()
+                        }) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Back",
@@ -811,7 +820,7 @@ fun DocumentViewerScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = if (isLandscape) 4.dp else 16.dp),
                 contentAlignment = Alignment.Center
             ) {
                 when {
@@ -1290,11 +1299,12 @@ fun DocumentViewerScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(if (isLandscape) 2.dp else 10.dp))
 
             // Bottom Action Bar
             DocumentBottomActionBar(
                 isSaved = isSaved,
+                isLandscape = isLandscape,
                 onSaveClick = {
                     isSaved = true
                     if (key.isNotBlank()) {
@@ -3428,6 +3438,7 @@ fun DocumentBottomActionBar(
     onThumbnailClick: () -> Unit,
     onShareClick: () -> Unit,
     onMoreClick: () -> Unit,
+    isLandscape: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -3443,7 +3454,7 @@ fun DocumentBottomActionBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 16.dp, vertical = if (isLandscape) 3.dp else 10.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {

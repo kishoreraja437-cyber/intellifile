@@ -1,7 +1,7 @@
 package com.simats.intellifile.ui.main
 
-
-
+import android.app.Activity
+import android.content.pm.ActivityInfo
 import androidx.activity.compose.BackHandler
 
 import androidx.compose.animation.AnimatedContent
@@ -248,6 +248,12 @@ fun MainScreen(
     var selectedDetailFile by remember { mutableStateOf<FileDetailData?>(null) }
 
     var isDocumentViewerOpen by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isDocumentViewerOpen) {
+        if (!isDocumentViewerOpen) {
+            (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+    }
 
     var isSetPriorityOpen by remember { mutableStateOf(false) }
 
@@ -556,6 +562,7 @@ fun MainScreen(
                                 filePath = selectedDetailFile?.path ?: "",
                                 fileUriString = selectedDetailFile?.uriString ?: "",
                                 onBackClick = {
+                                    (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                                     isDocumentViewerOpen = false
                                     if (selectedTab == BottomNavItem.AI || selectedTab == BottomNavItem.FILES) {
                                         selectedDetailFile = null
@@ -571,6 +578,7 @@ fun MainScreen(
                                 fileFormat = selectedDetailFile?.fileType?.substringBefore(" ") ?: "PDF",
                                 totalPages = 1,
                                 onBackClick = {
+                                    (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                                     isDocumentViewerOpen = false
                                     if (selectedTab == BottomNavItem.AI || selectedTab == BottomNavItem.FILES) {
                                         selectedDetailFile = null
@@ -578,14 +586,17 @@ fun MainScreen(
                                 },
                                 onShareClick = { isShareOpen = true },
                                 onMoreClick = {
+                                    (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                                     isDocumentViewerOpen = false
                                     isSetPriorityOpen = true
                                 },
                                 onSetPriorityClick = {
+                                    (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                                     isDocumentViewerOpen = false
                                     isSetPriorityOpen = true
                                 },
                                 onConfirmSave = {
+                                    (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                                     isDocumentViewerOpen = false
                                     isSetPriorityOpen = true
                                 }

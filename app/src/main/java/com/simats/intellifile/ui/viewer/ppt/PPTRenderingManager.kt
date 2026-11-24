@@ -51,8 +51,6 @@ object PPTRenderingManager {
 
         Card(
             modifier = modifier
-                .fillMaxWidth()
-                .aspectRatio(safeAspectRatio)
                 .shadow(elevation = 8.dp, shape = RoundedCornerShape(10.dp)),
             shape = RoundedCornerShape(10.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),

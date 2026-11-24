@@ -121,7 +121,7 @@ fun PPTViewerScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             viewModel.clearSearch()
         }
     }
@@ -161,7 +161,10 @@ fun PPTViewerScreen(
             uiState.isSearchActive -> viewModel.setSearchActive(false)
             uiState.showThumbnailsDrawer -> viewModel.setThumbnailsDrawer(false)
             uiState.isFullscreen -> viewModel.setFullscreen(false)
-            else -> onBackClick()
+            else -> {
+                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                onBackClick()
+            }
         }
     }
 
@@ -224,6 +227,7 @@ fun PPTViewerScreen(
                         }
                     },
                     onBackClick = {
+                        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                         viewModel.clearSearch()
                         onBackClick()
                     },
@@ -275,6 +279,7 @@ fun PPTViewerScreen(
                         zoomPercentage = (uiState.zoomScale * 100).toInt(),
                         canGoPrevious = uiState.canGoPrevious,
                         canGoNext = uiState.canGoNext,
+                        isLandscape = isLandscape,
                         onPreviousClick = {
                             coroutineScope.launch {
                                 if (pagerState.currentPage > 0) {
@@ -434,7 +439,7 @@ private fun PPTViewerTopBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(horizontal = 8.dp, vertical = if (isLandscape) 2.dp else 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Back Button
@@ -713,23 +718,46 @@ private fun PPTVisualCanvasView(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(if (isFullscreen) 1f else 0.98f)
-                    .graphicsLayer {
-                        if (isCurrentPage) {
-                            scaleX = zoomScale
-                            scaleY = zoomScale
-                            translationX = panOffset.x
-                            translationY = panOffset.y
-                        }
-                    }
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
             ) {
-                PPTRenderingManager.RenderVisualSlide(
-                    bitmap = slideBitmap,
-                    placeholderThumbnail = placeholderThumbnail,
-                    aspectRatio = aspectRatio
-                )
+                val safeAspect = if (aspectRatio > 0.5f) aspectRatio else 16f / 9f
+                val maxAvailableWidth = maxWidth * (if (isFullscreen) 1f else 0.98f)
+                val maxAvailableHeight = maxHeight * (if (isFullscreen) 1f else 0.96f)
+
+                val widthBasedHeight = maxAvailableWidth / safeAspect
+                val heightBasedWidth = maxAvailableHeight * safeAspect
+
+                val slideWidth: androidx.compose.ui.unit.Dp
+                val slideHeight: androidx.compose.ui.unit.Dp
+                if (widthBasedHeight <= maxAvailableHeight) {
+                    slideWidth = maxAvailableWidth
+                    slideHeight = widthBasedHeight
+                } else {
+                    slideWidth = heightBasedWidth
+                    slideHeight = maxAvailableHeight
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(slideWidth, slideHeight)
+                        .graphicsLayer {
+                            if (isCurrentPage) {
+                                scaleX = zoomScale
+                                scaleY = zoomScale
+                                translationX = panOffset.x
+                                translationY = panOffset.y
+                            }
+                        }
+                ) {
+                    PPTRenderingManager.RenderVisualSlide(
+                        bitmap = slideBitmap,
+                        placeholderThumbnail = placeholderThumbnail,
+                        aspectRatio = safeAspect,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         }
     }
@@ -746,6 +774,7 @@ private fun PPTBottomNavigationBar(
     zoomPercentage: Int,
     canGoPrevious: Boolean,
     canGoNext: Boolean,
+    isLandscape: Boolean = false,
     onPreviousClick: () -> Unit,
     onNextClick: () -> Unit,
     onSlidePillClick: () -> Unit,
@@ -760,7 +789,7 @@ private fun PPTBottomNavigationBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = if (isLandscape) 2.dp else 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -775,28 +804,30 @@ private fun PPTBottomNavigationBar(
                     disabledContentColor = Color(0xFF94A3B8)
                 ),
                 shape = CircleShape,
-                modifier = Modifier.size(42.dp)
+                modifier = Modifier.size(if (isLandscape) 34.dp else 42.dp)
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                    contentDescription = "Previous Slide"
+                    contentDescription = "Previous Slide",
+                    modifier = Modifier.size(if (isLandscape) 20.dp else 24.dp)
                 )
             }
 
             // Middle: Slide Counter Pill & Zoom Controls
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(if (isLandscape) 4.dp else 6.dp)
             ) {
                 // Zoom Out Button
                 IconButton(
                     onClick = onZoomOut,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(if (isLandscape) 30.dp else 36.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Remove,
                         contentDescription = "Zoom Out",
-                        tint = DarkOceanTeal
+                        tint = DarkOceanTeal,
+                        modifier = Modifier.size(if (isLandscape) 18.dp else 24.dp)
                     )
                 }
 
@@ -807,12 +838,12 @@ private fun PPTBottomNavigationBar(
                         .background(ContainerAqua)
                         .border(1.dp, DuskyAqua.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
                         .clickable(onClick = onSlidePillClick)
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .padding(horizontal = if (isLandscape) 8.dp else 12.dp, vertical = if (isLandscape) 3.dp else 6.dp)
                 ) {
                     Text(
                         text = "$currentSlideNumber / $totalSlides",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
+                        fontSize = if (isLandscape) 11.5.sp else 13.sp,
                         color = DarkOceanTeal
                     )
                 }
@@ -823,12 +854,12 @@ private fun PPTBottomNavigationBar(
                         .clip(RoundedCornerShape(20.dp))
                         .background(Color(0xFFF1F5F9))
                         .clickable(onClick = onResetZoom)
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .padding(horizontal = if (isLandscape) 8.dp else 10.dp, vertical = if (isLandscape) 3.dp else 6.dp)
                 ) {
                     Text(
                         text = "$zoomPercentage%",
                         fontWeight = FontWeight.Medium,
-                        fontSize = 12.sp,
+                        fontSize = if (isLandscape) 11.5.sp else 12.sp,
                         color = MutedAqua
                     )
                 }
@@ -836,12 +867,13 @@ private fun PPTBottomNavigationBar(
                 // Zoom In Button
                 IconButton(
                     onClick = onZoomIn,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(if (isLandscape) 30.dp else 36.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Zoom In",
-                        tint = DarkOceanTeal
+                        tint = DarkOceanTeal,
+                        modifier = Modifier.size(if (isLandscape) 18.dp else 24.dp)
                     )
                 }
             }
@@ -857,11 +889,12 @@ private fun PPTBottomNavigationBar(
                     disabledContentColor = Color(0xFF94A3B8)
                 ),
                 shape = CircleShape,
-                modifier = Modifier.size(42.dp)
+                modifier = Modifier.size(if (isLandscape) 34.dp else 42.dp)
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "Next Slide"
+                    contentDescription = "Next Slide",
+                    modifier = Modifier.size(if (isLandscape) 20.dp else 24.dp)
                 )
             }
         }
