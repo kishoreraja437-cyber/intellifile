@@ -686,13 +686,10 @@ fun VoiceAssistantModal(
         }
     }
 
-    // Auto-start listening on first open if permission is granted, or request permission
+    // Request microphone permission if not granted on open
     LaunchedEffect(hasAudioPermission) {
         if (!hasAudioPermission) {
             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        } else if (voiceState == AssistantVoiceState.IDLE && userSpeechText.isEmpty()) {
-            delay(300L)
-            startListening()
         }
     }
 
@@ -711,7 +708,7 @@ fun VoiceAssistantModal(
             onDismiss()
         },
         sheetState = sheetState,
-        containerColor = Color(0xFF05323D),
+        containerColor = Color(0xFF1E5155),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         dragHandle = {
             Box(
@@ -942,8 +939,8 @@ fun VoiceAssistantModal(
                         }
                     }
 
-                    // Quick Suggested Voice Actions (when IDLE)
-                    if (userSpeechText.isBlank() && voiceState == AssistantVoiceState.IDLE) {
+                    // Quick Suggested Voice Actions (visible when IDLE or LISTENING before user speaks)
+                    if (userSpeechText.isBlank() && (voiceState == AssistantVoiceState.IDLE || voiceState == AssistantVoiceState.LISTENING)) {
                         item {
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
@@ -1035,6 +1032,18 @@ fun VoiceAssistantModal(
                         value = manualInputText,
                         onValueChange = { manualInputText = it },
                         singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Send
+                        ),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onSend = {
+                                if (manualInputText.isNotBlank()) {
+                                    val txt = manualInputText.trim()
+                                    manualInputText = ""
+                                    executeCommand(txt)
+                                }
+                            }
+                        ),
                         textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF0F172A), fontSize = 13.5.sp),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1055,7 +1064,7 @@ fun VoiceAssistantModal(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = "Send Command",
-                        tint = Color(0xFF00897B),
+                        tint = Color(0xFF0D4B53),
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -1134,7 +1143,7 @@ fun VoiceAssistantModal(
 
                     Box(
                         modifier = Modifier
-                            .size(52.dp)
+                            .size(54.dp)
                             .shadow(elevation = 6.dp, shape = CircleShape, spotColor = Color(0x6000C2A8))
                             .clip(CircleShape)
                             .background(
@@ -1142,7 +1151,7 @@ fun VoiceAssistantModal(
                                     colors = if (voiceState == AssistantVoiceState.LISTENING) {
                                         listOf(Color(0xFF00E5FF), Color(0xFF00C2A8))
                                     } else {
-                                        listOf(Color(0xFF00C2A8), Color(0xFF00A389))
+                                        listOf(Color(0xFF00D4C8), Color(0xFF00A896))
                                     }
                                 )
                             )

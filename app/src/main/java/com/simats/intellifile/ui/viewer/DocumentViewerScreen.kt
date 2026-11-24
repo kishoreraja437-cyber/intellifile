@@ -9,7 +9,8 @@ import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -159,9 +160,16 @@ fun DocumentViewerScreen(
         }
     }
 
+    // Immersive Full-Screen controls visibility
+    var areControlsVisible by remember { mutableStateOf(true) }
+
     BackHandler {
-        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        onBackClick()
+        if (!areControlsVisible) {
+            areControlsVisible = true
+        } else {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            onBackClick()
+        }
     }
 
     val effectiveFormat = remember(fileName, fileFormat) {
@@ -580,7 +588,12 @@ fun DocumentViewerScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             // Header Bar
-            if (isSearchActive) {
+            AnimatedVisibility(
+                visible = areControlsVisible,
+                enter = fadeIn(animationSpec = tween(220)) + expandVertically(animationSpec = tween(220)),
+                exit = fadeOut(animationSpec = tween(220)) + shrinkVertically(animationSpec = tween(220))
+            ) {
+                if (isSearchActive) {
                 val matchingUnits = remember(parsedContent, searchQuery) {
                     if (searchQuery.isBlank()) emptyList<Int>()
                     else when (val content = parsedContent) {
@@ -814,13 +827,14 @@ fun DocumentViewerScreen(
                     }
                 }
             }
+        }
 
             // Main Viewport Container
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = if (isLandscape) 4.dp else 16.dp),
+                    .padding(horizontal = if (!areControlsVisible) 0.dp else if (isLandscape) 4.dp else 16.dp),
                 contentAlignment = Alignment.Center
             ) {
                 when {
@@ -901,6 +915,9 @@ fun DocumentViewerScreen(
                                     .clipToBounds()
                                     .pointerInput(Unit) {
                                         detectTapGestures(
+                                            onTap = {
+                                                areControlsVisible = !areControlsVisible
+                                            },
                                             onDoubleTap = {
                                                 if (docGestureScale > 1.1f) {
                                                     docGestureScale = 1f
@@ -1069,7 +1086,8 @@ fun DocumentViewerScreen(
                         SpreadsheetTableView(
                             spreadsheet = spreadsheet,
                             zoomPercentage = zoomPercentage,
-                            searchQuery = searchQuery
+                            searchQuery = searchQuery,
+                            onToggleControls = { areControlsVisible = !areControlsVisible }
                         )
                     }
 
@@ -1102,6 +1120,7 @@ fun DocumentViewerScreen(
                                     }
                                     zoomPercentage = (docGestureScale * 100).toInt()
                                 },
+                                onToggleControls = { areControlsVisible = !areControlsVisible },
                                 searchQuery = searchQuery,
                                 onZoomImage = { zoomTargetDocumentImage = it }
                             )
@@ -1136,6 +1155,7 @@ fun DocumentViewerScreen(
                                     }
                                     zoomPercentage = (docGestureScale * 100).toInt()
                                 },
+                                onToggleControls = { areControlsVisible = !areControlsVisible },
                                 searchQuery = searchQuery,
                                 onPrevPage = { if (currentPageIndex > 1) currentPageIndex-- },
                                 onNextPage = { if (currentPageIndex < totalUnitsCount) currentPageIndex++ },
@@ -1151,182 +1171,191 @@ fun DocumentViewerScreen(
                             textDoc = textDoc,
                             fileFormat = effectiveFormat,
                             zoomPercentage = zoomPercentage,
-                            searchQuery = searchQuery
+                            searchQuery = searchQuery,
+                            onToggleControls = { areControlsVisible = !areControlsVisible }
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Unified Bottom Indicator & Zoom Bar
-            val unitName = when {
-                parsedContent is ParsedDocumentContent.Presentation -> "Slide"
-                parsedContent is ParsedDocumentContent.Spreadsheet -> "Row"
-                else -> "Page"
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            AnimatedVisibility(
+                visible = areControlsVisible,
+                enter = fadeIn(animationSpec = tween(220)) + expandVertically(animationSpec = tween(220)),
+                exit = fadeOut(animationSpec = tween(220)) + shrinkVertically(animationSpec = tween(220))
             ) {
-                // Interactive Unit Indicator Pill with Prev / Next arrows
-                Row(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(Color.White)
-                        .border(1.dp, Color(0xFFF1F5F9), CircleShape)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (wordDocViewMode == WordDocViewMode.CONTINUOUS && parsedContent is ParsedDocumentContent.RichDocument) {
-                        Text(
-                            text = "Full Document · $totalUnitsCount Pages",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFF374151),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                        )
-                    } else {
-                        if (totalUnitsCount > 1) {
-                            IconButton(
-                                onClick = { if (currentPageIndex > 1) currentPageIndex-- },
-                                enabled = currentPageIndex > 1,
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                                    contentDescription = "Previous $unitName",
-                                    tint = if (currentPageIndex > 1) Color(0xFF374151) else Color(0xFFD1D5DB),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                        Text(
-                            text = if (totalUnitsCount > 1) "$unitName $currentPageIndex / $totalUnitsCount" else "$unitName 1 / 1",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFF374151),
+                    // Unified Bottom Indicator & Zoom Bar
+                    val unitName = when {
+                        parsedContent is ParsedDocumentContent.Presentation -> "Slide"
+                        parsedContent is ParsedDocumentContent.Spreadsheet -> "Row"
+                        else -> "Page"
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Interactive Unit Indicator Pill with Prev / Next arrows
+                        Row(
                             modifier = Modifier
-                                .clickable {
-                                    if (totalUnitsCount > 1) {
-                                        showJumpDialog = true
+                                .clip(CircleShape)
+                                .background(Color.White)
+                                .border(1.dp, Color(0xFFF1F5F9), CircleShape)
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (wordDocViewMode == WordDocViewMode.CONTINUOUS && parsedContent is ParsedDocumentContent.RichDocument) {
+                                Text(
+                                    text = "Full Document · $totalUnitsCount Pages",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF374151),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            } else {
+                                if (totalUnitsCount > 1) {
+                                    IconButton(
+                                        onClick = { if (currentPageIndex > 1) currentPageIndex-- },
+                                        enabled = currentPageIndex > 1,
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                            contentDescription = "Previous $unitName",
+                                            tint = if (currentPageIndex > 1) Color(0xFF374151) else Color(0xFFD1D5DB),
+                                            modifier = Modifier.size(18.dp)
+                                        )
                                     }
                                 }
-                                .padding(horizontal = 8.dp)
-                        )
 
-                        if (totalUnitsCount > 1) {
+                                Text(
+                                    text = if (totalUnitsCount > 1) "$unitName $currentPageIndex / $totalUnitsCount" else "$unitName 1 / 1",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF374151),
+                                    modifier = Modifier
+                                        .clickable {
+                                            if (totalUnitsCount > 1) {
+                                                showJumpDialog = true
+                                            }
+                                        }
+                                        .padding(horizontal = 8.dp)
+                                )
+
+                                if (totalUnitsCount > 1) {
+                                    IconButton(
+                                        onClick = { if (currentPageIndex < totalUnitsCount) currentPageIndex++ },
+                                        enabled = currentPageIndex < totalUnitsCount,
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                            contentDescription = "Next $unitName",
+                                            tint = if (currentPageIndex < totalUnitsCount) Color(0xFF374151) else Color(0xFFD1D5DB),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Zoom Control Pill
+                        Row(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(Color.White)
+                                .border(1.dp, Color(0xFFF1F5F9), CircleShape)
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             IconButton(
-                                onClick = { if (currentPageIndex < totalUnitsCount) currentPageIndex++ },
-                                enabled = currentPageIndex < totalUnitsCount,
+                                onClick = {
+                                    if (zoomPercentage > 60) {
+                                        zoomPercentage -= 20
+                                        docGestureScale = zoomPercentage / 100f
+                                        if (docGestureScale <= 1f) docPanOffset = Offset.Zero
+                                    }
+                                },
                                 modifier = Modifier.size(28.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    contentDescription = "Next $unitName",
-                                    tint = if (currentPageIndex < totalUnitsCount) Color(0xFF374151) else Color(0xFFD1D5DB),
-                                    modifier = Modifier.size(18.dp)
+                                    imageVector = Icons.Default.Remove,
+                                    contentDescription = "Zoom Out",
+                                    tint = Color(0xFF374151),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            Text(
+                                text = "$zoomPercentage%",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF111827),
+                                modifier = Modifier.clickable {
+                                    docGestureScale = 1f
+                                    docPanOffset = Offset.Zero
+                                    zoomPercentage = 100
+                                }
+                            )
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            IconButton(
+                                onClick = {
+                                    if (zoomPercentage < 300) {
+                                        zoomPercentage += 20
+                                        docGestureScale = zoomPercentage / 100f
+                                    }
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Zoom In",
+                                    tint = Color(0xFF374151),
+                                    modifier = Modifier.size(16.dp)
                                 )
                             }
                         }
                     }
-                }
 
-                // Zoom Control Pill
-                Row(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(Color.White)
-                        .border(1.dp, Color(0xFFF1F5F9), CircleShape)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = {
-                            if (zoomPercentage > 60) {
-                                zoomPercentage -= 20
-                                docGestureScale = zoomPercentage / 100f
-                                if (docGestureScale <= 1f) docPanOffset = Offset.Zero
+                    Spacer(modifier = Modifier.height(if (isLandscape) 2.dp else 10.dp))
+
+                    // Bottom Action Bar
+                    DocumentBottomActionBar(
+                        isSaved = isSaved,
+                        isLandscape = isLandscape,
+                        onSaveClick = {
+                            isSaved = true
+                            if (key.isNotBlank()) {
+                                LocalFileDatabaseHelper.getInstance(context).setBookmarked(key, fileName, true)
+                                Toast.makeText(context, "Saved to device collection", Toast.LENGTH_SHORT).show()
+                            }
+                            onConfirmSave()
+                            onSetPriorityClick()
+                        },
+                        onThumbnailClick = {
+                            if (totalUnitsCount > 1) {
+                                showJumpDialog = true
+                            } else {
+                                onThumbnailClick()
                             }
                         },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Remove,
-                            contentDescription = "Zoom Out",
-                            tint = Color(0xFF374151),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Text(
-                        text = "$zoomPercentage%",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF111827),
-                        modifier = Modifier.clickable {
-                            docGestureScale = 1f
-                            docPanOffset = Offset.Zero
-                            zoomPercentage = 100
+                        onShareClick = onShareClick,
+                        onMoreClick = {
+                            onMoreClick()
+                            onSetPriorityClick()
                         }
                     )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    IconButton(
-                        onClick = {
-                            if (zoomPercentage < 300) {
-                                zoomPercentage += 20
-                                docGestureScale = zoomPercentage / 100f
-                            }
-                        },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Zoom In",
-                            tint = Color(0xFF374151),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
                 }
             }
-
-            Spacer(modifier = Modifier.height(if (isLandscape) 2.dp else 10.dp))
-
-            // Bottom Action Bar
-            DocumentBottomActionBar(
-                isSaved = isSaved,
-                isLandscape = isLandscape,
-                onSaveClick = {
-                    isSaved = true
-                    if (key.isNotBlank()) {
-                        LocalFileDatabaseHelper.getInstance(context).setBookmarked(key, fileName, true)
-                        Toast.makeText(context, "Saved to device collection", Toast.LENGTH_SHORT).show()
-                    }
-                    onConfirmSave()
-                    onSetPriorityClick()
-                },
-                onThumbnailClick = {
-                    if (totalUnitsCount > 1) {
-                        showJumpDialog = true
-                    } else {
-                        onThumbnailClick()
-                    }
-                },
-                onShareClick = onShareClick,
-                onMoreClick = {
-                    onMoreClick()
-                    onSetPriorityClick()
-                }
-            )
         }
 
         // Interactive Full-Screen Diagram Zoom Dialog
@@ -2619,7 +2648,8 @@ private fun FullscreenSlideshowDialog(
 private fun SpreadsheetTableView(
     spreadsheet: ParsedDocumentContent.Spreadsheet,
     zoomPercentage: Int,
-    searchQuery: String
+    searchQuery: String,
+    onToggleControls: () -> Unit = {}
 ) {
     val scaleFactor = zoomPercentage / 100f
     val textSize = (13 * scaleFactor).sp
@@ -2642,6 +2672,9 @@ private fun SpreadsheetTableView(
             .clip(RoundedCornerShape(14.dp))
             .background(Color.White)
             .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(14.dp))
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { onToggleControls() })
+            }
     ) {
         // Table Info Banner
         Row(
@@ -2778,6 +2811,7 @@ private fun WordDocumentContinuousView(
     docPanOffset: Offset = Offset.Zero,
     onZoomPanChange: (Float, Offset) -> Unit = { _, _ -> },
     onDoubleTap: () -> Unit = {},
+    onToggleControls: () -> Unit = {},
     searchQuery: String,
     onZoomImage: (com.simats.intellifile.data.manager.DocumentImage) -> Unit
 ) {
@@ -2789,7 +2823,10 @@ private fun WordDocumentContinuousView(
             .fillMaxSize()
             .clipToBounds()
             .pointerInput(Unit) {
-                detectTapGestures(onDoubleTap = { onDoubleTap() })
+                detectTapGestures(
+                    onTap = { onToggleControls() },
+                    onDoubleTap = { onDoubleTap() }
+                )
             }
             .pointerInput(Unit) {
                 awaitEachGesture {
@@ -2949,6 +2986,7 @@ private fun WordDocumentPageView(
     docPanOffset: Offset = Offset.Zero,
     onZoomPanChange: (Float, Offset) -> Unit = { _, _ -> },
     onDoubleTap: () -> Unit = {},
+    onToggleControls: () -> Unit = {},
     searchQuery: String,
     onPrevPage: () -> Unit,
     onNextPage: () -> Unit,
@@ -2962,7 +3000,10 @@ private fun WordDocumentPageView(
             .padding(vertical = 4.dp)
             .clipToBounds()
             .pointerInput(Unit) {
-                detectTapGestures(onDoubleTap = { onDoubleTap() })
+                detectTapGestures(
+                    onTap = { onToggleControls() },
+                    onDoubleTap = { onDoubleTap() }
+                )
             }
             .pointerInput(Unit) {
                 awaitEachGesture {
@@ -3381,7 +3422,8 @@ private fun PlainTextViewer(
     textDoc: ParsedDocumentContent.PlainText,
     fileFormat: String,
     zoomPercentage: Int,
-    searchQuery: String
+    searchQuery: String,
+    onToggleControls: () -> Unit = {}
 ) {
     val scaleFactor = zoomPercentage / 100f
     val bodySize = (13 * scaleFactor).sp
@@ -3395,6 +3437,9 @@ private fun PlainTextViewer(
             .clip(RoundedCornerShape(12.dp))
             .background(Color.White)
             .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { onToggleControls() })
+            }
             .padding(14.dp)
             .verticalScroll(rememberScrollState())
             .horizontalScroll(rememberScrollState())

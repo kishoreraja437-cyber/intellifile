@@ -10,6 +10,7 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -203,7 +204,11 @@ fun PPTViewerScreen(
     Scaffold(
         containerColor = BackgroundAqua,
         topBar = {
-            if (!uiState.isFullscreen) {
+            AnimatedVisibility(
+                visible = !uiState.isFullscreen,
+                enter = fadeIn(animationSpec = tween(220)) + expandVertically(animationSpec = tween(220)),
+                exit = fadeOut(animationSpec = tween(220)) + shrinkVertically(animationSpec = tween(220))
+            ) {
                 PPTViewerTopBar(
                     fileName = fileName,
                     currentSlideNumber = uiState.currentSlideNumber,
@@ -244,7 +249,11 @@ fun PPTViewerScreen(
             }
         },
         bottomBar = {
-            if (!uiState.isFullscreen && !uiState.isLoading && uiState.errorMessage == null) {
+            AnimatedVisibility(
+                visible = !uiState.isFullscreen && !uiState.isLoading && uiState.errorMessage == null,
+                enter = fadeIn(animationSpec = tween(220)) + expandVertically(animationSpec = tween(220)),
+                exit = fadeOut(animationSpec = tween(220)) + shrinkVertically(animationSpec = tween(220))
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -338,40 +347,12 @@ fun PPTViewerScreen(
                         },
                         onDoubleTap = {
                             if (uiState.zoomScale > 1.1f) viewModel.resetZoom() else viewModel.updateZoomAndPan(2.2f, Offset.Zero)
+                        },
+                        onToggleControls = {
+                            viewModel.toggleFullscreen()
                         }
                     )
                 }
-            }
-
-            // Fullscreen Floating Minimal Controls
-            if (uiState.isFullscreen && !uiState.isLoading && uiState.errorMessage == null) {
-                PPTFullscreenOverlayControls(
-                    currentSlideNumber = uiState.currentSlideNumber,
-                    totalSlides = uiState.totalSlides,
-                    canGoPrevious = uiState.canGoPrevious,
-                    canGoNext = uiState.canGoNext,
-                    isLandscape = isLandscape,
-                    onPreviousClick = {
-                        coroutineScope.launch {
-                            if (pagerState.currentPage > 0) {
-                                pagerState.animateScrollToPage(pagerState.currentPage - 1)
-                            } else {
-                                viewModel.previousSlide()
-                            }
-                        }
-                    },
-                    onNextClick = {
-                        coroutineScope.launch {
-                            if (pagerState.currentPage < totalSlides - 1) {
-                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                            } else {
-                                viewModel.nextSlide()
-                            }
-                        }
-                    },
-                    onToggleOrientation = toggleOrientation,
-                    onExitFullscreen = { viewModel.setFullscreen(false) }
-                )
             }
 
             // Speaker Notes Bottom Dialog
@@ -637,6 +618,7 @@ private fun PPTVisualCanvasView(
     currentSlideBitmap: Bitmap?,
     onZoomPanChange: (Float, Offset) -> Unit,
     onDoubleTap: () -> Unit,
+    onToggleControls: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     HorizontalPager(
@@ -673,6 +655,7 @@ private fun PPTVisualCanvasView(
                         Modifier
                             .pointerInput(Unit) {
                                 detectTapGestures(
+                                    onTap = { onToggleControls() },
                                     onDoubleTap = { onDoubleTap() }
                                 )
                             }
