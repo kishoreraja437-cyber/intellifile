@@ -158,8 +158,6 @@ import com.simats.intellifile.ui.notifications.NotificationsScreen
 
 import com.simats.intellifile.ui.permission.FilePermissionsDetailScreen
 
-import com.simats.intellifile.ui.priority.SetPriorityScreen
-
 import com.simats.intellifile.ui.profile.ProfileScreen
 
 import com.simats.intellifile.ui.saved.FileSavedSuccessScreen
@@ -255,8 +253,6 @@ fun MainScreen(
         }
     }
 
-    var isSetPriorityOpen by remember { mutableStateOf(false) }
-
     var isFileSavedSuccessOpen by remember { mutableStateOf(false) }
 
     var isShareOpen by remember { mutableStateOf(false) }
@@ -294,7 +290,6 @@ fun MainScreen(
         isAiHistoryOpen = false
         selectedDetailFile = null
         isDocumentViewerOpen = false
-        isSetPriorityOpen = false
         isFileSavedSuccessOpen = false
         isShareOpen = false
         isFilePermissionsOpen = false
@@ -327,7 +322,6 @@ fun MainScreen(
             isThemeOpen -> isThemeOpen = false
             isNotificationsOpen -> isNotificationsOpen = false
             isFilePermissionsOpen -> isFilePermissionsOpen = false
-            isSetPriorityOpen -> isSetPriorityOpen = false
             selectedDetailFile != null -> selectedDetailFile = null
             isAiHistoryOpen -> isAiHistoryOpen = false
             isRecentFilesOpen -> isRecentFilesOpen = false
@@ -344,7 +338,7 @@ fun MainScreen(
     }
 
     val isOverlayScreenOpen = isVoiceAssistantOpen || isRecentFilesOpen || isAiHistoryOpen || selectedDetailFile != null ||
-            isDocumentViewerOpen || isSetPriorityOpen || isFileSavedSuccessOpen || isShareOpen || isFilePermissionsOpen ||
+            isDocumentViewerOpen || isFileSavedSuccessOpen || isShareOpen || isFilePermissionsOpen ||
             isNotificationsOpen || isThemeOpen || isAboutOpen ||
             isHelpSupportOpen || isContactSupportOpen || isContactSuccessOpen ||
             isFeedbackOpen || isFeedbackSuccessOpen
@@ -402,8 +396,6 @@ fun MainScreen(
             isNotificationsOpen -> "notifications"
 
             isFilePermissionsOpen -> "file_permissions"
-
-            isSetPriorityOpen -> "set_priority"
 
             selectedDetailFile != null -> "file_detail_${selectedDetailFile?.fileName}"
 
@@ -585,21 +577,9 @@ fun MainScreen(
                                     }
                                 },
                                 onShareClick = { isShareOpen = true },
-                                onMoreClick = {
-                                    (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                                    isDocumentViewerOpen = false
-                                    isSetPriorityOpen = true
-                                },
-                                onSetPriorityClick = {
-                                    (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                                    isDocumentViewerOpen = false
-                                    isSetPriorityOpen = true
-                                },
-                                onConfirmSave = {
-                                    (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                                    isDocumentViewerOpen = false
-                                    isSetPriorityOpen = true
-                                }
+                                onMoreClick = { isShareOpen = true },
+                                onSetPriorityClick = {},
+                                onConfirmSave = {}
                             )
                         }
                     }
@@ -680,50 +660,6 @@ fun MainScreen(
                             isAiHistoryOpen = false
 
                             navigateToTab(BottomNavItem.AI)
-
-                        }
-
-                    )
-
-
-
-                    "set_priority" -> SetPriorityScreen(
-
-                        fileName = selectedDetailFile?.fileName ?: "Document.pdf",
-
-                        fileSize = selectedDetailFile?.fileSize ?: "0 KB",
-
-                        fileFormat = selectedDetailFile?.fileType?.substringBefore(" ") ?: "PDF",
-
-                        iconResId = selectedDetailFile?.iconResId ?: R.drawable.pdf,
-
-                        initialPriority = selectedDetailFile?.priority ?: PriorityLevel.NORMAL,
-
-                        onBackClick = { isSetPriorityOpen = false },
-
-                        onSavePriority = { newPriority ->
-
-                            selectedDetailFile?.let { detail ->
-
-                                val key = if (detail.path.isNotBlank()) detail.path else detail.uriString
-
-                                LocalFileDatabaseHelper.getInstance(context).setPriority(
-
-                                    uriOrPath = key,
-
-                                    fileName = detail.fileName,
-
-                                    priority = newPriority
-
-                                )
-
-                                selectedDetailFile = detail.copy(priority = newPriority)
-
-                            }
-
-                            isSetPriorityOpen = false
-
-                            isFileSavedSuccessOpen = true
 
                         }
 
@@ -938,9 +874,9 @@ fun MainScreen(
 
                             onShareClick = { isShareOpen = true },
 
-                            onMoreOptionsClick = { isSetPriorityOpen = true },
+                            onMoreOptionsClick = { isShareOpen = true },
 
-                            onSetPriorityClick = { isSetPriorityOpen = true },
+                            onSetPriorityClick = {},
 
                             onPriorityChanged = { newPriority ->
 
