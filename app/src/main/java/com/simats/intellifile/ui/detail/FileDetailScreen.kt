@@ -553,14 +553,98 @@ fun FileDetailScreen(
                             val newPriority = if (selectedPriority == priority) null else priority
                             selectedPriority = newPriority
                             val key = if (fileData.path.isNotBlank()) fileData.path else fileData.uriString
-                            LocalFileDatabaseHelper.getInstance(context).setPriority(
+                            dbHelper.setPriority(
                                 uriOrPath = key,
                                 fileName = fileData.fileName,
                                 priority = newPriority
                             )
+                            if (fileData.uriString.isNotBlank()) {
+                                dbHelper.setPriority(
+                                    uriOrPath = fileData.uriString,
+                                    fileName = fileData.fileName,
+                                    priority = newPriority
+                                )
+                            }
+                            if (fileData.fileName.isNotBlank()) {
+                                dbHelper.setPriority(
+                                    uriOrPath = fileData.fileName,
+                                    fileName = fileData.fileName,
+                                    priority = newPriority
+                                )
+                            }
                             onPriorityChanged(newPriority)
                         },
                         modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Dedicated Save Priority Button directly in File Details Screen
+            Button(
+                onClick = {
+                    val key = if (fileData.path.isNotBlank()) fileData.path else fileData.uriString
+                    dbHelper.setPriority(
+                        uriOrPath = key,
+                        fileName = fileData.fileName,
+                        priority = selectedPriority
+                    )
+                    if (fileData.uriString.isNotBlank()) {
+                        dbHelper.setPriority(
+                            uriOrPath = fileData.uriString,
+                            fileName = fileData.fileName,
+                            priority = selectedPriority
+                        )
+                    }
+                    if (fileData.fileName.isNotBlank()) {
+                        dbHelper.setPriority(
+                            uriOrPath = fileData.fileName,
+                            fileName = fileData.fileName,
+                            priority = selectedPriority
+                        )
+                    }
+
+                    // Sync priority to server if file is in IntelliSpace
+                    val meta = dbHelper.getMetadata(key) ?: dbHelper.getMetadata(fileData.fileName)
+                    val vaultId = meta?.vaultDocId
+                    if (vaultId != null && selectedPriority != null) {
+                        scope.launch {
+                            docRepository.setPriority(vaultId, selectedPriority!!.name)
+                        }
+                    }
+
+                    onPriorityChanged(selectedPriority)
+                    Toast.makeText(
+                        context,
+                        if (selectedPriority != null) "Priority saved as ${selectedPriority?.title}!" else "Priority cleared!",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                ),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Save Priority",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (selectedPriority != null) "Save Priority (${selectedPriority?.title})" else "Save Priority",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
                 }
             }
