@@ -395,7 +395,7 @@ fun AboutScreen(
                         Spacer(modifier = Modifier.width(14.dp))
 
                         Text(
-                            text = "Terms of Service",
+                            text = "Terms and Conditions",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface
