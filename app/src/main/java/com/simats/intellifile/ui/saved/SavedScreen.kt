@@ -24,6 +24,14 @@ import com.simats.intellifile.ui.common.DraggableScrollbar
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.BookmarkRemove
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -73,6 +81,7 @@ data class SavedFileItem(
 
 enum class PriorityFilter(val label: String, val level: PriorityLevel?) {
     ALL("All", null),
+    BOOKMARKED("Bookmarked", null),
     IMPORTANT("Important", PriorityLevel.IMPORTANT),
     NORMAL("Normal", PriorityLevel.NORMAL),
     LOW("Low", PriorityLevel.LOW)
@@ -103,6 +112,19 @@ fun SavedScreen(
     var refreshTrigger by remember { mutableIntStateOf(0) }
     var realFiles by remember { mutableStateOf<List<LocalFileItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refreshTrigger++
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     // Multi-select & Batch Vault Move State
     var isMultiSelectMode by remember { mutableStateOf(false) }
@@ -138,6 +160,7 @@ fun SavedScreen(
             val matchesSearch = file.title.contains(searchQuery, ignoreCase = true)
             val matchesPriority = when (selectedFilter) {
                 PriorityFilter.ALL -> true
+                PriorityFilter.BOOKMARKED -> file.isBookmarked
                 else -> file.priority == selectedFilter.level
             }
             matchesSearch && matchesPriority
@@ -474,9 +497,11 @@ fun SavedScreen(
                 }
 
                 item {
-                    // Priority Filter Chips Row
+                    // Priority & Bookmark Filter Chips Row
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         PriorityFilter.values().forEach { filter ->
@@ -484,8 +509,7 @@ fun SavedScreen(
                             FilterChip(
                                 filter = filter,
                                 isSelected = isSelected,
-                                onClick = { selectedFilter = filter },
-                                modifier = Modifier.weight(1f)
+                                onClick = { selectedFilter = filter }
                             )
                         }
                     }
@@ -548,7 +572,18 @@ fun SavedScreen(
                             }
                         },
                         onOpenClick = { onOpenFile(file) },
-                        onShareClick = { onShareFileClick(file) }
+                        onShareClick = { onShareFileClick(file) },
+                        onToggleBookmark = {
+                            val key = if (file.path.isNotBlank()) file.path else file.uriString
+                            val newBookmarked = !file.isBookmarked
+                            dbHelper.setBookmarked(key, file.title, newBookmarked)
+                            Toast.makeText(
+                                context,
+                                if (newBookmarked) "Added to Bookmarks" else "Removed from Bookmarks",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            refreshTrigger++
+                        }
                     )
                 }
             }
@@ -641,6 +676,7 @@ fun FilterChip(
     )
     val backgroundColor = when (filter) {
         PriorityFilter.ALL -> if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+        PriorityFilter.BOOKMARKED -> if (isSelected) Color(0xFF6C5CE7) else Color(0xFFF3F0FF)
         PriorityFilter.IMPORTANT -> if (isSelected) Color(0xFFFFE2EA) else Color(0xFFFFF0F3)
         PriorityFilter.NORMAL -> if (isSelected) Color(0xFFFFF2D6) else Color(0xFFFFFDF5)
         PriorityFilter.LOW -> if (isSelected) Color(0xFFDCFCE7) else Color(0xFFF0FDF5)
@@ -648,6 +684,7 @@ fun FilterChip(
 
     val textColor = when (filter) {
         PriorityFilter.ALL -> if (isSelected) Color.White else Color(0xFF4B5563)
+        PriorityFilter.BOOKMARKED -> if (isSelected) Color.White else Color(0xFF6C5CE7)
         PriorityFilter.IMPORTANT -> Color(0xFFE11D48)
         PriorityFilter.NORMAL -> Color(0xFFD97706)
         PriorityFilter.LOW -> Color(0xFF059669)
@@ -655,6 +692,7 @@ fun FilterChip(
 
     val borderColor = when (filter) {
         PriorityFilter.ALL -> Color.Transparent
+        PriorityFilter.BOOKMARKED -> if (isSelected) Color(0xFF6C5CE7) else Color(0xFFD8B4FE)
         PriorityFilter.IMPORTANT -> if (isSelected) Color(0xFFFFA0B4) else Color(0xFFFFA0B4).copy(alpha = 0.5f)
         PriorityFilter.NORMAL -> if (isSelected) Color(0xFFF6C768) else Color(0xFFF6C768).copy(alpha = 0.5f)
         PriorityFilter.LOW -> if (isSelected) Color(0xFF86EFAC) else Color(0xFF86EFAC).copy(alpha = 0.5f)
@@ -667,14 +705,22 @@ fun FilterChip(
             .background(backgroundColor)
             .border(width = 1.dp, color = borderColor, shape = CircleShape)
             .clickable { onClick() }
-            .padding(vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            if (filter.level != null) {
+            if (filter == PriorityFilter.BOOKMARKED) {
+                Icon(
+                    imageVector = if (isSelected) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
+                    contentDescription = filter.label,
+                    tint = textColor,
+                    modifier = Modifier.size(15.dp)
+                )
+                Spacer(modifier = Modifier.width(5.dp))
+            } else if (filter.level != null) {
                 Image(
                     painter = painterResource(id = filter.level.badgeResId),
                     contentDescription = filter.label,
@@ -701,6 +747,7 @@ fun SavedFileCard(
     onLongClick: () -> Unit = {},
     onOpenClick: () -> Unit,
     onShareClick: () -> Unit,
+    onToggleBookmark: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var isMenuOpen by remember { mutableStateOf(false) }
@@ -781,9 +828,40 @@ fun SavedFileCard(
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
 
-            if (file.priority != null) {
-                Spacer(modifier = Modifier.height(6.dp))
-                PriorityTag(priority = file.priority)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                if (file.priority != null) {
+                    PriorityTag(priority = file.priority)
+                }
+                if (file.isBookmarked) {
+                    if (file.priority != null) Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(0xFFF3F0FF),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD8B4FE))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Bookmark,
+                                contentDescription = "Bookmarked",
+                                tint = Color(0xFF6C5CE7),
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "Bookmarked",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF6C5CE7)
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -822,8 +900,10 @@ fun SavedFileCard(
 
                 SavedFileOptionsDropdownMenu(
                     expanded = isMenuOpen,
+                    isBookmarked = file.isBookmarked,
                     onDismissRequest = { isMenuOpen = false },
                     onShareClick = onShareClick,
+                    onToggleBookmark = onToggleBookmark,
                     onDeleteClick = { /* Handle delete file */ }
                 )
             }
@@ -834,14 +914,41 @@ fun SavedFileCard(
 @Composable
 fun SavedFileOptionsDropdownMenu(
     expanded: Boolean,
+    isBookmarked: Boolean = false,
     onDismissRequest: () -> Unit,
     onShareClick: () -> Unit,
+    onToggleBookmark: () -> Unit = {},
     onDeleteClick: () -> Unit
 ) {
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismissRequest
     ) {
+        DropdownMenuItem(
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (isBookmarked) Icons.Outlined.BookmarkRemove else Icons.Default.Bookmark,
+                        contentDescription = if (isBookmarked) "Remove Bookmark" else "Bookmark",
+                        tint = Color(0xFF6C5CE7),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = if (isBookmarked) "Remove Bookmark" else "Bookmark",
+                        fontSize = 14.sp,
+                        color = Color(0xFF374151)
+                    )
+                }
+            },
+            onClick = {
+                onDismissRequest()
+                onToggleBookmark()
+            }
+        )
+
+        HorizontalDivider(color = Color(0xFFF3F4F6))
+
         DropdownMenuItem(
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {

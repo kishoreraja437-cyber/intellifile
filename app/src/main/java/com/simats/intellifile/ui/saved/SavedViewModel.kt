@@ -46,6 +46,7 @@ class SavedViewModel(application: Application) : AndroidViewModel(application) {
             val filteredLocal = allLocal.filter { item ->
                 when (filter) {
                     PriorityFilter.ALL -> item.priority != null || item.isBookmarked
+                    PriorityFilter.BOOKMARKED -> item.isBookmarked
                     PriorityFilter.IMPORTANT -> item.priority == PriorityLevel.IMPORTANT
                     PriorityFilter.NORMAL -> item.priority == PriorityLevel.NORMAL
                     PriorityFilter.LOW -> item.priority == PriorityLevel.LOW
@@ -57,6 +58,7 @@ class SavedViewModel(application: Application) : AndroidViewModel(application) {
             // Server saved files
             val priorityStr = when (filter) {
                 PriorityFilter.ALL -> "ALL"
+                PriorityFilter.BOOKMARKED -> "ALL"
                 PriorityFilter.IMPORTANT -> "IMPORTANT"
                 PriorityFilter.NORMAL -> "NORMAL"
                 PriorityFilter.LOW -> "LOW"

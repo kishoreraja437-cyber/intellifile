@@ -143,7 +143,11 @@ class PPTViewerViewModel(application: Application) : AndroidViewModel(applicatio
                         currentSlideIndex = 0,
                         currentSlideBitmap = firstBmp,
                         zoomScale = 1.0f,
-                        panOffset = Offset.Zero
+                        panOffset = Offset.Zero,
+                        isSearchActive = false,
+                        searchQuery = "",
+                        matchingSlideIndices = emptyList(),
+                        currentSearchMatchIndex = 0
                     )
                 }
 
@@ -349,6 +353,31 @@ class PPTViewerViewModel(application: Application) : AndroidViewModel(applicatio
             it.copy(currentSearchMatchIndex = nextMatchIndex)
         }
         goToSlide(targetSlide)
+    }
+
+    fun previousSearchResult() {
+        val matches = _uiState.value.matchingSlideIndices
+        if (matches.isEmpty()) return
+
+        val currentIndex = _uiState.value.currentSearchMatchIndex
+        val prevMatchIndex = if (currentIndex - 1 < 0) matches.size - 1 else currentIndex - 1
+        val targetSlide = matches[prevMatchIndex]
+
+        _uiState.update {
+            it.copy(currentSearchMatchIndex = prevMatchIndex)
+        }
+        goToSlide(targetSlide)
+    }
+
+    fun clearSearch() {
+        _uiState.update {
+            it.copy(
+                isSearchActive = false,
+                searchQuery = "",
+                matchingSlideIndices = emptyList(),
+                currentSearchMatchIndex = 0
+            )
+        }
     }
 
     fun setShowJumpDialog(show: Boolean) {

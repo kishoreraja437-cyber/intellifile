@@ -39,6 +39,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.ui.platform.LocalConfiguration
+import com.simats.intellifile.data.local.LocalFileDatabaseHelper
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import kotlinx.coroutines.Dispatchers
@@ -85,8 +88,14 @@ fun PPTViewerScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     val activity = context as? Activity
-    val isLandscape = activity?.resources?.configuration?.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val coroutineScope = rememberCoroutineScope()
+
+    val key = if (filePath.isNotBlank()) filePath else fileUriString
+    var isBookmarked by remember(key) {
+        mutableStateOf(if (key.isNotBlank()) LocalFileDatabaseHelper.getInstance(context).isBookmarked(key) else false)
+    }
 
     val totalSlides = uiState.totalSlides.coerceAtLeast(1)
     val pagerState = rememberPagerState(
@@ -113,6 +122,7 @@ fun PPTViewerScreen(
     DisposableEffect(Unit) {
         onDispose {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            viewModel.clearSearch()
         }
     }
 
@@ -188,7 +198,7 @@ fun PPTViewerScreen(
     }
 
     Scaffold(
-        containerColor = if (uiState.isFullscreen) Color(0xFF0F172A) else BackgroundAqua,
+        containerColor = BackgroundAqua,
         topBar = {
             if (!uiState.isFullscreen) {
                 PPTViewerTopBar(
@@ -201,10 +211,26 @@ fun PPTViewerScreen(
                     hasNotes = !uiState.currentSlideInfo?.notes.isNullOrBlank(),
                     isThumbnailsOpen = uiState.showThumbnailsDrawer,
                     isLandscape = isLandscape,
-                    onBackClick = onBackClick,
+                    isBookmarked = isBookmarked,
+                    onToggleBookmark = {
+                        isBookmarked = !isBookmarked
+                        if (key.isNotBlank()) {
+                            LocalFileDatabaseHelper.getInstance(context).setBookmarked(key, fileName, isBookmarked)
+                            Toast.makeText(
+                                context,
+                                if (isBookmarked) "Added to Bookmarks" else "Removed from Bookmarks",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    },
+                    onBackClick = {
+                        viewModel.clearSearch()
+                        onBackClick()
+                    },
                     onToggleSearch = { viewModel.setSearchActive(!uiState.isSearchActive) },
                     onSearchQueryChanged = { viewModel.onSearchQueryChanged(it) },
                     onNextSearchResult = { viewModel.nextSearchResult() },
+                    onPreviousSearchResult = { viewModel.previousSearchResult() },
                     onToggleNotes = { viewModel.toggleNotes() },
                     onToggleThumbnails = { viewModel.toggleThumbnailsDrawer() },
                     onToggleOrientation = toggleOrientation,
@@ -386,10 +412,13 @@ private fun PPTViewerTopBar(
     hasNotes: Boolean,
     isThumbnailsOpen: Boolean,
     isLandscape: Boolean,
+    isBookmarked: Boolean,
+    onToggleBookmark: () -> Unit,
     onBackClick: () -> Unit,
     onToggleSearch: () -> Unit,
     onSearchQueryChanged: (String) -> Unit,
     onNextSearchResult: () -> Unit,
+    onPreviousSearchResult: () -> Unit,
     onToggleNotes: () -> Unit,
     onToggleThumbnails: () -> Unit,
     onToggleOrientation: () -> Unit,
@@ -462,6 +491,15 @@ private fun PPTViewerTopBar(
                     )
                 }
 
+                // Bookmark
+                IconButton(onClick = onToggleBookmark) {
+                    Icon(
+                        imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
+                        contentDescription = "Bookmark",
+                        tint = if (isBookmarked) Color(0xFF6C5CE7) else DarkOceanTeal
+                    )
+                }
+
                 // Speaker Notes
                 if (hasNotes) {
                     IconButton(onClick = onToggleNotes) {
@@ -529,6 +567,8 @@ private fun PPTViewerTopBar(
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = { onNextSearchResult() }),
                         colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = DarkOceanTeal,
+                            unfocusedTextColor = DarkOceanTeal,
                             focusedBorderColor = DuskyAqua,
                             unfocusedBorderColor = CardBorderColor,
                             cursorColor = DuskyAqua
@@ -546,6 +586,13 @@ private fun PPTViewerTopBar(
                         )
 
                         if (matchingCount > 1) {
+                            IconButton(onClick = onPreviousSearchResult) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                    contentDescription = "Previous Match",
+                                    tint = DuskyAqua
+                                )
+                            }
                             IconButton(onClick = onNextSearchResult) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -591,7 +638,7 @@ private fun PPTVisualCanvasView(
         state = pagerState,
         modifier = modifier
             .fillMaxSize()
-            .background(if (isFullscreen) Color(0xFF0F172A) else BackgroundAqua),
+            .background(BackgroundAqua),
         userScrollEnabled = zoomScale <= 1.05f
     ) { page ->
         val slideBitmap by produceState<Bitmap?>(

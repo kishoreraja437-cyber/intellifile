@@ -122,7 +122,7 @@ object LocalFileManager {
 
                     val format = resolveFormat(name, mime)
                     val iconRes = resolveIconResId(format)
-                    val meta = metadataMap[key] ?: metadataMap[name]
+                    val meta = metadataMap[key] ?: (if (dataPath != null) metadataMap[dataPath] else null) ?: metadataMap[itemUri.toString()] ?: metadataMap[name]
 
                     // Priority is strictly user-assigned: null if not set
                     val priority = meta?.priority

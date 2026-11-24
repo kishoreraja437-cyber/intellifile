@@ -54,6 +54,11 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Slideshow
 import androidx.compose.material.icons.filled.TableChart
+import android.app.Activity
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
+import androidx.compose.material.icons.filled.ScreenRotation
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material.icons.outlined.BookmarkBorder
@@ -127,8 +132,31 @@ fun DocumentViewerScreen(
     onDismissSaveConfirmation: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val activity = context as? Activity
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val isPreview = LocalInspectionMode.current
     val key = if (filePath.isNotBlank()) filePath else fileUriString
+
+    // Search bar state
+    var isSearchActive by remember(filePath, fileUriString) { mutableStateOf(false) }
+    var searchQuery by remember(filePath, fileUriString) { mutableStateOf("") }
+
+    val toggleOrientation: () -> Unit = {
+        activity?.requestedOrientation = if (isLandscape) {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
+    }
+
+    DisposableEffect(filePath, fileUriString) {
+        onDispose {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            isSearchActive = false
+            searchQuery = ""
+        }
+    }
 
     val effectiveFormat = remember(fileName, fileFormat) {
         val ext = fileName.substringAfterLast('.', "").uppercase()
@@ -172,16 +200,12 @@ fun DocumentViewerScreen(
 
     var wordDocViewMode by remember { mutableStateOf(WordDocViewMode.PAGE_VIEW) }
     var zoomTargetDocumentImage by remember { mutableStateOf<DocumentImage?>(null) }
-    var isBookmarked by remember {
+    var isBookmarked by remember(key) {
         mutableStateOf(
             if (!isPreview && key.isNotBlank()) LocalFileDatabaseHelper.getInstance(context).isBookmarked(key) else false
         )
     }
     var isSaved by remember { mutableStateOf(false) }
-
-    // Search bar state
-    var isSearchActive by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
 
     // Jump dialog state
     var showJumpDialog by remember { mutableStateOf(false) }
@@ -483,7 +507,7 @@ fun DocumentViewerScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.92f))
+                    .background(Color(0xFFF8FAFC))
             ) {
                 Box(
                     modifier = Modifier
@@ -510,7 +534,7 @@ fun DocumentViewerScreen(
                                 )
                         )
                     } else {
-                        Text("Image could not be rendered", color = Color.White)
+                        Text("Image could not be rendered", color = Color(0xFF64748B))
                     }
                 }
 
@@ -524,7 +548,7 @@ fun DocumentViewerScreen(
                 ) {
                     Text(
                         text = targetImg.caption.ifBlank { "Document Graphic" },
-                        color = Color.White,
+                        color = Color(0xFF1E293B),
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp
                     )
@@ -532,9 +556,9 @@ fun DocumentViewerScreen(
                         onClick = { zoomTargetDocumentImage = null },
                         modifier = Modifier
                             .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.5f))
+                            .background(Color(0xFFE2E8F0))
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color(0xFF1E293B))
                     }
                 }
             }
@@ -551,6 +575,28 @@ fun DocumentViewerScreen(
         ) {
             // Header Bar
             if (isSearchActive) {
+                val matchingUnits = remember(parsedContent, searchQuery) {
+                    if (searchQuery.isBlank()) emptyList<Int>()
+                    else when (val content = parsedContent) {
+                        is ParsedDocumentContent.Presentation -> {
+                            content.slides.filter { s ->
+                                s.title.contains(searchQuery, ignoreCase = true) ||
+                                        s.subtitle.contains(searchQuery, ignoreCase = true) ||
+                                        s.points.any { it.contains(searchQuery, ignoreCase = true) } ||
+                                        s.rawContent.contains(searchQuery, ignoreCase = true) ||
+                                        s.notes.contains(searchQuery, ignoreCase = true)
+                            }.map { it.slideNumber }
+                        }
+                        is ParsedDocumentContent.RichDocument -> {
+                            content.pages.filter { p ->
+                                p.paragraphs.any { it.contains(searchQuery, ignoreCase = true) } ||
+                                        p.elements.any { it.text.contains(searchQuery, ignoreCase = true) }
+                            }.map { it.pageNumber }
+                        }
+                        else -> emptyList()
+                    }
+                }
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -572,16 +618,59 @@ fun DocumentViewerScreen(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Search inside document...") },
+                        placeholder = { Text("Search inside document...", fontSize = 13.sp, color = Color(0xFF94A3B8)) },
                         singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color(0xFF0F172A),
+                            unfocusedTextColor = Color(0xFF0F172A),
+                            focusedBorderColor = Color(0xFF55A9AF),
+                            unfocusedBorderColor = Color(0xFFCBD5E1),
+                            cursorColor = Color(0xFF55A9AF)
+                        ),
+                        shape = RoundedCornerShape(8.dp),
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
                                 IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Clear")
+                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFF64748B))
                                 }
                             }
                         }
                     )
+
+                    if (searchQuery.isNotBlank() && matchingUnits.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "${matchingUnits.size} match",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF55A9AF)
+                        )
+
+                        if (matchingUnits.size > 1) {
+                            IconButton(onClick = {
+                                val curIdx = matchingUnits.indexOf(currentPageIndex)
+                                val prevIdx = if (curIdx <= 0) matchingUnits.lastIndex else curIdx - 1
+                                currentPageIndex = matchingUnits[prevIdx]
+                            }) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                    contentDescription = "Previous Match",
+                                    tint = Color(0xFF55A9AF)
+                                )
+                            }
+                            IconButton(onClick = {
+                                val curIdx = matchingUnits.indexOf(currentPageIndex)
+                                val nextIdx = if (curIdx < 0 || curIdx >= matchingUnits.lastIndex) 0 else curIdx + 1
+                                currentPageIndex = matchingUnits[nextIdx]
+                            }) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = "Next Match",
+                                    tint = Color(0xFF55A9AF)
+                                )
+                            }
+                        }
+                    }
                 }
             } else {
                 Row(
@@ -674,6 +763,14 @@ fun DocumentViewerScreen(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = "Search",
                                 tint = Color(0xFF111827)
+                            )
+                        }
+
+                        IconButton(onClick = toggleOrientation) {
+                            Icon(
+                                imageVector = Icons.Default.ScreenRotation,
+                                contentDescription = "Rotate Orientation",
+                                tint = if (isLandscape) Color(0xFF55A9AF) else Color(0xFF111827)
                             )
                         }
 
@@ -2230,7 +2327,7 @@ private fun DiagramZoomDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF0F172A))
+                .background(Color(0xFFF8FAFC))
         ) {
             // Header Bar
             Row(
@@ -2246,25 +2343,25 @@ private fun DiagramZoomDialog(
                         text = image.title.ifBlank { "Presentation Diagram" },
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = Color(0xFF1E293B),
                         maxLines = 1
                     )
                     Text(
                         text = "Pinch to zoom (up to 5x) · Drag to pan diagram",
                         fontSize = 11.sp,
-                        color = Color(0xFF94A3B8)
+                        color = Color(0xFF64748B)
                     )
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { scale = (scale + 0.5f).coerceAtMost(5f) }) {
-                        Icon(Icons.Default.ZoomIn, contentDescription = "Zoom In", tint = Color.White)
+                        Icon(Icons.Default.ZoomIn, contentDescription = "Zoom In", tint = Color(0xFF1E293B))
                     }
                     IconButton(onClick = { scale = (scale - 0.5f).coerceAtLeast(1f); if (scale == 1f) offset = Offset.Zero }) {
-                        Icon(Icons.Default.ZoomOut, contentDescription = "Zoom Out", tint = Color.White)
+                        Icon(Icons.Default.ZoomOut, contentDescription = "Zoom Out", tint = Color(0xFF1E293B))
                     }
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color(0xFF1E293B))
                     }
                 }
             }

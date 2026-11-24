@@ -1147,6 +1147,8 @@ fun MainScreen(
 
                                     )
 
+                                    isDocumentViewerOpen = true
+
                                 },
 
                                 onShareFileClick = { file ->
