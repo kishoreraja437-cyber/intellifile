@@ -401,6 +401,13 @@ object PPTDocumentHandler {
     }
 
     /**
+     * Retrieves a previously cached rendered slide bitmap if available in memory.
+     */
+    fun getCachedSlideBitmap(slideIndex: Int): Bitmap? = renderLock.withLock {
+        slideCache.get(slideIndex)
+    }
+
+    /**
      * Renders a slide into a high-resolution Bitmap with ZERO WATERMARK.
      */
     fun renderSlideBitmap(slideIndex: Int, scale: Float = 1.5f): Bitmap? = renderLock.withLock {

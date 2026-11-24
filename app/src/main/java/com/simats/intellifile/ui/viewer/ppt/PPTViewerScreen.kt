@@ -22,6 +22,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,6 +38,9 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -77,6 +83,29 @@ fun PPTViewerScreen(
     val uiState by viewModel.uiState.collectAsState()
     val activity = context as? Activity
     val isLandscape = activity?.resources?.configuration?.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val coroutineScope = rememberCoroutineScope()
+
+    val totalSlides = uiState.totalSlides.coerceAtLeast(1)
+    val pagerState = rememberPagerState(
+        initialPage = uiState.currentSlideIndex.coerceIn(0, totalSlides - 1),
+        pageCount = { totalSlides }
+    )
+
+    // Synchronize horizontal swipe gestures -> ViewModel slide navigation & indicators
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }.collect { page ->
+            if (page != uiState.currentSlideIndex) {
+                viewModel.goToSlide(page)
+            }
+        }
+    }
+
+    // Synchronize ViewModel navigation -> Pager smooth animation
+    LaunchedEffect(uiState.currentSlideIndex) {
+        if (pagerState.currentPage != uiState.currentSlideIndex) {
+            pagerState.animateScrollToPage(uiState.currentSlideIndex)
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -201,7 +230,12 @@ fun PPTViewerScreen(
                             currentSlideIndex = uiState.currentSlideIndex,
                             aspectRatio = uiState.document?.aspectRatio ?: (16f / 9f),
                             listState = thumbnailListState,
-                            onSlideSelected = { viewModel.goToSlide(it) }
+                            onSlideSelected = { slideIdx ->
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(slideIdx)
+                                    viewModel.goToSlide(slideIdx)
+                                }
+                            }
                         )
                     }
 
@@ -212,8 +246,24 @@ fun PPTViewerScreen(
                         zoomPercentage = (uiState.zoomScale * 100).toInt(),
                         canGoPrevious = uiState.canGoPrevious,
                         canGoNext = uiState.canGoNext,
-                        onPreviousClick = { viewModel.previousSlide() },
-                        onNextClick = { viewModel.nextSlide() },
+                        onPreviousClick = {
+                            coroutineScope.launch {
+                                if (pagerState.currentPage > 0) {
+                                    pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                                } else {
+                                    viewModel.previousSlide()
+                                }
+                            }
+                        },
+                        onNextClick = {
+                            coroutineScope.launch {
+                                if (pagerState.currentPage < totalSlides - 1) {
+                                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                                } else {
+                                    viewModel.nextSlide()
+                                }
+                            }
+                        },
                         onSlidePillClick = { viewModel.setShowJumpDialog(true) },
                         onZoomIn = { viewModel.zoomIn() },
                         onZoomOut = { viewModel.zoomOut() },
@@ -241,22 +291,20 @@ fun PPTViewerScreen(
                 }
                 uiState.document != null -> {
                     PPTVisualCanvasView(
-                        bitmap = uiState.currentSlideBitmap,
-                        placeholderThumbnail = uiState.thumbnails[uiState.currentSlideIndex],
+                        pagerState = pagerState,
                         aspectRatio = uiState.document?.aspectRatio ?: (16f / 9f),
                         zoomScale = uiState.zoomScale,
                         panOffset = uiState.panOffset,
                         isFullscreen = uiState.isFullscreen,
-                        canGoNext = uiState.canGoNext,
-                        canGoPrevious = uiState.canGoPrevious,
+                        thumbnails = uiState.thumbnails,
+                        currentSlideIndex = uiState.currentSlideIndex,
+                        currentSlideBitmap = uiState.currentSlideBitmap,
                         onZoomPanChange = { zoomDelta, panDelta ->
                             viewModel.updateZoomAndPan(zoomDelta, panDelta)
                         },
                         onDoubleTap = {
                             if (uiState.zoomScale > 1.1f) viewModel.resetZoom() else viewModel.updateZoomAndPan(2.2f, Offset.Zero)
-                        },
-                        onSwipeNext = { viewModel.nextSlide() },
-                        onSwipePrevious = { viewModel.previousSlide() }
+                        }
                     )
                 }
             }
@@ -269,8 +317,24 @@ fun PPTViewerScreen(
                     canGoPrevious = uiState.canGoPrevious,
                     canGoNext = uiState.canGoNext,
                     isLandscape = isLandscape,
-                    onPreviousClick = { viewModel.previousSlide() },
-                    onNextClick = { viewModel.nextSlide() },
+                    onPreviousClick = {
+                        coroutineScope.launch {
+                            if (pagerState.currentPage > 0) {
+                                pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                            } else {
+                                viewModel.previousSlide()
+                            }
+                        }
+                    },
+                    onNextClick = {
+                        coroutineScope.launch {
+                            if (pagerState.currentPage < totalSlides - 1) {
+                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                            } else {
+                                viewModel.nextSlide()
+                            }
+                        }
+                    },
                     onToggleOrientation = toggleOrientation,
                     onExitFullscreen = { viewModel.setFullscreen(false) }
                 )
@@ -291,7 +355,11 @@ fun PPTViewerScreen(
                     currentSlide = uiState.currentSlideNumber,
                     totalSlides = uiState.totalSlides,
                     onConfirm = { slideNum ->
-                        viewModel.goToSlide(slideNum - 1)
+                        val targetIdx = (slideNum - 1).coerceIn(0, totalSlides - 1)
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(targetIdx)
+                            viewModel.goToSlide(targetIdx)
+                        }
                     },
                     onDismiss = { viewModel.setShowJumpDialog(false) }
                 )
@@ -504,71 +572,84 @@ private fun PPTViewerTopBar(
 
 @Composable
 private fun PPTVisualCanvasView(
-    bitmap: Bitmap?,
-    placeholderThumbnail: Bitmap?,
+    pagerState: PagerState,
     aspectRatio: Float,
     zoomScale: Float,
     panOffset: Offset,
     isFullscreen: Boolean,
-    canGoNext: Boolean,
-    canGoPrevious: Boolean,
+    thumbnails: Map<Int, Bitmap>,
+    currentSlideIndex: Int,
+    currentSlideBitmap: Bitmap?,
     onZoomPanChange: (Float, Offset) -> Unit,
     onDoubleTap: () -> Unit,
-    onSwipeNext: () -> Unit,
-    onSwipePrevious: () -> Unit
+    modifier: Modifier = Modifier
 ) {
-    var accumulatedDrag by remember { mutableFloatStateOf(0f) }
-
-    Box(
-        modifier = Modifier
+    HorizontalPager(
+        state = pagerState,
+        modifier = modifier
             .fillMaxSize()
-            .background(if (isFullscreen) Color(0xFF0F172A) else BackgroundAqua)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onDoubleTap = { onDoubleTap() }
-                )
-            }
-            .pointerInput(zoomScale) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    onZoomPanChange(zoom, pan)
+            .background(if (isFullscreen) Color(0xFF0F172A) else BackgroundAqua),
+        userScrollEnabled = zoomScale <= 1.05f
+    ) { page ->
+        val slideBitmap by produceState<Bitmap?>(
+            initialValue = if (page == currentSlideIndex && currentSlideBitmap != null) {
+                currentSlideBitmap
+            } else {
+                PPTDocumentHandler.getCachedSlideBitmap(page)
+            },
+            key1 = page,
+            key2 = if (page == currentSlideIndex) currentSlideBitmap else null
+        ) {
+            if (value == null) {
+                value = withContext(Dispatchers.IO) {
+                    PPTDocumentHandler.renderSlideBitmap(page, scale = 1.5f)
                 }
             }
-            .then(
-                if (zoomScale <= 1.05f) {
-                    Modifier.pointerInput(Unit) {
-                        detectHorizontalDragGestures(
-                            onDragEnd = {
-                                if (accumulatedDrag < -75f && canGoNext) {
-                                    onSwipeNext()
-                                } else if (accumulatedDrag > 75f && canGoPrevious) {
-                                    onSwipePrevious()
-                                }
-                                accumulatedDrag = 0f
-                            },
-                            onHorizontalDrag = { _, dragAmount ->
-                                accumulatedDrag += dragAmount
-                            }
-                        )
-                    }
-                } else Modifier
-            ),
-        contentAlignment = Alignment.Center
-    ) {
+        }
+
+        val placeholderThumbnail = thumbnails[page]
+        val isCurrentPage = page == currentSlideIndex
+
         Box(
             modifier = Modifier
-                .fillMaxWidth(if (isFullscreen) 1f else 0.98f)
-                .graphicsLayer {
-                    scaleX = zoomScale
-                    scaleY = zoomScale
-                    translationX = panOffset.x
-                    translationY = panOffset.y
-                }
+                .fillMaxSize()
+                .then(
+                    if (isCurrentPage) {
+                        Modifier
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onDoubleTap = { onDoubleTap() }
+                                )
+                            }
+                            .pointerInput(zoomScale) {
+                                if (zoomScale > 1.05f) {
+                                    detectTransformGestures { _, pan, zoom, _ ->
+                                        onZoomPanChange(zoom, pan)
+                                    }
+                                }
+                            }
+                    } else Modifier
+                ),
+            contentAlignment = Alignment.Center
         ) {
-            PPTRenderingManager.RenderVisualSlide(
-                bitmap = bitmap,
-                placeholderThumbnail = placeholderThumbnail,
-                aspectRatio = aspectRatio
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(if (isFullscreen) 1f else 0.98f)
+                    .graphicsLayer {
+                        if (isCurrentPage) {
+                            scaleX = zoomScale
+                            scaleY = zoomScale
+                            translationX = panOffset.x
+                            translationY = panOffset.y
+                        }
+                    }
+            ) {
+                PPTRenderingManager.RenderVisualSlide(
+                    bitmap = slideBitmap,
+                    placeholderThumbnail = placeholderThumbnail,
+                    aspectRatio = aspectRatio
+                )
+            }
         }
     }
 }
