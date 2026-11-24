@@ -105,6 +105,9 @@ import com.simats.intellifile.data.manager.DocumentImage
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.ViewAgenda
 import com.simats.intellifile.ui.viewer.ppt.PPTViewerScreen
+import com.simats.intellifile.data.repository.DocumentRepository
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -178,6 +181,11 @@ fun DocumentViewerScreen(
     }
 
     val isPdf = remember(effectiveFormat) { effectiveFormat == "PDF" }
+
+    val isWordDoc = remember(effectiveFormat, fileName) {
+        val ext = fileName.substringAfterLast('.', "").uppercase().ifBlank { effectiveFormat.uppercase() }
+        ext in listOf("DOC", "DOCX", "ODT", "RTF", "DOT", "DOTX")
+    }
 
     val isPresentation = remember(effectiveFormat, fileName) {
         effectiveFormat.uppercase() in listOf("PPT", "PPTX", "PPS", "PPSX", "POT", "POTX") ||
@@ -372,8 +380,100 @@ fun DocumentViewerScreen(
                     isLoading = false
                 }
             }
+        } else if (isWordDoc) {
+            withContext(Dispatchers.IO) {
+                try {
+                    // Strategy 1: High-fidelity LibreOffice conversion to PDF via backend
+                    val docRepo = DocumentRepository(context)
+                    val conversionResult = docRepo.convertWordToPdf(
+                        documentId = documentId,
+                        filePath = filePath.ifBlank { null },
+                        uriString = fileUriString.ifBlank { null },
+                        fileName = fileName
+                    )
+
+                    var renderer: PdfRendererWrapper? = null
+                    var pfd: ParcelFileDescriptor? = null
+
+                    if (conversionResult.isSuccess) {
+                        val convertedPdf = conversionResult.getOrNull()
+                        if (convertedPdf != null && convertedPdf.exists() && convertedPdf.length() > 0) {
+                            try {
+                                pfd = ParcelFileDescriptor.open(convertedPdf, ParcelFileDescriptor.MODE_READ_ONLY)
+                                renderer = PdfRendererWrapper(pfd)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                try { pfd?.close() } catch (_: Exception) {}
+                                pfd = null
+                                renderer = null
+                            }
+                        }
+                    }
+
+                    if (renderer != null && pfd != null) {
+                        parcelFileDescriptor = pfd
+                        pdfRenderer = renderer
+                        totalUnitsCount = renderer.pageCount.coerceAtLeast(1)
+                        currentPageIndex = 1
+
+                        // Also parse document text in background for search metadata if available
+                        try {
+                            val parsed = DocumentContentParser.parse(
+                                context = context,
+                                uriString = fileUriString,
+                                path = filePath,
+                                format = effectiveFormat,
+                                fileName = fileName
+                            )
+                            if (parsed is ParsedDocumentContent.RichDocument) {
+                                parsedContent = parsed
+                            }
+                        } catch (_: Exception) {}
+                    } else {
+                        // Strategy 2: Graceful offline fallback to local DocumentContentParser
+                        val result = DocumentContentParser.parse(
+                            context = context,
+                            uriString = fileUriString,
+                            path = filePath,
+                            format = effectiveFormat,
+                            fileName = fileName
+                        )
+                        parsedContent = result
+                        when (result) {
+                            is ParsedDocumentContent.RichDocument -> {
+                                totalUnitsCount = result.totalPages.coerceAtLeast(1)
+                                currentPageIndex = 1
+                            }
+                            is ParsedDocumentContent.Error -> {
+                                errorMessage = result.message
+                            }
+                            else -> {}
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    try {
+                        val result = DocumentContentParser.parse(
+                            context = context,
+                            uriString = fileUriString,
+                            path = filePath,
+                            format = effectiveFormat,
+                            fileName = fileName
+                        )
+                        parsedContent = result
+                        if (result is ParsedDocumentContent.RichDocument) {
+                            totalUnitsCount = result.totalPages.coerceAtLeast(1)
+                            currentPageIndex = 1
+                        }
+                    } catch (fallbackEx: Exception) {
+                        errorMessage = "Error opening document: ${e.localizedMessage}"
+                    }
+                } finally {
+                    isLoading = false
+                }
+            }
         } else {
-            // Parse non-PDF documents: PPTX, PPT, DOCX, DOC, XLSX, XLS, CSV, TXT, JSON, MD
+            // Parse non-PDF documents: PPTX, PPT, XLSX, XLS, CSV, TXT, JSON, MD
             withContext(Dispatchers.IO) {
                 try {
                     val result = DocumentContentParser.parse(
@@ -714,6 +814,11 @@ fun DocumentViewerScreen(
                             )
                             val subtitle = when {
                                 isPdf -> "PDF Document · Page $currentPageIndex of $totalUnitsCount"
+                                isWordDoc -> {
+                                    val rich = parsedContent as? ParsedDocumentContent.RichDocument
+                                    if (rich != null && rich.wordCount > 0) "Word Document · Page $currentPageIndex of $totalUnitsCount · ${rich.wordCount} words"
+                                    else "Word Document · Page $currentPageIndex of $totalUnitsCount"
+                                }
                                 parsedContent is ParsedDocumentContent.Presentation -> "PowerPoint Presentation · Slide $currentPageIndex of $totalUnitsCount"
                                 parsedContent is ParsedDocumentContent.Spreadsheet -> "Excel Spreadsheet · ${(parsedContent as ParsedDocumentContent.Spreadsheet).rows.size} Rows"
                                 parsedContent is ParsedDocumentContent.RichDocument -> {
@@ -749,7 +854,7 @@ fun DocumentViewerScreen(
                             }
                         }
 
-                        if (parsedContent is ParsedDocumentContent.RichDocument || effectiveFormat.uppercase() in listOf("DOC", "DOCX", "RTF")) {
+                        if (isWordDoc || parsedContent is ParsedDocumentContent.RichDocument || effectiveFormat.uppercase() in listOf("DOC", "DOCX", "RTF")) {
                             IconButton(onClick = { openWithExternalApp() }) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.OpenInNew,
@@ -895,7 +1000,7 @@ fun DocumentViewerScreen(
                         }
                     }
 
-                    isPdf -> {
+                    isPdf || (isWordDoc && pdfRenderer != null && wordDocViewMode == WordDocViewMode.PAGE_VIEW) -> {
                         if (pageBitmap != null) {
                             Box(
                                 modifier = Modifier
@@ -918,11 +1023,13 @@ fun DocumentViewerScreen(
                                             }
                                         )
                                     }
-                                    .pointerInput(Unit) {
+                                    .pointerInput(currentPageIndex) {
                                         awaitEachGesture {
                                             awaitFirstDown(requireUnconsumed = false)
                                             var prevDist = 0f
                                             var prevCentroid = Offset.Zero
+                                            var totalDragX = 0f
+                                            var totalDragY = 0f
                                             do {
                                                 val event = awaitPointerEvent()
                                                 val pressed = event.changes.filter { it.pressed }
@@ -947,25 +1054,42 @@ fun DocumentViewerScreen(
                                                     prevDist = currDist
                                                     prevCentroid = currCentroid
                                                     event.changes.forEach { it.consume() }
-                                                } else if (pressed.size == 1 && docGestureScale > 1.05f) {
-                                                    // Single-finger drag pan when zoomed into PDF
+                                                } else if (pressed.size == 1) {
                                                     val change = pressed[0]
                                                     val panDelta = change.positionChange()
-                                                    if (panDelta != Offset.Zero) {
-                                                        val maxPanX = (1200f * (docGestureScale - 1f)).coerceAtLeast(0f)
-                                                        val maxPanY = (1600f * (docGestureScale - 1f)).coerceAtLeast(0f)
-                                                        val rawPan = docPanOffset + panDelta
-                                                        docPanOffset = Offset(
-                                                            x = rawPan.x.coerceIn(-maxPanX, maxPanX),
-                                                            y = rawPan.y.coerceIn(-maxPanY, maxPanY)
-                                                        )
-                                                        change.consume()
+                                                    if (docGestureScale > 1.05f) {
+                                                        // Single-finger drag pan when zoomed into PDF/Word
+                                                        if (panDelta != Offset.Zero) {
+                                                            val maxPanX = (1200f * (docGestureScale - 1f)).coerceAtLeast(0f)
+                                                            val maxPanY = (1600f * (docGestureScale - 1f)).coerceAtLeast(0f)
+                                                            val rawPan = docPanOffset + panDelta
+                                                            docPanOffset = Offset(
+                                                                x = rawPan.x.coerceIn(-maxPanX, maxPanX),
+                                                                y = rawPan.y.coerceIn(-maxPanY, maxPanY)
+                                                            )
+                                                            change.consume()
+                                                        }
+                                                    } else {
+                                                        // Track horizontal drag for page swipe when scale is 1.0
+                                                        totalDragX += panDelta.x
+                                                        totalDragY += panDelta.y
                                                     }
                                                     prevDist = 0f
                                                 } else {
                                                     prevDist = 0f
                                                 }
                                             } while (pressed.isNotEmpty())
+
+                                            // Check swipe navigation on finger release
+                                            if (docGestureScale <= 1.05f && kotlin.math.abs(totalDragX) > 80f && kotlin.math.abs(totalDragX) > kotlin.math.abs(totalDragY) * 1.5f) {
+                                                if (totalDragX < 0 && currentPageIndex < totalUnitsCount) {
+                                                    // Swiping from right to left -> Next page
+                                                    currentPageIndex++
+                                                } else if (totalDragX > 0 && currentPageIndex > 1) {
+                                                    // Swiping from left to right -> Previous page
+                                                    currentPageIndex--
+                                                }
+                                            }
                                         }
                                     },
                                 contentAlignment = Alignment.Center
@@ -1029,6 +1153,41 @@ fun DocumentViewerScreen(
                         } else {
                             Text("Rendering page...", fontSize = 14.sp, color = Color(0xFF6B7280))
                         }
+                    }
+
+                    isWordDoc && pdfRenderer != null && wordDocViewMode == WordDocViewMode.CONTINUOUS -> {
+                        WordPdfContinuousView(
+                            renderer = pdfRenderer!!,
+                            totalPages = totalUnitsCount,
+                            currentPageIndex = currentPageIndex,
+                            zoomPercentage = zoomPercentage,
+                            docGestureScale = docGestureScale,
+                            docPanOffset = docPanOffset,
+                            onZoomPanChange = { newScale, newPan ->
+                                docGestureScale = newScale
+                                val maxPanX = (1200f * (docGestureScale - 1f)).coerceAtLeast(0f)
+                                val maxPanY = (1600f * (docGestureScale - 1f)).coerceAtLeast(0f)
+                                docPanOffset = Offset(
+                                    x = newPan.x.coerceIn(-maxPanX, maxPanX),
+                                    y = newPan.y.coerceIn(-maxPanY, maxPanY)
+                                )
+                                zoomPercentage = (docGestureScale * 100).toInt()
+                            },
+                            onDoubleTap = {
+                                if (docGestureScale > 1.1f) {
+                                    docGestureScale = 1f
+                                    docPanOffset = Offset.Zero
+                                } else {
+                                    docGestureScale = 2.2f
+                                    docPanOffset = Offset.Zero
+                                }
+                                zoomPercentage = (docGestureScale * 100).toInt()
+                            },
+                            onToggleControls = { areControlsVisible = !areControlsVisible },
+                            onPageChanged = { newPage ->
+                                currentPageIndex = newPage
+                            }
+                        )
                     }
 
                     // PPT / PPTX Presentation View
@@ -1197,9 +1356,9 @@ fun DocumentViewerScreen(
                                 .padding(horizontal = 8.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (wordDocViewMode == WordDocViewMode.CONTINUOUS && parsedContent is ParsedDocumentContent.RichDocument) {
+                            if (wordDocViewMode == WordDocViewMode.CONTINUOUS && (isWordDoc || parsedContent is ParsedDocumentContent.RichDocument)) {
                                 Text(
-                                    text = "Full Document · $totalUnitsCount Pages",
+                                    text = "Page $currentPageIndex of $totalUnitsCount",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = Color(0xFF374151),
@@ -3524,6 +3683,178 @@ fun DocumentBottomActionBar(
     }
 }
 
+@Composable
+private fun WordPdfContinuousView(
+    renderer: PdfRendererWrapper,
+    totalPages: Int,
+    currentPageIndex: Int,
+    zoomPercentage: Int,
+    docGestureScale: Float,
+    docPanOffset: Offset,
+    onZoomPanChange: (Float, Offset) -> Unit,
+    onDoubleTap: () -> Unit,
+    onToggleControls: () -> Unit,
+    onPageChanged: (Int) -> Unit
+) {
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (currentPageIndex - 1).coerceIn(0, totalPages - 1))
+    val density = LocalContext.current.resources.displayMetrics.density
+    val baseScale = (zoomPercentage / 100f) * density
+
+    // Synchronize visible page back to parent
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex }.collect { index ->
+            val page = (index + 1).coerceIn(1, totalPages)
+            if (page != currentPageIndex) {
+                onPageChanged(page)
+            }
+        }
+    }
+
+    // Scroll smoothly to target page when currentPageIndex changes externally (e.g. from jump dialog)
+    LaunchedEffect(currentPageIndex) {
+        val targetIdx = (currentPageIndex - 1).coerceIn(0, totalPages - 1)
+        if (kotlin.math.abs(listState.firstVisibleItemIndex - targetIdx) > 1) {
+            listState.animateScrollToItem(targetIdx)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clipToBounds()
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { onToggleControls() },
+                    onDoubleTap = { onDoubleTap() }
+                )
+            }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    var prevDist = 0f
+                    var prevCentroid = Offset.Zero
+                    do {
+                        val event = awaitPointerEvent()
+                        val pressed = event.changes.filter { it.pressed }
+                        if (pressed.size >= 2) {
+                            val p1 = pressed[0].position
+                            val p2 = pressed[1].position
+                            val currDist = (p1 - p2).getDistance()
+                            val currCentroid = (p1 + p2) / 2f
+                            if (prevDist > 0f) {
+                                val zoomRatio = currDist / prevDist
+                                val newScale = (docGestureScale * zoomRatio).coerceIn(0.6f, 5.0f)
+                                val panDelta = currCentroid - prevCentroid
+                                onZoomPanChange(newScale, docPanOffset + panDelta)
+                            }
+                            prevDist = currDist
+                            prevCentroid = currCentroid
+                            event.changes.forEach { it.consume() }
+                        } else if (pressed.size == 1 && docGestureScale > 1.05f) {
+                            val change = pressed[0]
+                            val panDelta = change.positionChange()
+                            if (panDelta != Offset.Zero) {
+                                onZoomPanChange(docGestureScale, docPanOffset + panDelta)
+                                change.consume()
+                            }
+                            prevDist = 0f
+                        } else {
+                            prevDist = 0f
+                        }
+                    } while (pressed.isNotEmpty())
+                }
+            }
+    ) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = docGestureScale
+                    scaleY = docGestureScale
+                    translationX = docPanOffset.x
+                    translationY = docPanOffset.y
+                }
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            items(totalPages) { pageIdx ->
+                PdfContinuousPageItem(
+                    renderer = renderer,
+                    pageIndex = pageIdx,
+                    totalPages = totalPages,
+                    scale = baseScale
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PdfContinuousPageItem(
+    renderer: PdfRendererWrapper,
+    pageIndex: Int,
+    totalPages: Int,
+    scale: Float
+) {
+    var pageBitmap by remember(pageIndex, scale) { mutableStateOf<Bitmap?>(null) }
+
+    LaunchedEffect(pageIndex, scale) {
+        withContext(Dispatchers.IO) {
+            try {
+                val bmp = renderer.renderPage(pageIndex, scale)
+                pageBitmap = bmp
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (pageBitmap != null) {
+            Image(
+                bitmap = pageBitmap!!.asImageBitmap(),
+                contentDescription = "Page ${pageIndex + 1} of $totalPages",
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .shadow(4.dp, RoundedCornerShape(8.dp))
+                    .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
+                    .background(Color.White)
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.92f)
+                    .height(520.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
+                    .background(Color.White),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(28.dp),
+                    color = Color(0xFF55A9AF),
+                    strokeWidth = 2.dp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Page ${pageIndex + 1} of $totalPages",
+            fontSize = 11.sp,
+            color = Color(0xFF94A3B8),
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
 /**
  * Internal wrapper class around [PdfRenderer] to isolate android.graphics.pdf.PdfRenderer references.
  * This prevents ClassNotFoundException / NoClassDefFoundError during Compose Preview layoutlib reflection.
@@ -3535,19 +3866,26 @@ private class PdfRendererWrapper(pfd: ParcelFileDescriptor) : AutoCloseable {
         get() = renderer.pageCount
 
     fun renderPage(pageIndex: Int, scale: Float): Bitmap {
-        val page = renderer.openPage(pageIndex)
-        val targetWidth = (page.width * scale).toInt().coerceIn(200, 3200)
-        val targetHeight = (page.height * scale).toInt().coerceIn(200, 4800)
-        val bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        canvas.drawColor(android.graphics.Color.WHITE)
-        page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-        page.close()
-        return bitmap
+        synchronized(renderer) {
+            val safeIndex = pageIndex.coerceIn(0, (renderer.pageCount - 1).coerceAtLeast(0))
+            val page = renderer.openPage(safeIndex)
+            val targetWidth = (page.width * scale).toInt().coerceIn(200, 3200)
+            val targetHeight = (page.height * scale).toInt().coerceIn(200, 4800)
+            val bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            canvas.drawColor(android.graphics.Color.WHITE)
+            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            page.close()
+            return bitmap
+        }
     }
 
     override fun close() {
-        try { renderer.close() } catch (_: Exception) {}
+        try {
+            synchronized(renderer) {
+                renderer.close()
+            }
+        } catch (_: Exception) {}
     }
 }
 

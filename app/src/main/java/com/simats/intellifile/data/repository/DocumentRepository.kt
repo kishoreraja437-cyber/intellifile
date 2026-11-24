@@ -311,6 +311,112 @@ class DocumentRepository(private val context: Context) {
     }
 
     /**
+     * Converts a Word document (DOC/DOCX/ODT/RTF) into PDF via LibreOffice backend.
+     * Caches the converted PDF locally in cacheDir/converted_word/ so subsequent opens are instant.
+     */
+    suspend fun convertWordToPdf(
+        documentId: Int? = null,
+        filePath: String? = null,
+        uriString: String? = null,
+        fileName: String
+    ): Result<File> = withContext(Dispatchers.IO) {
+        val safeFileName = fileName.substringAfterLast('/').substringAfterLast('\\').trim().ifBlank { "document.docx" }
+        val ext = safeFileName.substringAfterLast('.', "").lowercase()
+        if (ext !in listOf("doc", "docx", "odt", "rtf", "dot", "dotx")) {
+            return@withContext Result.failure(Exception("Unsupported Word document extension: $ext"))
+        }
+
+        val cacheSubDir = File(context.cacheDir, "converted_word").apply { mkdirs() }
+        var tempSourceFile: File? = null
+
+        try {
+            // Case 1: If documentId is available, request conversion by documentId
+            if (documentId != null && documentId > 0) {
+                val resp = api.convertWordDocument(documentId)
+                if (resp.isSuccessful && resp.body()?.success == true) {
+                    val body = resp.body()!!
+                    val pdfUrl = NetworkConfig.resolveMediaUrl(body.pdfUrl) ?: (NetworkConfig.getBaseUrl() + (body.pdfPath ?: ""))
+                    val targetPdfFile = File(cacheSubDir, "doc_${documentId}_${body.totalPages ?: 0}.pdf")
+                    if (targetPdfFile.exists() && targetPdfFile.length() > 1024) {
+                        return@withContext Result.success(targetPdfFile)
+                    }
+                    val downloaded = downloadPdfToCache(pdfUrl, targetPdfFile)
+                    if (downloaded && targetPdfFile.exists() && targetPdfFile.length() > 1024) {
+                        return@withContext Result.success(targetPdfFile)
+                    }
+                }
+            }
+
+            // Case 2: If filePath points to a server-side document (starts with uploads/ or contains /intellifile_backend/uploads/)
+            if (!filePath.isNullOrBlank() && (filePath.contains("uploads/") || filePath.contains("intellifile_backend/"))) {
+                val serverRelPath = filePath.substringAfter("intellifile_backend/", filePath).trimStart('/')
+                val resp = api.convertWordByPath(serverRelPath)
+                if (resp.isSuccessful && resp.body()?.success == true) {
+                    val body = resp.body()!!
+                    val pdfUrl = NetworkConfig.resolveMediaUrl(body.pdfUrl) ?: (NetworkConfig.getBaseUrl() + (body.pdfPath ?: ""))
+                    val cacheKey = Integer.toHexString(serverRelPath.hashCode())
+                    val targetPdfFile = File(cacheSubDir, "path_${cacheKey}.pdf")
+                    if (targetPdfFile.exists() && targetPdfFile.length() > 1024) {
+                        return@withContext Result.success(targetPdfFile)
+                    }
+                    val downloaded = downloadPdfToCache(pdfUrl, targetPdfFile)
+                    if (downloaded && targetPdfFile.exists() && targetPdfFile.length() > 1024) {
+                        return@withContext Result.success(targetPdfFile)
+                    }
+                }
+            }
+
+            // Case 3: Local file on device - resolve source file and calculate MD5
+            tempSourceFile = resolveLocalSourceFile(context, uriString, filePath, safeFileName)
+            if (tempSourceFile == null || !tempSourceFile.exists() || tempSourceFile.length() <= 0L) {
+                return@withContext Result.failure(Exception("Cannot read document file to convert."))
+            }
+
+            val fileHash = computeFileMd5(tempSourceFile) ?: (safeFileName.hashCode().toString() + "_" + tempSourceFile.length())
+            val targetPdfFile = File(cacheSubDir, "${fileHash}.pdf")
+
+            // If locally cached from a previous session, return immediately!
+            if (targetPdfFile.exists() && targetPdfFile.length() > 1024) {
+                return@withContext Result.success(targetPdfFile)
+            }
+
+            // Upload document to convert_word.php endpoint
+            val mimeType = when (ext) {
+                "doc", "dot" -> "application/msword"
+                "docx", "dotx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                "odt" -> "application/vnd.oasis.opendocument.text"
+                "rtf" -> "application/rtf"
+                else -> "application/octet-stream"
+            }
+            val requestFile = tempSourceFile.asRequestBody(mimeType.toMediaTypeOrNull())
+            val filePart = MultipartBody.Part.createFormData("file", safeFileName, requestFile)
+
+            val resp = api.convertWordFile(filePart)
+            if (resp.isSuccessful && resp.body()?.success == true) {
+                val body = resp.body()!!
+                val pdfUrl = NetworkConfig.resolveMediaUrl(body.pdfUrl) ?: (NetworkConfig.getBaseUrl() + (body.pdfPath ?: ""))
+                val downloaded = downloadPdfToCache(pdfUrl, targetPdfFile)
+                if (downloaded && targetPdfFile.exists() && targetPdfFile.length() > 1024) {
+                    return@withContext Result.success(targetPdfFile)
+                } else {
+                    return@withContext Result.failure(Exception("Failed to download converted PDF from server."))
+                }
+            } else {
+                val errMsg = resp.body()?.message ?: resp.errorBody()?.string() ?: "Server Word conversion failed"
+                return@withContext Result.failure(Exception(errMsg))
+            }
+        } catch (e: Exception) {
+            return@withContext Result.failure(e)
+        } finally {
+            try {
+                if (tempSourceFile != null && (tempSourceFile.name.startsWith("doc_convert_src_") || tempSourceFile.name.startsWith("ppt_convert_src_"))) {
+                    tempSourceFile.delete()
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    /**
      * Converts a PowerPoint (PPT/PPTX) presentation into PDF via LibreOffice backend.
      * Caches the converted PDF locally in cacheDir/converted_ppt/ so subsequent opens are instant.
      */
@@ -404,7 +510,7 @@ class DocumentRepository(private val context: Context) {
         } finally {
             try {
                 // If temporary resolved file was created in cache, clean it up
-                if (tempSourceFile != null && tempSourceFile.name.startsWith("ppt_convert_src_")) {
+                if (tempSourceFile != null && (tempSourceFile.name.startsWith("ppt_convert_src_") || tempSourceFile.name.startsWith("doc_convert_src_"))) {
                     tempSourceFile.delete()
                 }
             } catch (_: Exception) {}
@@ -474,7 +580,7 @@ class DocumentRepository(private val context: Context) {
             }
         }
 
-        val tempFile = File(context.cacheDir, "ppt_convert_src_${System.currentTimeMillis()}_$fileName")
+        val tempFile = File(context.cacheDir, "doc_convert_src_${System.currentTimeMillis()}_$fileName")
         var copied = false
 
         if (!uriString.isNullOrBlank()) {

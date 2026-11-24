@@ -374,6 +374,26 @@ interface IntelliFileApiService {
         @Part file: MultipartBody.Part
     ): Response<PptConversionResponse>
 
+    // --- Word Document Conversion via LibreOffice ---
+
+    @FormUrlEncoded
+    @POST("documents/convert_word.php")
+    suspend fun convertWordDocument(
+        @Field("document_id") documentId: Int
+    ): Response<PptConversionResponse>
+
+    @FormUrlEncoded
+    @POST("documents/convert_word.php")
+    suspend fun convertWordByPath(
+        @Field("file_path") filePath: String
+    ): Response<PptConversionResponse>
+
+    @Multipart
+    @POST("documents/convert_word.php")
+    suspend fun convertWordFile(
+        @Part file: MultipartBody.Part
+    ): Response<PptConversionResponse>
+
 }
 
 
