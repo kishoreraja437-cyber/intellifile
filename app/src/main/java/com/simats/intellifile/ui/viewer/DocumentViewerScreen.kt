@@ -14,8 +14,13 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -156,6 +161,15 @@ fun DocumentViewerScreen(
     var currentPageIndex by remember { mutableIntStateOf(1) }
     var totalUnitsCount by remember { mutableIntStateOf(totalPages.coerceAtLeast(1)) }
     var zoomPercentage by remember { mutableIntStateOf(100) }
+    var docGestureScale by remember { mutableFloatStateOf(1f) }
+    var docPanOffset by remember { mutableStateOf(Offset.Zero) }
+
+    LaunchedEffect(currentPageIndex) {
+        docGestureScale = 1f
+        docPanOffset = Offset.Zero
+        zoomPercentage = 100
+    }
+
     var wordDocViewMode by remember { mutableStateOf(WordDocViewMode.PAGE_VIEW) }
     var zoomTargetDocumentImage by remember { mutableStateOf<DocumentImage?>(null) }
     var isBookmarked by remember {
@@ -778,14 +792,83 @@ fun DocumentViewerScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .verticalScroll(rememberScrollState())
-                                    .horizontalScroll(rememberScrollState()),
+                                    .clipToBounds()
+                                    .pointerInput(Unit) {
+                                        detectTapGestures(
+                                            onDoubleTap = {
+                                                if (docGestureScale > 1.1f) {
+                                                    docGestureScale = 1f
+                                                    docPanOffset = Offset.Zero
+                                                } else {
+                                                    docGestureScale = 2.2f
+                                                    docPanOffset = Offset.Zero
+                                                }
+                                                zoomPercentage = (docGestureScale * 100).toInt()
+                                            }
+                                        )
+                                    }
+                                    .pointerInput(Unit) {
+                                        awaitEachGesture {
+                                            awaitFirstDown(requireUnconsumed = false)
+                                            var prevDist = 0f
+                                            var prevCentroid = Offset.Zero
+                                            do {
+                                                val event = awaitPointerEvent()
+                                                val pressed = event.changes.filter { it.pressed }
+                                                if (pressed.size >= 2) {
+                                                    // Two-finger pinch to zoom in/out
+                                                    val p1 = pressed[0].position
+                                                    val p2 = pressed[1].position
+                                                    val currDist = (p1 - p2).getDistance()
+                                                    val currCentroid = (p1 + p2) / 2f
+                                                    if (prevDist > 0f) {
+                                                        val zoomRatio = currDist / prevDist
+                                                        docGestureScale = (docGestureScale * zoomRatio).coerceIn(0.6f, 5.0f)
+                                                        val maxPanX = (1200f * (docGestureScale - 1f)).coerceAtLeast(0f)
+                                                        val maxPanY = (1600f * (docGestureScale - 1f)).coerceAtLeast(0f)
+                                                        val rawPan = docPanOffset + (currCentroid - prevCentroid)
+                                                        docPanOffset = Offset(
+                                                            x = rawPan.x.coerceIn(-maxPanX, maxPanX),
+                                                            y = rawPan.y.coerceIn(-maxPanY, maxPanY)
+                                                        )
+                                                        zoomPercentage = (docGestureScale * 100).toInt()
+                                                    }
+                                                    prevDist = currDist
+                                                    prevCentroid = currCentroid
+                                                    event.changes.forEach { it.consume() }
+                                                } else if (pressed.size == 1 && docGestureScale > 1.05f) {
+                                                    // Single-finger drag pan when zoomed into PDF
+                                                    val change = pressed[0]
+                                                    val panDelta = change.positionChange()
+                                                    if (panDelta != Offset.Zero) {
+                                                        val maxPanX = (1200f * (docGestureScale - 1f)).coerceAtLeast(0f)
+                                                        val maxPanY = (1600f * (docGestureScale - 1f)).coerceAtLeast(0f)
+                                                        val rawPan = docPanOffset + panDelta
+                                                        docPanOffset = Offset(
+                                                            x = rawPan.x.coerceIn(-maxPanX, maxPanX),
+                                                            y = rawPan.y.coerceIn(-maxPanY, maxPanY)
+                                                        )
+                                                        change.consume()
+                                                    }
+                                                    prevDist = 0f
+                                                } else {
+                                                    prevDist = 0f
+                                                }
+                                            } while (pressed.isNotEmpty())
+                                        }
+                                    },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Image(
                                     bitmap = pageBitmap!!,
                                     contentDescription = "Page $currentPageIndex of $totalUnitsCount",
                                     modifier = Modifier
+                                        .graphicsLayer {
+                                            scaleX = docGestureScale
+                                            scaleY = docGestureScale
+                                            translationX = docPanOffset.x
+                                            translationY = docPanOffset.y
+                                        }
                                         .clip(RoundedCornerShape(8.dp))
                                         .border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(8.dp))
                                         .background(Color.White)
@@ -891,6 +974,28 @@ fun DocumentViewerScreen(
                             WordDocumentContinuousView(
                                 doc = doc,
                                 zoomPercentage = zoomPercentage,
+                                docGestureScale = docGestureScale,
+                                docPanOffset = docPanOffset,
+                                onZoomPanChange = { newScale, newPan ->
+                                    docGestureScale = newScale
+                                    val maxPanX = (1200f * (docGestureScale - 1f)).coerceAtLeast(0f)
+                                    val maxPanY = (1600f * (docGestureScale - 1f)).coerceAtLeast(0f)
+                                    docPanOffset = Offset(
+                                        x = newPan.x.coerceIn(-maxPanX, maxPanX),
+                                        y = newPan.y.coerceIn(-maxPanY, maxPanY)
+                                    )
+                                    zoomPercentage = (docGestureScale * 100).toInt()
+                                },
+                                onDoubleTap = {
+                                    if (docGestureScale > 1.1f) {
+                                        docGestureScale = 1f
+                                        docPanOffset = Offset.Zero
+                                    } else {
+                                        docGestureScale = 2.2f
+                                        docPanOffset = Offset.Zero
+                                    }
+                                    zoomPercentage = (docGestureScale * 100).toInt()
+                                },
                                 searchQuery = searchQuery,
                                 onZoomImage = { zoomTargetDocumentImage = it }
                             )
@@ -903,6 +1008,28 @@ fun DocumentViewerScreen(
                                 currentPage = currentPageIndex,
                                 totalPages = doc.totalPages,
                                 zoomPercentage = zoomPercentage,
+                                docGestureScale = docGestureScale,
+                                docPanOffset = docPanOffset,
+                                onZoomPanChange = { newScale, newPan ->
+                                    docGestureScale = newScale
+                                    val maxPanX = (1200f * (docGestureScale - 1f)).coerceAtLeast(0f)
+                                    val maxPanY = (1600f * (docGestureScale - 1f)).coerceAtLeast(0f)
+                                    docPanOffset = Offset(
+                                        x = newPan.x.coerceIn(-maxPanX, maxPanX),
+                                        y = newPan.y.coerceIn(-maxPanY, maxPanY)
+                                    )
+                                    zoomPercentage = (docGestureScale * 100).toInt()
+                                },
+                                onDoubleTap = {
+                                    if (docGestureScale > 1.1f) {
+                                        docGestureScale = 1f
+                                        docPanOffset = Offset.Zero
+                                    } else {
+                                        docGestureScale = 2.2f
+                                        docPanOffset = Offset.Zero
+                                    }
+                                    zoomPercentage = (docGestureScale * 100).toInt()
+                                },
                                 searchQuery = searchQuery,
                                 onPrevPage = { if (currentPageIndex > 1) currentPageIndex-- },
                                 onNextPage = { if (currentPageIndex < totalUnitsCount) currentPageIndex++ },
@@ -1014,7 +1141,13 @@ fun DocumentViewerScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
-                        onClick = { if (zoomPercentage > 60) zoomPercentage -= 15 },
+                        onClick = {
+                            if (zoomPercentage > 60) {
+                                zoomPercentage -= 20
+                                docGestureScale = zoomPercentage / 100f
+                                if (docGestureScale <= 1f) docPanOffset = Offset.Zero
+                            }
+                        },
                         modifier = Modifier.size(28.dp)
                     ) {
                         Icon(
@@ -1031,13 +1164,23 @@ fun DocumentViewerScreen(
                         text = "$zoomPercentage%",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF111827)
+                        color = Color(0xFF111827),
+                        modifier = Modifier.clickable {
+                            docGestureScale = 1f
+                            docPanOffset = Offset.Zero
+                            zoomPercentage = 100
+                        }
                     )
 
                     Spacer(modifier = Modifier.width(8.dp))
 
                     IconButton(
-                        onClick = { if (zoomPercentage < 220) zoomPercentage += 15 },
+                        onClick = {
+                            if (zoomPercentage < 300) {
+                                zoomPercentage += 20
+                                docGestureScale = zoomPercentage / 100f
+                            }
+                        },
                         modifier = Modifier.size(28.dp)
                     ) {
                         Icon(
@@ -2524,6 +2667,10 @@ private fun SpreadsheetTableView(
 private fun WordDocumentContinuousView(
     doc: com.simats.intellifile.data.manager.ParsedDocumentContent.RichDocument,
     zoomPercentage: Int,
+    docGestureScale: Float = 1f,
+    docPanOffset: Offset = Offset.Zero,
+    onZoomPanChange: (Float, Offset) -> Unit = { _, _ -> },
+    onDoubleTap: () -> Unit = {},
     searchQuery: String,
     onZoomImage: (com.simats.intellifile.data.manager.DocumentImage) -> Unit
 ) {
@@ -2533,14 +2680,64 @@ private fun WordDocumentContinuousView(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(vertical = 4.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .shadow(3.dp, RoundedCornerShape(12.dp))
-            .background(Color.White)
-            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
-            .padding(20.dp)
-            .verticalScroll(rememberScrollState())
+            .clipToBounds()
+            .pointerInput(Unit) {
+                detectTapGestures(onDoubleTap = { onDoubleTap() })
+            }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    var prevDist = 0f
+                    var prevCentroid = Offset.Zero
+                    do {
+                        val event = awaitPointerEvent()
+                        val pressed = event.changes.filter { it.pressed }
+                        if (pressed.size >= 2) {
+                            val p1 = pressed[0].position
+                            val p2 = pressed[1].position
+                            val currDist = (p1 - p2).getDistance()
+                            val currCentroid = (p1 + p2) / 2f
+                            if (prevDist > 0f) {
+                                val zoomRatio = currDist / prevDist
+                                val newScale = (docGestureScale * zoomRatio).coerceIn(0.6f, 5.0f)
+                                val panDelta = currCentroid - prevCentroid
+                                onZoomPanChange(newScale, docPanOffset + panDelta)
+                            }
+                            prevDist = currDist
+                            prevCentroid = currCentroid
+                            event.changes.forEach { it.consume() }
+                        } else if (pressed.size == 1 && docGestureScale > 1.05f) {
+                            val change = pressed[0]
+                            val panDelta = change.positionChange()
+                            if (panDelta != Offset.Zero) {
+                                onZoomPanChange(docGestureScale, docPanOffset + panDelta)
+                                change.consume()
+                            }
+                            prevDist = 0f
+                        } else {
+                            prevDist = 0f
+                        }
+                    } while (pressed.isNotEmpty())
+                }
+            }
     ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = docGestureScale
+                    scaleY = docGestureScale
+                    translationX = docPanOffset.x
+                    translationY = docPanOffset.y
+                }
+                .padding(vertical = 4.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .shadow(3.dp, RoundedCornerShape(12.dp))
+                .background(Color.White)
+                .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
+                .padding(20.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
         Column {
             // Document Metadata Banner
             Row(
@@ -2633,6 +2830,7 @@ private fun WordDocumentContinuousView(
         }
     }
 }
+}
 
 @Composable
 private fun WordDocumentPageView(
@@ -2640,6 +2838,10 @@ private fun WordDocumentPageView(
     currentPage: Int,
     totalPages: Int,
     zoomPercentage: Int,
+    docGestureScale: Float = 1f,
+    docPanOffset: Offset = Offset.Zero,
+    onZoomPanChange: (Float, Offset) -> Unit = { _, _ -> },
+    onDoubleTap: () -> Unit = {},
     searchQuery: String,
     onPrevPage: () -> Unit,
     onNextPage: () -> Unit,
@@ -2651,12 +2853,58 @@ private fun WordDocumentPageView(
         modifier = Modifier
             .fillMaxSize()
             .padding(vertical = 4.dp)
+            .clipToBounds()
+            .pointerInput(Unit) {
+                detectTapGestures(onDoubleTap = { onDoubleTap() })
+            }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    var prevDist = 0f
+                    var prevCentroid = Offset.Zero
+                    do {
+                        val event = awaitPointerEvent()
+                        val pressed = event.changes.filter { it.pressed }
+                        if (pressed.size >= 2) {
+                            val p1 = pressed[0].position
+                            val p2 = pressed[1].position
+                            val currDist = (p1 - p2).getDistance()
+                            val currCentroid = (p1 + p2) / 2f
+                            if (prevDist > 0f) {
+                                val zoomRatio = currDist / prevDist
+                                val newScale = (docGestureScale * zoomRatio).coerceIn(0.6f, 5.0f)
+                                val panDelta = currCentroid - prevCentroid
+                                onZoomPanChange(newScale, docPanOffset + panDelta)
+                            }
+                            prevDist = currDist
+                            prevCentroid = currCentroid
+                            event.changes.forEach { it.consume() }
+                        } else if (pressed.size == 1 && docGestureScale > 1.05f) {
+                            val change = pressed[0]
+                            val panDelta = change.positionChange()
+                            if (panDelta != Offset.Zero) {
+                                onZoomPanChange(docGestureScale, docPanOffset + panDelta)
+                                change.consume()
+                            }
+                            prevDist = 0f
+                        } else {
+                            prevDist = 0f
+                        }
+                    } while (pressed.isNotEmpty())
+                }
+            }
     ) {
         // Document Page Paper Sheet
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
+                .graphicsLayer {
+                    scaleX = docGestureScale
+                    scaleY = docGestureScale
+                    translationX = docPanOffset.x
+                    translationY = docPanOffset.y
+                }
                 .clip(RoundedCornerShape(12.dp))
                 .shadow(3.dp, RoundedCornerShape(12.dp))
                 .background(Color.White)

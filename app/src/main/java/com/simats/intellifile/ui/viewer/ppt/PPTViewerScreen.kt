@@ -15,9 +15,12 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -621,11 +624,42 @@ private fun PPTVisualCanvasView(
                                     onDoubleTap = { onDoubleTap() }
                                 )
                             }
-                            .pointerInput(zoomScale) {
-                                if (zoomScale > 1.05f) {
-                                    detectTransformGestures { _, pan, zoom, _ ->
-                                        onZoomPanChange(zoom, pan)
-                                    }
+                            .pointerInput(Unit) {
+                                awaitEachGesture {
+                                    awaitFirstDown(requireUnconsumed = false)
+                                    var prevDist = 0f
+                                    var prevCentroid = Offset.Zero
+                                    do {
+                                        val event = awaitPointerEvent()
+                                        val pressed = event.changes.filter { it.pressed }
+                                        if (pressed.size >= 2) {
+                                            // Multi-finger pinch to zoom in/out
+                                            val p1 = pressed[0].position
+                                            val p2 = pressed[1].position
+                                            val currDist = (p1 - p2).getDistance()
+                                            val currCentroid = (p1 + p2) / 2f
+                                            if (prevDist > 0f) {
+                                                val zoomRatio = currDist / prevDist
+                                                val panDelta = currCentroid - prevCentroid
+                                                onZoomPanChange(zoomRatio, panDelta)
+                                            }
+                                            prevDist = currDist
+                                            prevCentroid = currCentroid
+                                            event.changes.forEach { it.consume() }
+                                        } else if (pressed.size == 1 && zoomScale > 1.05f) {
+                                            // Single finger pan when zoomed into slide
+                                            val change = pressed[0]
+                                            val panDelta = change.positionChange()
+                                            if (panDelta != Offset.Zero) {
+                                                onZoomPanChange(1.0f, panDelta)
+                                                change.consume()
+                                            }
+                                            prevDist = 0f
+                                        } else {
+                                            // Single finger at 1.0x: allow HorizontalPager horizontal swipe
+                                            prevDist = 0f
+                                        }
+                                    } while (pressed.isNotEmpty())
                                 }
                             }
                     } else Modifier

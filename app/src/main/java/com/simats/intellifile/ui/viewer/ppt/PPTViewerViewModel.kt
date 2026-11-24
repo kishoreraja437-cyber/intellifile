@@ -259,8 +259,14 @@ class PPTViewerViewModel(application: Application) : AndroidViewModel(applicatio
     fun updateZoomAndPan(zoomDelta: Float, panDelta: Offset) {
         _uiState.update {
             val newScale = (it.zoomScale * zoomDelta).coerceIn(1.0f, 5.0f)
-            val newPan = if (newScale == 1.0f) Offset.Zero else it.panOffset + panDelta
-            it.copy(zoomScale = newScale, panOffset = newPan)
+            val maxPanX = (1000f * (newScale - 1f)).coerceAtLeast(0f)
+            val maxPanY = (800f * (newScale - 1f)).coerceAtLeast(0f)
+            val rawPan = if (newScale == 1.0f) Offset.Zero else it.panOffset + panDelta
+            val clampedPan = Offset(
+                x = rawPan.x.coerceIn(-maxPanX, maxPanX),
+                y = rawPan.y.coerceIn(-maxPanY, maxPanY)
+            )
+            it.copy(zoomScale = newScale, panOffset = clampedPan)
         }
     }
 
