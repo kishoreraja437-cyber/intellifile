@@ -387,7 +387,7 @@ fun AboutScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Description,
-                            contentDescription = "Terms of Service",
+                            contentDescription = "Terms and Conditions",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
