@@ -56,6 +56,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -710,32 +711,36 @@ fun VoiceAssistantModal(
             onDismiss()
         },
         sheetState = sheetState,
-        containerColor = Color(0xFF02171E),
+        containerColor = Color(0xFF05323D),
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         dragHandle = {
-            BottomSheetDefaults.DragHandle(
-                color = Color(0xFF265D6B)
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(28.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(42.dp)
+                        .height(4.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF00E5FF))
+                )
+            }
         },
         modifier = modifier
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF074957),
-                            Color(0xFF042D37),
-                            Color(0xFF02171E)
-                        )
-                    )
-                )
+                .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                .background(Color.White)
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 20.dp),
+                .padding(top = 16.dp, bottom = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Minimal Sleek Header Bar
+            // Sleek Header Bar
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -749,15 +754,15 @@ fun VoiceAssistantModal(
                             .background(
                                 if (voiceState == AssistantVoiceState.LISTENING) Color(0xFF00E5FF)
                                 else if (voiceState == AssistantVoiceState.SPEAKING) Color(0xFF00C2A8)
-                                else Color(0xFF55A9AF)
+                                else Color(0xFF00C2A8)
                             )
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "IntelliFile AI Voice",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFFB0D0D7)
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F172A)
                     )
                 }
 
@@ -771,8 +776,8 @@ fun VoiceAssistantModal(
                         Icon(
                             imageVector = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
                             contentDescription = if (isMuted) "Unmute" else "Mute",
-                            tint = if (isMuted) Color.Gray else Color(0xFF8EAFB7),
-                            modifier = Modifier.size(20.dp)
+                            tint = Color(0xFF0F172A),
+                            modifier = Modifier.size(22.dp)
                         )
                     }
 
@@ -785,14 +790,14 @@ fun VoiceAssistantModal(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close",
-                            tint = Color(0xFF8EAFB7),
-                            modifier = Modifier.size(20.dp)
+                            tint = Color(0xFF0F172A),
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Main Content Area
             LazyColumn(
@@ -871,7 +876,7 @@ fun VoiceAssistantModal(
                                 text = "Found Files (${foundDeviceFiles.size})",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White,
+                                color = Color(0xFF0F172A),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(top = 4.dp)
@@ -897,7 +902,7 @@ fun VoiceAssistantModal(
                                 text = "IntelliSpace Files (${attachedAiFiles.size})",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White,
+                                color = Color(0xFF0F172A),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(top = 4.dp)
@@ -946,12 +951,12 @@ fun VoiceAssistantModal(
                             ) {
                                 Text(
                                     text = "Suggested voice commands:",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xFF8EAFB7)
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF0F172A)
                                 )
 
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
 
                                 val samplePrompts = listOf(
                                     "Go to AI screen",
@@ -967,29 +972,30 @@ fun VoiceAssistantModal(
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     items(samplePrompts) { prompt ->
                                         Surface(
-                                            shape = RoundedCornerShape(16.dp),
-                                            color = Color(0x330A4C5A),
-                                            border = BorderStroke(1.dp, Color(0x2200E5FF)),
+                                            shape = RoundedCornerShape(20.dp),
+                                            color = Color.White,
+                                            border = BorderStroke(1.2.dp, Color(0xFF4DD0E1)),
                                             modifier = Modifier.clickable {
                                                 userSpeechText = prompt
                                                 executeCommand(prompt)
                                             }
                                         ) {
                                             Row(
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Outlined.AutoAwesome,
                                                     contentDescription = null,
-                                                    tint = Color(0xFF00E5FF),
-                                                    modifier = Modifier.size(14.dp)
+                                                    tint = Color(0xFF00BCD4),
+                                                    modifier = Modifier.size(15.dp)
                                                 )
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Text(
                                                     text = prompt,
-                                                    fontSize = 12.sp,
-                                                    color = Color.White
+                                                    fontSize = 12.5.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = Color(0xFF0F172A)
                                                 )
                                             }
                                         }
@@ -1001,17 +1007,17 @@ fun VoiceAssistantModal(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Manual Text Input Fallback Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(44.dp)
+                    .height(48.dp)
                     .clip(CircleShape)
-                    .background(Color(0x44011419))
-                    .border(1.dp, Color(0x3300E5FF), CircleShape)
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                    .background(Color.White)
+                    .border(BorderStroke(1.2.dp, Color(0xFF4DD0E1)), CircleShape)
+                    .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
@@ -1021,20 +1027,20 @@ fun VoiceAssistantModal(
                     if (manualInputText.isEmpty()) {
                         Text(
                             text = "Type command or question...",
-                            fontSize = 13.sp,
-                            color = Color(0xFF5A8590)
+                            fontSize = 13.5.sp,
+                            color = Color(0xFF94A3B8)
                         )
                     }
                     BasicTextField(
                         value = manualInputText,
                         onValueChange = { manualInputText = it },
                         singleLine = true,
-                        textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 13.sp),
+                        textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFF0F172A), fontSize = 13.5.sp),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
 
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
                 IconButton(
                     onClick = {
@@ -1049,15 +1055,15 @@ fun VoiceAssistantModal(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = "Send Command",
-                        tint = Color(0xFF00E5FF),
-                        modifier = Modifier.size(18.dp)
+                        tint = Color(0xFF00897B),
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Bottom Actions Bar
+            // Bottom Actions Bar with Floating Aqua Mic Button at Right
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1070,29 +1076,29 @@ fun VoiceAssistantModal(
                             onOpenInAiChat(currentConversationId)
                         },
                         shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(1.dp, Color(0x4400E5FF)),
+                        border = BorderStroke(1.dp, Color(0xFF00C2A8)),
                         colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = Color(0xFF00E5FF)
+                            contentColor = Color(0xFF00A389)
                         )
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Chat,
                             contentDescription = "Chat",
-                            tint = Color(0xFF00E5FF),
+                            tint = Color(0xFF00A389),
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "Open in AI Chat", fontSize = 13.sp, color = Color.White)
+                        Text(text = "Open in AI Chat", fontSize = 13.sp, color = Color(0xFF00A389))
                     }
                 } else {
                     Spacer(modifier = Modifier.width(1.dp))
                 }
 
-                // Primary Mic Action Button with Pulsing Halo
+                // Primary Circular Aqua Mic FAB Button with Pulsing Halo
                 val bottomMicTransition = rememberInfiniteTransition(label = "bottomMicPulse")
                 val bottomMicHaloScale by bottomMicTransition.animateFloat(
                     initialValue = 1.0f,
-                    targetValue = 1.28f,
+                    targetValue = 1.25f,
                     animationSpec = infiniteRepeatable(
                         animation = tween(800, easing = FastOutSlowInEasing),
                         repeatMode = RepeatMode.Reverse
@@ -1100,7 +1106,7 @@ fun VoiceAssistantModal(
                     label = "bottomMicHaloScale"
                 )
                 val bottomMicHaloAlpha by bottomMicTransition.animateFloat(
-                    initialValue = 0.5f,
+                    initialValue = 0.45f,
                     targetValue = 0.05f,
                     animationSpec = infiniteRepeatable(
                         animation = tween(800, easing = FastOutSlowInEasing),
@@ -1115,7 +1121,7 @@ fun VoiceAssistantModal(
                     if (voiceState == AssistantVoiceState.LISTENING) {
                         Box(
                             modifier = Modifier
-                                .size(48.dp)
+                                .size(54.dp)
                                 .graphicsLayer(
                                     scaleX = bottomMicHaloScale,
                                     scaleY = bottomMicHaloScale,
@@ -1128,14 +1134,15 @@ fun VoiceAssistantModal(
 
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(52.dp)
+                            .shadow(elevation = 6.dp, shape = CircleShape, spotColor = Color(0x6000C2A8))
                             .clip(CircleShape)
                             .background(
                                 Brush.linearGradient(
                                     colors = if (voiceState == AssistantVoiceState.LISTENING) {
                                         listOf(Color(0xFF00E5FF), Color(0xFF00C2A8))
                                     } else {
-                                        listOf(Color(0xFF00C2A8), Color(0xFF063E4B))
+                                        listOf(Color(0xFF00C2A8), Color(0xFF00A389))
                                     }
                                 )
                             )
@@ -1187,8 +1194,8 @@ fun LocalDeviceFileResultCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(Color(0x33052A33))
-            .border(1.dp, Color(0x2200E5FF), RoundedCornerShape(14.dp))
+            .background(Color.White)
+            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(14.dp))
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1205,7 +1212,7 @@ fun LocalDeviceFileResultCard(
                 text = item.title,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = Color(0xFF0F172A),
                 maxLines = 1
             )
             Row(
@@ -1214,13 +1221,13 @@ fun LocalDeviceFileResultCard(
             ) {
                 Surface(
                     shape = RoundedCornerShape(4.dp),
-                    color = Color(0xFF26E07F).copy(alpha = 0.15f)
+                    color = Color(0xFF00C2A8).copy(alpha = 0.12f)
                 ) {
                     Text(
                         text = "Device Files",
                         fontSize = 9.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF26E07F),
+                        color = Color(0xFF00897B),
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                     )
                 }
@@ -1228,7 +1235,7 @@ fun LocalDeviceFileResultCard(
                 Text(
                     text = "${item.format} • ${item.sizeFormatted} • ${item.dateText}",
                     fontSize = 11.sp,
-                    color = Color(0xFF8EAFB7)
+                    color = Color(0xFF64748B)
                 )
             }
         }
@@ -1392,13 +1399,13 @@ fun VoiceWaveOrb(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // 3. Bold White Title: VOICE RECOGNITION
+        // 3. Bold Navy Title: VOICE RECOGNITION
         Text(
             text = "VOICE RECOGNITION",
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
-            letterSpacing = 2.5.sp,
-            color = Color.White,
+            letterSpacing = 2.sp,
+            color = Color(0xFF0F2537),
             textAlign = TextAlign.Center
         )
 
@@ -1407,8 +1414,8 @@ fun VoiceWaveOrb(
         // 4. Clean Subtitle / Status / Transcript
         Text(
             text = statusText,
-            fontSize = 12.sp,
-            color = Color(0xFF8EAFB7),
+            fontSize = 12.5.sp,
+            color = Color(0xFF64748B),
             textAlign = TextAlign.Center,
             lineHeight = 17.sp,
             modifier = Modifier
@@ -1560,15 +1567,15 @@ fun UserSpeechCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0x33083B47))
-            .border(1.dp, Color(0x3300E5FF), RoundedCornerShape(16.dp))
+            .background(Color(0xFFF0FDFA))
+            .border(1.dp, Color(0xFF99F6E4), RoundedCornerShape(16.dp))
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             imageVector = Icons.Default.FormatQuote,
             contentDescription = null,
-            tint = Color(0xFF00E5FF),
+            tint = Color(0xFF0D9488),
             modifier = Modifier.size(20.dp)
         )
         Spacer(modifier = Modifier.width(8.dp))
@@ -1576,7 +1583,7 @@ fun UserSpeechCard(
             text = text,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
-            color = Color.White
+            color = Color(0xFF0F172A)
         )
     }
 }
@@ -1592,13 +1599,13 @@ fun AssistantAnswerCard(
     Card(
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0x4406333D)
+            containerColor = Color(0xFFF8FAFC)
         ),
         modifier = modifier
             .fillMaxWidth()
             .border(
                 1.dp,
-                Color(0x4400E5FF),
+                Color(0xFFCCFBF1),
                 RoundedCornerShape(18.dp)
             )
     ) {
@@ -1612,7 +1619,7 @@ fun AssistantAnswerCard(
                     Icon(
                         imageVector = Icons.Default.AutoAwesome,
                         contentDescription = "AI",
-                        tint = Color(0xFF00E5FF),
+                        tint = Color(0xFF0D9488),
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -1620,7 +1627,7 @@ fun AssistantAnswerCard(
                         text = "IntelliFile Answer",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF00E5FF)
+                        color = Color(0xFF0D9488)
                     )
                 }
 
@@ -1633,7 +1640,7 @@ fun AssistantAnswerCard(
                     Icon(
                         imageVector = if (isSpeaking) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
                         contentDescription = if (isSpeaking) "Stop Speaking" else "Speak Again",
-                        tint = Color(0xFF00E5FF),
+                        tint = Color(0xFF0D9488),
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -1644,7 +1651,7 @@ fun AssistantAnswerCard(
             Text(
                 text = replyText,
                 fontSize = 14.sp,
-                color = Color.White,
+                color = Color(0xFF0F172A),
                 lineHeight = 20.sp
             )
         }
@@ -1667,8 +1674,8 @@ fun VoiceAssistantFileCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(Color(0x33052A33))
-            .border(1.dp, Color(0x2200E5FF), RoundedCornerShape(14.dp))
+            .background(Color.White)
+            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(14.dp))
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1685,7 +1692,7 @@ fun VoiceAssistantFileCard(
                 text = file.title,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = Color(0xFF0F172A),
                 maxLines = 1
             )
             Row(
@@ -1694,13 +1701,13 @@ fun VoiceAssistantFileCard(
             ) {
                 Surface(
                     shape = RoundedCornerShape(4.dp),
-                    color = Color(0xFF00E5FF).copy(alpha = 0.15f)
+                    color = Color(0xFF00C2A8).copy(alpha = 0.12f)
                 ) {
                     Text(
                         text = file.source,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF00E5FF),
+                        color = Color(0xFF00897B),
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                     )
                 }
@@ -1708,7 +1715,7 @@ fun VoiceAssistantFileCard(
                 Text(
                     text = "${file.format} • ${file.size}" + (if (file.page != null) " • Page ${file.page}" else ""),
                     fontSize = 11.sp,
-                    color = Color(0xFF8EAFB7)
+                    color = Color(0xFF64748B)
                 )
             }
         }
@@ -1734,8 +1741,8 @@ fun PermissionRequiredCard(
 ) {
     Card(
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0x4406333D)),
-        border = BorderStroke(1.dp, Color(0x3300E5FF)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDFA)),
+        border = BorderStroke(1.dp, Color(0xFF99F6E4)),
         modifier = modifier.fillMaxWidth()
     ) {
         Column(
@@ -1746,13 +1753,13 @@ fun PermissionRequiredCard(
                 modifier = Modifier
                     .size(54.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF00E5FF).copy(alpha = 0.15f)),
+                    .background(Color(0xFF00C2A8).copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Mic,
                     contentDescription = "Microphone",
-                    tint = Color(0xFF00E5FF),
+                    tint = Color(0xFF00A389),
                     modifier = Modifier.size(28.dp)
                 )
             }
@@ -1763,7 +1770,7 @@ fun PermissionRequiredCard(
                 text = "Microphone Access Required",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = Color(0xFF0F172A)
             )
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -1771,7 +1778,7 @@ fun PermissionRequiredCard(
             Text(
                 text = "IntelliFile needs microphone permission to listen to your voice commands, search documents, and give spoken answers.",
                 fontSize = 13.sp,
-                color = Color(0xFF8EAFB7),
+                color = Color(0xFF64748B),
                 textAlign = TextAlign.Center
             )
 
@@ -1780,7 +1787,7 @@ fun PermissionRequiredCard(
             Button(
                 onClick = onRequestPermission,
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00A389))
             ) {
                 Text(text = "Grant Microphone Access", color = Color.White)
             }
