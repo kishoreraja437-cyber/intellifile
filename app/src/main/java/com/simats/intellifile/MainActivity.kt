@@ -81,7 +81,8 @@ class AppNavigationViewModel(application: Application) : AndroidViewModel(applic
     val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
 
     private val initialTheme = try {
-        AppThemeMode.valueOf(sessionManager.getThemeMode())
+        val mode = AppThemeMode.valueOf(sessionManager.getThemeMode())
+        if (mode == AppThemeMode.SYSTEM) AppThemeMode.LIGHT else mode
     } catch (e: Exception) {
         AppThemeMode.LIGHT
     }
@@ -361,11 +362,10 @@ class MainActivity : ComponentActivity() {
             val currentScreen by appNavViewModel.currentScreen.collectAsState()
             val themeMode by appNavViewModel.themeMode.collectAsState()
 
-            val isSystemDark = isSystemInDarkTheme()
             val isDarkTheme = when (themeMode) {
                 AppThemeMode.LIGHT -> false
                 AppThemeMode.DARK -> true
-                AppThemeMode.SYSTEM -> isSystemDark
+                AppThemeMode.SYSTEM -> false
             }
 
             DisposableEffect(isDarkTheme) {

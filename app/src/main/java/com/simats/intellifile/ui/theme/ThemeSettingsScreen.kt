@@ -14,7 +14,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.LightMode
-import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -48,7 +47,7 @@ enum class AppThemeMode(val title: String, val description: String) {
 @Composable
 fun ThemeSettingsScreen(
     modifier: Modifier = Modifier,
-    initialThemeMode: AppThemeMode = AppThemeMode.SYSTEM,
+    initialThemeMode: AppThemeMode = AppThemeMode.LIGHT,
     onBackClick: () -> Unit = {},
     onSaveTheme: (AppThemeMode) -> Unit = {}
 ) {
@@ -56,7 +55,7 @@ fun ThemeSettingsScreen(
     val scope = rememberCoroutineScope()
     val sessionManager = remember { SessionManager(context) }
     val authRepo = remember { AuthRepository(context) }
-    var selectedTheme by remember { mutableStateOf(initialThemeMode) }
+    var selectedTheme by remember { mutableStateOf(if (initialThemeMode == AppThemeMode.SYSTEM) AppThemeMode.LIGHT else initialThemeMode) }
 
     Box(
         modifier = modifier
@@ -123,17 +122,6 @@ fun ThemeSettingsScreen(
                 isSelected = selectedTheme == AppThemeMode.DARK,
                 onSelect = { selectedTheme = AppThemeMode.DARK },
                 previewContent = { DarkThemePreviewMock() }
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Theme Option 3: System Default
-            ThemeCardItem(
-                themeMode = AppThemeMode.SYSTEM,
-                icon = Icons.Outlined.Smartphone,
-                isSelected = selectedTheme == AppThemeMode.SYSTEM,
-                onSelect = { selectedTheme = AppThemeMode.SYSTEM },
-                previewContent = { SystemThemePreviewMock() }
             )
 
             Spacer(modifier = Modifier.weight(1f))
@@ -334,83 +322,6 @@ fun DarkThemePreviewMock() {
                     .clip(RoundedCornerShape(4.dp))
                     .background(Color(0xFF4338CA))
             )
-        }
-    }
-}
-
-@Composable
-fun SystemThemePreviewMock() {
-    Row(
-        modifier = Modifier
-            .width(68.dp)
-            .height(54.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFEEF2FF))
-    ) {
-        // Light half
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .background(Color(0xFFEEF2FF))
-                .padding(4.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(Color(0xFF6C5CE7))
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(14.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(Color(0xFFC7D2FE))
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.8f)
-                        .height(10.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(Color(0xFF4338CA))
-                )
-            }
-        }
-
-        // Dark half
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .background(Color(0xFF0F172A))
-                .padding(4.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(Color(0xFF6C5CE7))
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(14.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(Color(0xFF1E293B))
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.8f)
-                        .height(10.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(Color(0xFF4338CA))
-                )
-            }
         }
     }
 }
