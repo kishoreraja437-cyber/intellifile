@@ -186,6 +186,22 @@ data class DocumentDto(
 
     @SerializedName("has_text") val has_text: Boolean = false,
 
+    @SerializedName("insight_status") val insight_status: String = "PENDING",
+
+    @SerializedName("insight_overview") val insight_overview: String? = null,
+
+    @SerializedName("insight_topics") val insight_topics: List<String> = emptyList(),
+
+    @SerializedName("insight_key_points") val insight_key_points: List<String> = emptyList(),
+
+    @SerializedName("insight_details") val insight_details: List<String> = emptyList(),
+
+    @SerializedName("insight_terms") val insight_terms: List<String> = emptyList(),
+
+    @SerializedName("insight_conclusion") val insight_conclusion: String? = null,
+
+    @SerializedName("insight_error") val insight_error: String? = null,
+
     @SerializedName("created_at") val created_at: String? = null,
 
     @SerializedName("last_accessed") val last_accessed: String? = null
@@ -448,32 +464,47 @@ data class AiMessagesResponse(
 
 
 data class AiSummarizeRequest(
-
     @SerializedName("document_id") val document_id: Int? = null,
-
     @SerializedName("title") val title: String? = null,
-
-    @SerializedName("content_text") val content_text: String? = null
-
+    @SerializedName("content_text") val content_text: String? = null,
+    @SerializedName("retry") val retry: Boolean = false
 )
-
-
 
 data class AiSummarizeResponse(
-
     @SerializedName("success") val success: Boolean,
-
     @SerializedName("title") val title: String? = null,
-
+    @SerializedName("format") val format: String? = null,
+    @SerializedName("status") val status: String? = null,
+    @SerializedName("overview") val overview: String? = null,
+    @SerializedName("main_topics") val main_topics: List<String> = emptyList(),
+    @SerializedName("key_points") val key_points: List<String> = emptyList(),
+    @SerializedName("important_details") val important_details: List<String> = emptyList(),
+    @SerializedName("important_terms") val important_terms: List<String> = emptyList(),
+    @SerializedName("conclusion") val conclusion: String? = null,
     @SerializedName("summary") val summary: String? = null,
-
     @SerializedName("bullet_points") val bullet_points: List<String> = emptyList(),
-
     @SerializedName("sentence_count") val sentence_count: Int = 0,
+    @SerializedName("message") val message: String? = null,
+    @SerializedName("error") val error: String? = null
+) {
+    val effectiveOverview: String
+        get() = overview?.takeIf { it.isNotBlank() } ?: summary ?: ""
 
-    @SerializedName("message") val message: String? = null
+    val effectiveKeyPoints: List<String>
+        get() = if (key_points.isNotEmpty()) key_points else bullet_points
 
-)
+    val effectiveTopics: List<String>
+        get() = main_topics
+
+    val effectiveDetails: List<String>
+        get() = important_details
+
+    val effectiveTerms: List<String>
+        get() = important_terms
+
+    val effectiveConclusion: String
+        get() = conclusion ?: ""
+}
 
 
 

@@ -155,37 +155,22 @@ class AiRepository(private val context: Context) {
 
 
     suspend fun summarizeDocument(
-
         documentId: Int? = null,
-
         title: String? = null,
-
-        contentText: String? = null
-
+        contentText: String? = null,
+        retry: Boolean = false
     ): Result<AiSummarizeResponse> {
-
         return try {
-
-            val response = api.summarizeDocument(AiSummarizeRequest(documentId, title, contentText))
-
+            val response = api.summarizeDocument(AiSummarizeRequest(documentId, title, contentText, retry))
             if (response.isSuccessful && response.body()?.success == true) {
-
                 Result.success(response.body()!!)
-
             } else {
-
                 val msg = response.body()?.message ?: response.errorBody()?.string() ?: "Failed to summarize"
-
                 Result.failure(Exception(msg))
-
             }
-
         } catch (e: Exception) {
-
             Result.failure(e)
-
         }
-
     }
 
 

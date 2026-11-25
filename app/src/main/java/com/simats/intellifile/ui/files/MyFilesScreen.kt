@@ -132,12 +132,48 @@ fun MyFilesScreen(
     var docToDelete by remember { mutableStateOf<DocumentDto?>(null) }
     var resolvingDocId by remember { mutableIntStateOf(-1) }
 
+    // Function to load IntelliSpace documents
+    fun loadVault() {
+        coroutineScope.launch {
+            isVaultLoading = true
+            val result = docRepo.getDocuments()
+            isVaultLoading = false
+            result.onSuccess { docs ->
+                vaultDocuments = docs
+            }.onFailure {
+                // If offline or network issue, keep any existing
+            }
+        }
+    }
+
     // Function to generate and load AI Insights
-    fun loadInsightsForDoc(doc: DocumentDto) {
+    fun loadInsightsForDoc(doc: DocumentDto, retry: Boolean = false) {
         selectedSummaryDoc = doc
+        aiInsightsError = null
+
+        // Instant render if already available in DocumentDto and not retrying
+        if (!retry && doc.insight_status.equals("READY", ignoreCase = true) && !doc.insight_overview.isNullOrBlank()) {
+            isGeneratingInsights = false
+            aiInsightsResult = AiSummarizeResponse(
+                success = true,
+                title = doc.title,
+                format = doc.format,
+                status = "READY",
+                overview = doc.insight_overview,
+                main_topics = doc.insight_topics,
+                key_points = doc.insight_key_points,
+                important_details = doc.insight_details,
+                important_terms = doc.insight_terms,
+                conclusion = doc.insight_conclusion,
+                summary = doc.insight_overview,
+                bullet_points = doc.insight_key_points,
+                sentence_count = doc.insight_key_points.size
+            )
+            return
+        }
+
         isGeneratingInsights = true
         aiInsightsResult = null
-        aiInsightsError = null
 
         coroutineScope.launch {
             var contentToSummarize = doc.content_text
@@ -158,41 +194,16 @@ fun MyFilesScreen(
             val res = aiRepo.summarizeDocument(
                 documentId = if (doc.id > 0) doc.id else null,
                 title = doc.title,
-                contentText = contentToSummarize
+                contentText = contentToSummarize,
+                retry = retry
             )
 
             isGeneratingInsights = false
             res.onSuccess { summaryResponse ->
                 aiInsightsResult = summaryResponse
+                loadVault()
             }.onFailure { ex ->
-                if (!contentToSummarize.isNullOrBlank()) {
-                    val rawSentences = contentToSummarize.split(Regex("(?<=[.!?\\n])\\s+")).filter { it.isNotBlank() }
-                    val bullets = rawSentences.take(4).map { it.trim().trimStart('-', '*', '•').trim() }
-                    val fallbackSummary = if (rawSentences.size > 2) rawSentences.take(2).joinToString(" ") else contentToSummarize.take(300)
-                    aiInsightsResult = AiSummarizeResponse(
-                        success = true,
-                        title = doc.title,
-                        summary = fallbackSummary,
-                        bullet_points = bullets,
-                        sentence_count = bullets.size
-                    )
-                } else {
-                    aiInsightsError = ex.message ?: "Failed to generate AI insights"
-                }
-            }
-        }
-    }
-
-    // Function to load IntelliSpace documents
-    fun loadVault() {
-        coroutineScope.launch {
-            isVaultLoading = true
-            val result = docRepo.getDocuments()
-            isVaultLoading = false
-            result.onSuccess { docs ->
-                vaultDocuments = docs
-            }.onFailure {
-                // If offline or network issue, keep any existing
+                aiInsightsError = ex.message ?: "Failed to generate AI insights. Please tap retry."
             }
         }
     }
@@ -249,15 +260,16 @@ fun MyFilesScreen(
                         }
                     } catch (_: Exception) {}
 
-                    uploadProgressMessage = "Moving file ${index + 1} of ${uris.size}: $fileName..."
+                    uploadProgressMessage = "Uploading & Extracting content (${index + 1}/${uris.size}): $fileName..."
 
                     val result = docRepo.uploadToVault(
                         filePath = "",
                         uriString = uri.toString(),
                         fileName = fileName
                     )
-                    result.onSuccess {
-                        dbHelper.setVaultStatus(uri.toString(), fileName, true)
+                    result.onSuccess { uploadedDoc ->
+                        uploadProgressMessage = "AI Insight Ready for: $fileName"
+                        dbHelper.setVaultStatus(uri.toString(), fileName, true, uploadedDoc.id)
                         successCount++
                     }.onFailure { ex ->
                         lastError = ex.message
@@ -344,18 +356,18 @@ fun MyFilesScreen(
                         modifier = Modifier
                             .size(38.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                            .background(Color(0xFF2563EB).copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.AutoAwesome,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(22.dp)
+                            tint = Color(0xFF2563EB),
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(10.dp))
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "AI Document Insights",
                             fontWeight = FontWeight.Bold,
@@ -363,9 +375,22 @@ fun MyFilesScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Neural Analysis & Summarization",
+                            text = "Universal IntelliSpace Intelligence",
                             fontSize = 11.sp,
                             color = Color(0xFF6B7280)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFFDEF7EC))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = if (doc.insight_status.equals("FAILED", ignoreCase = true)) "Failed" else "Insight Ready",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (doc.insight_status.equals("FAILED", ignoreCase = true)) Color(0xFF991B1B) else Color(0xFF03543F)
                         )
                     }
                 }
@@ -374,11 +399,11 @@ fun MyFilesScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 480.dp)
+                        .heightIn(max = 520.dp)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    // Document Header Card
+                    // Document Header Summary Card
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
                         shape = RoundedCornerShape(12.dp),
@@ -394,7 +419,7 @@ fun MyFilesScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Spacer(modifier = Modifier.height(6.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(6.dp))
@@ -402,31 +427,6 @@ fun MyFilesScreen(
                                         .padding(horizontal = 8.dp, vertical = 2.dp)
                                 ) {
                                     Text(text = doc.format, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF3730A3))
-                                }
-                                if (!doc.priority.isNullOrBlank()) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(
-                                                when (doc.priority.uppercase()) {
-                                                    "IMPORTANT" -> Color(0xFFFEE2E2)
-                                                    "NORMAL" -> Color(0xFFDEF7EC)
-                                                    else -> Color(0xFFF3F4F6)
-                                                }
-                                            )
-                                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                                    ) {
-                                        Text(
-                                            text = doc.priority,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = when (doc.priority.uppercase()) {
-                                                "IMPORTANT" -> Color(0xFF991B1B)
-                                                "NORMAL" -> Color(0xFF03543F)
-                                                else -> Color(0xFF374151)
-                                            }
-                                        )
-                                    }
                                 }
                                 Box(
                                     modifier = Modifier
@@ -436,6 +436,14 @@ fun MyFilesScreen(
                                 ) {
                                     Text(text = doc.file_size, fontSize = 11.sp, color = Color(0xFF4B5563))
                                 }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFFF3F4F6))
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text(text = "${doc.total_pages} Page${if (doc.total_pages > 1) "s" else ""}", fontSize = 11.sp, color = Color(0xFF4B5563))
+                                }
                             }
                         }
                     }
@@ -444,25 +452,25 @@ fun MyFilesScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 28.dp),
+                                .padding(vertical = 36.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(36.dp),
+                                modifier = Modifier.size(40.dp),
                                 color = MaterialTheme.colorScheme.primary,
                                 strokeWidth = 3.dp
                             )
-                            Spacer(modifier = Modifier.height(14.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                text = "Analyzing document with AI...",
+                                text = "Extracting & Analyzing Content...",
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 14.sp,
                                 color = Color(0xFF1F2937)
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Extracting executive summary and key points",
+                                text = "Generating universal 6-section insight across ${doc.format}",
                                 fontSize = 12.sp,
                                 color = Color(0xFF6B7280)
                             )
@@ -470,7 +478,7 @@ fun MyFilesScreen(
                     } else if (aiInsightsResult != null) {
                         val insights = aiInsightsResult!!
 
-                        // 1. Executive Summary Box
+                        // 1. OVERVIEW SECTION
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -488,7 +496,7 @@ fun MyFilesScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "AI Executive Summary",
+                                    text = "1. Executive Overview",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     color = Color(0xFF166534)
@@ -496,15 +504,63 @@ fun MyFilesScreen(
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = insights.summary ?: "Summary generated successfully.",
+                                text = insights.effectiveOverview.ifBlank { "Overview generated from document content." },
                                 fontSize = 13.sp,
                                 color = Color(0xFF1E293B),
                                 lineHeight = 19.sp
                             )
                         }
 
-                        // 2. Key Highlights / Bullet points
-                        if (insights.bullet_points.isNotEmpty()) {
+                        // 2. MAIN TOPICS SECTION
+                        if (insights.effectiveTopics.isNotEmpty()) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFFEEF2FF))
+                                    .border(1.dp, Color(0xFFC7D2FE), RoundedCornerShape(12.dp))
+                                    .padding(12.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Folder,
+                                        contentDescription = null,
+                                        tint = Color(0xFF4338CA),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "2. Main Topics & Themes",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = Color(0xFF3730A3)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    insights.effectiveTopics.forEach { topic ->
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(6.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(0xFF4F46E5))
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = topic,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = Color(0xFF312E81)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 3. KEY POINTS SECTION
+                        if (insights.effectiveKeyPoints.isNotEmpty()) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -522,14 +578,14 @@ fun MyFilesScreen(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "Key Takeaways & Points",
+                                        text = "3. Core Key Points",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp,
                                         color = Color(0xFF334155)
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
-                                insights.bullet_points.forEachIndexed { index, point ->
+                                insights.effectiveKeyPoints.forEachIndexed { index, point ->
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -538,7 +594,7 @@ fun MyFilesScreen(
                                     ) {
                                         Box(
                                             modifier = Modifier
-                                                .padding(top = 4.dp)
+                                                .padding(top = 3.dp)
                                                 .size(16.dp)
                                                 .clip(CircleShape)
                                                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
@@ -563,7 +619,140 @@ fun MyFilesScreen(
                             }
                         }
 
-                        // 3. Document Analysis Badges
+                        // 4. IMPORTANT DETAILS SECTION
+                        if (insights.effectiveDetails.isNotEmpty()) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFFFFFBEB))
+                                    .border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(12.dp))
+                                    .padding(12.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Visibility,
+                                        contentDescription = null,
+                                        tint = Color(0xFFD97706),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "4. Critical Facts, Numbers & Details",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = Color(0xFF92400E)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                insights.effectiveDetails.forEach { detail ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 2.dp),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Text(
+                                            text = "▪ ",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFD97706)
+                                        )
+                                        Text(
+                                            text = detail,
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF451A03),
+                                            lineHeight = 17.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // 5. IMPORTANT TERMS & DEFINITIONS SECTION
+                        if (insights.effectiveTerms.isNotEmpty()) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFFFDF4FF))
+                                    .border(1.dp, Color(0xFFF0ABFC), RoundedCornerShape(12.dp))
+                                    .padding(12.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Psychology,
+                                        contentDescription = null,
+                                        tint = Color(0xFFC026D3),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "5. Key Terms & Definitions",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = Color(0xFF86198F)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                insights.effectiveTerms.forEach { termItem ->
+                                    val parts = termItem.split("—", limit = 2)
+                                    Column(modifier = Modifier.padding(vertical = 3.dp)) {
+                                        Text(
+                                            text = parts[0].trim(),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF701A75)
+                                        )
+                                        if (parts.size > 1) {
+                                            Text(
+                                                text = parts[1].trim(),
+                                                fontSize = 11.sp,
+                                                color = Color(0xFF4A044E),
+                                                lineHeight = 15.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 6. CONCLUSION SECTION
+                        if (insights.effectiveConclusion.isNotBlank()) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFFF1F5F9))
+                                    .border(1.dp, Color(0xFFCBD5E1), RoundedCornerShape(12.dp))
+                                    .padding(12.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.CloudDone,
+                                        contentDescription = null,
+                                        tint = Color(0xFF475569),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "6. Conclusion & Takeaway",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = Color(0xFF1E293B)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = insights.effectiveConclusion,
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF334155),
+                                    lineHeight = 17.sp
+                                )
+                            }
+                        }
+
+                        // Technical Metadata Badges
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -577,7 +766,7 @@ fun MyFilesScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("Pages", fontSize = 10.sp, color = Color(0xFF6B7280))
+                                    Text("Pages/Slides", fontSize = 10.sp, color = Color(0xFF6B7280))
                                     Text("${doc.total_pages}", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
@@ -591,7 +780,7 @@ fun MyFilesScreen(
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text("Engine", fontSize = 10.sp, color = Color(0xFF6B7280))
-                                    Text("Neural NLP", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    Text("Universal NLP", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                             Box(
@@ -603,51 +792,8 @@ fun MyFilesScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("IntelliSpace Status", fontSize = 10.sp, color = Color(0xFF6B7280))
-                                    Text("Indexed", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
-                                }
-                            }
-                        }
-
-                        // 4. Raw Extracted Preview (if available)
-                        if (!doc.content_text.isNullOrBlank()) {
-                            var showRawText by remember { mutableStateOf(false) }
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFFF8FAFC))
-                                    .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
-                                    .padding(10.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { showRawText = !showRawText },
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Extracted Text Preview",
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontSize = 12.sp,
-                                        color = Color(0xFF475569)
-                                    )
-                                    Text(
-                                        text = if (showRawText) "Hide" else "Show",
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                if (showRawText) {
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text(
-                                        text = doc.content_text.take(600) + if (doc.content_text.length > 600) "..." else "",
-                                        fontSize = 11.sp,
-                                        color = Color(0xFF64748B),
-                                        lineHeight = 16.sp
-                                    )
+                                    Text("Status", fontSize = 10.sp, color = Color(0xFF6B7280))
+                                    Text("Insight Ready", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
                                 }
                             }
                         }
@@ -658,52 +804,66 @@ fun MyFilesScreen(
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(Color(0xFFFEF2F2))
                                 .border(1.dp, Color(0xFFFECACA), RoundedCornerShape(12.dp))
-                                .padding(12.dp),
+                                .padding(14.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "Unable to Generate Insights",
+                                text = "Insight Generation Failed",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
+                                fontSize = 14.sp,
                                 color = Color(0xFF991B1B)
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = aiInsightsError ?: "Unknown error occurred.",
                                 fontSize = 12.sp,
                                 color = Color(0xFF7F1D1D),
                                 textAlign = TextAlign.Center
                             )
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
                             Button(
-                                onClick = { loadInsightsForDoc(doc) },
+                                onClick = { loadInsightsForDoc(doc, retry = true) },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Text("Retry Analysis", fontSize = 12.sp)
+                                Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Retry Generation", fontSize = 12.sp)
                             }
                         }
                     }
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        val docTitle = doc.title
-                        selectedSummaryDoc = null
-                        aiInsightsResult = null
-                        onNavigateToAiChat(docTitle)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Chat,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Chat with AI", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { loadInsightsForDoc(doc, retry = true) },
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Regenerate", fontSize = 12.sp)
+                    }
+                    Button(
+                        onClick = {
+                            val docTitle = doc.title
+                            selectedSummaryDoc = null
+                            aiInsightsResult = null
+                            onNavigateToAiChat(docTitle)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Chat,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Chat with AI", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             },
             dismissButton = {
@@ -1404,17 +1564,34 @@ fun VaultDocumentCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    val statusText = when {
+                        doc.insight_status.equals("READY", ignoreCase = true) -> "Insight Ready"
+                        doc.insight_status.equals("EXTRACTING", ignoreCase = true) || doc.insight_status.equals("GENERATING", ignoreCase = true) -> "Analyzing..."
+                        doc.insight_status.equals("FAILED", ignoreCase = true) -> "Insight Failed"
+                        doc.has_text -> "Insight Ready"
+                        else -> "Indexed"
+                    }
+                    val statusBg = when (statusText) {
+                        "Insight Failed" -> Color(0xFFFEE2E2)
+                        "Analyzing..." -> Color(0xFFE0E7FF)
+                        else -> Color(0xFFDEF7EC)
+                    }
+                    val statusColor = when (statusText) {
+                        "Insight Failed" -> Color(0xFF991B1B)
+                        "Analyzing..." -> Color(0xFF3730A3)
+                        else -> Color(0xFF03543F)
+                    }
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFFDEF7EC))
+                            .background(statusBg)
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = if (doc.has_text) "AI Ready" else "Indexed",
+                            text = statusText,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF03543F)
+                            color = statusColor
                         )
                     }
 
@@ -1489,10 +1666,11 @@ fun VaultDocumentCard(
                     }
 
                     // AI Insights Button
+                    val isFailed = doc.insight_status.equals("FAILED", ignoreCase = true)
                     Button(
                         onClick = onViewSummaryClick,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
+                            containerColor = if (isFailed) Color(0xFFDC2626) else MaterialTheme.colorScheme.primary,
                             contentColor = Color.White
                         ),
                         shape = RoundedCornerShape(8.dp),
@@ -1501,14 +1679,14 @@ fun VaultDocumentCard(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.AutoAwesome,
+                                imageVector = if (isFailed) Icons.Default.Refresh else Icons.Default.AutoAwesome,
                                 contentDescription = null,
                                 tint = Color.White,
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "AI Insights",
+                                text = if (isFailed) "Retry" else "AI Insights",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color.White
