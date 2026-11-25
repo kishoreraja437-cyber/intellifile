@@ -51,7 +51,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val aiRepository = AiRepository(application)
 
     private val defaultGreeting = ChatMessage.Ai(
-        text = "I am IntelliFile AI and I help to find the files",
+        text = "I am Intelli AI and I help to find the files",
         files = emptyList()
     )
 
@@ -320,6 +320,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    /**
+     * Updates an existing user message at index and re-executes search for that query
+     * without generating duplicate messages or duplicate chat sessions.
+     */
+    fun saveAndAsk(index: Int, newText: String) {
+        val trimmed = newText.trim()
+        if (trimmed.isBlank() || _uiState.value.isThinking) return
+        val current = _uiState.value.messages.toMutableList()
+        if (index in current.indices) {
+            val trimmedList = current.take(index).toMutableList()
+            _uiState.update { it.copy(messages = trimmedList) }
+        }
+        sendMessage(trimmed)
     }
 
     /**

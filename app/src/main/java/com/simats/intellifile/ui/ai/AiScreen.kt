@@ -29,6 +29,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.Path
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -150,7 +156,7 @@ fun AiScreen(
 
     val defaultGreeting = remember {
         ChatMessage.Ai(
-            text = "I am IntelliFile AI and I help to find the files",
+            text = "I am Intelli AI and I help to find the files",
             files = emptyList()
         )
     }
@@ -193,7 +199,15 @@ fun AiScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFF2FBF9),
+                        Color(0xFFEAF6F3),
+                        Color(0xFFF5FCFA)
+                    )
+                )
+            )
     ) {
         Column(
             modifier = Modifier
@@ -201,7 +215,7 @@ fun AiScreen(
                 .imePadding()
                 .then(if (!isKeyboardOpen) Modifier.navigationBarsPadding() else Modifier)
         ) {
-            val hasActiveConversation = uiState.currentConversationId != null || displayMessages.any { it is ChatMessage.User }
+            val hasActiveConversation = uiState.currentConversationId != null || uiState.messages.any { it is ChatMessage.User }
 
             // Header with Back Button and Robot Avatar
             AiHeader(
@@ -213,84 +227,148 @@ fun AiScreen(
                 onMicClick = onMicClick
             )
 
-            // Chat Messages List
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-            ) {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+            if (!hasActiveConversation) {
+                // Empty state matching reference image Left Screen
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    if (uiState.isLoadingConversation) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 40.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(36.dp)
-                                )
-                            }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        AiFluidOrbAvatar(
+                            size = 110.dp,
+                            iconSize = 54.dp
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Text(
+                            text = "IntelliFile AI",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0F3E46),
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Text(
+                            text = "I am Intelli AI and I help to find the files",
+                            fontSize = 13.5.sp,
+                            color = Color(0xFF5A7A80),
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(26.dp))
+
+                        ViewSearchHistoryButton(
+                            onClick = onViewSearchHistoryClick,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        // Greeting Pill with Aqua Border (No Copy / Edit buttons below)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(22.dp))
+                                .background(Color.White)
+                                .border(1.5.dp, Color(0xFF80CBC4), RoundedCornerShape(22.dp))
+                                .padding(horizontal = 20.dp, vertical = 14.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Text(
+                                text = "I am Intelli AI and I help to find the files",
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF0F3E46)
+                            )
                         }
-                    } else {
-                        itemsIndexed(displayMessages) { index, message ->
-                            when (message) {
-                                is ChatMessage.User -> {
-                                    UserMessageBubble(
-                                        text = message.text,
-                                        onCopy = {
-                                            clipboardManager.setText(AnnotatedString(message.text))
-                                            Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
-                                        },
-                                        onEdit = {
-                                            editingMessageIndex = index
-                                            editingMessageText = message.text
-                                            isEditingUserMessage = true
-                                        }
+                    }
+                }
+            } else {
+                // Active chat messages list matching reference image Right Screen
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        if (uiState.isLoadingConversation) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 40.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = Color(0xFF009688),
+                                        modifier = Modifier.size(36.dp)
                                     )
                                 }
-                                is ChatMessage.Ai -> {
-                                    AiMessageBubble(
-                                        text = message.text,
-                                        files = message.files,
-                                        isLoading = message.isLoading,
-                                        onOpenFile = onOpenFile,
-                                        onSelectPriorityClick = { file, prio ->
-                                            chatViewModel.assignPriorityToFile(file, prio)
-                                        },
-                                        onCopy = {
-                                            clipboardManager.setText(AnnotatedString(message.text))
-                                            Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
-                                        },
-                                        onEdit = {
-                                            editingMessageIndex = index
-                                            editingMessageText = message.text
-                                            isEditingUserMessage = false
-                                        }
-                                    )
+                            }
+                        } else {
+                            itemsIndexed(displayMessages) { index, message ->
+                                when (message) {
+                                    is ChatMessage.User -> {
+                                        UserMessageBubble(
+                                            text = message.text,
+                                            onCopy = {
+                                                clipboardManager.setText(AnnotatedString(message.text))
+                                                Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                                            },
+                                            onEdit = {
+                                                editingMessageIndex = index
+                                                editingMessageText = message.text
+                                                isEditingUserMessage = true
+                                            }
+                                        )
+                                    }
+                                    is ChatMessage.Ai -> {
+                                        AiMessageBubble(
+                                            text = message.text,
+                                            files = message.files,
+                                            isLoading = message.isLoading,
+                                            onOpenFile = onOpenFile,
+                                            onSelectPriorityClick = { file, prio ->
+                                                chatViewModel.assignPriorityToFile(file, prio)
+                                            },
+                                            onCopy = {
+                                                clipboardManager.setText(AnnotatedString(message.text))
+                                                Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                DraggableScrollbar(
-                    state = listState,
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .fillMaxHeight()
-                        .padding(top = 8.dp, bottom = 8.dp)
-                )
+                    DraggableScrollbar(
+                        state = listState,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                            .padding(top = 8.dp, bottom = 8.dp)
+                    )
+                }
             }
 
-        // Animated Edit Message Dialog with Living AI Aura & Spring Physics
+        // Edit Message Popup
         if (editingMessageIndex != null) {
             val targetIdx = editingMessageIndex!!
             AnimatedEditMessageDialog(
@@ -300,10 +378,10 @@ fun AiScreen(
                 onDismiss = { editingMessageIndex = null },
                 onSave = { newText ->
                     if (newText.isNotBlank()) {
-                        chatViewModel.updateMessageAt(targetIdx, newText)
+                        chatViewModel.updateMessageAt(targetIdx, newText.trim())
                         Toast.makeText(
                             context,
-                            if (isEditingUserMessage) "Message updated" else "AI response updated",
+                            "Message updated",
                             Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -312,9 +390,8 @@ fun AiScreen(
                 onSaveAndAskAi = if (isEditingUserMessage) {
                     { newText ->
                         if (newText.isNotBlank()) {
-                            chatViewModel.updateMessageAt(targetIdx, newText)
                             editingMessageIndex = null
-                            chatViewModel.sendMessage(newText)
+                            chatViewModel.saveAndAsk(targetIdx, newText.trim())
                         }
                     }
                 } else null,
@@ -347,27 +424,18 @@ fun AiScreen(
 @Composable
 fun AiFluidOrbAvatar(
     modifier: Modifier = Modifier,
-    size: Dp = 90.dp,
+    size: Dp = 96.dp,
     iconSize: Dp = 48.dp
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "aiOrbPulse")
     val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 0.94f,
-        targetValue = 1.08f,
+        initialValue = 0.97f,
+        targetValue = 1.03f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1400, easing = FastOutSlowInEasing),
+            animation = tween(1600, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulseScale"
-    )
-
-    val rotationAngle by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(6000, easing = LinearEasing)
-        ),
-        label = "rotationAngle"
     )
 
     Box(
@@ -377,41 +445,84 @@ fun AiFluidOrbAvatar(
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer(scaleX = pulseScale, scaleY = pulseScale, rotationZ = rotationAngle)
+                .graphicsLayer(scaleX = pulseScale, scaleY = pulseScale)
         ) {
+            val center = Offset(size.toPx() / 2f, size.toPx() / 2f)
+            val radius = size.toPx() * 0.44f
+
+            // 1. Soft radial background glow
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        Color(0xFF26E07F).copy(alpha = 0.85f),
-                        Color(0xFF00C2A8).copy(alpha = 0.65f),
-                        Color(0xFF55A9AF).copy(alpha = 0.35f),
+                        Color(0xFF2DD4BF).copy(alpha = 0.35f),
+                        Color(0xFF00BFA5).copy(alpha = 0.18f),
                         Color.Transparent
-                    )
+                    ),
+                    center = center,
+                    radius = size.toPx() * 0.5f
                 )
             )
+
+            // 2. Central Solid Teal Orb Disc
+            drawCircle(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color(0xFF2DD4BF),
+                        Color(0xFF00BFA5),
+                        Color(0xFF00897B)
+                    ),
+                    start = Offset(center.x - radius, center.y - radius),
+                    end = Offset(center.x + radius, center.y + radius)
+                ),
+                radius = radius,
+                center = center
+            )
+
+            // 3. Subtle inner lighting sheen
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.28f),
+                        Color.Transparent
+                    ),
+                    center = Offset(center.x - radius * 0.35f, center.y - radius * 0.35f),
+                    radius = radius * 0.7f
+                ),
+                radius = radius * 0.7f,
+                center = Offset(center.x - radius * 0.35f, center.y - radius * 0.35f)
+            )
+
+            // 4. Crisp 4-pointed white sparkle stars inside
+            // Large Star at center-left
+            drawSparkleStar(
+                center = Offset(center.x - radius * 0.15f, center.y),
+                outerRadius = radius * 0.48f,
+                color = Color.White
+            )
+            // Smaller Star at upper-right
+            drawSparkleStar(
+                center = Offset(center.x + radius * 0.42f, center.y - radius * 0.36f),
+                outerRadius = radius * 0.24f,
+                color = Color.White
+            )
         }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize(0.78f)
-                .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color(0xFF00C2A8),
-                            Color(0xFF55A9AF)
-                        )
-                    )
-                )
-        )
-
-        Icon(
-            imageVector = Icons.Default.AutoAwesome,
-            contentDescription = "AI Sparkle Logo",
-            tint = Color.White,
-            modifier = Modifier.size(iconSize)
-        )
     }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSparkleStar(
+    center: Offset,
+    outerRadius: Float,
+    color: Color
+) {
+    val path = Path().apply {
+        moveTo(center.x, center.y - outerRadius)
+        quadraticBezierTo(center.x, center.y, center.x + outerRadius, center.y)
+        quadraticBezierTo(center.x, center.y, center.x, center.y + outerRadius)
+        quadraticBezierTo(center.x, center.y, center.x - outerRadius, center.y)
+        quadraticBezierTo(center.x, center.y, center.x, center.y - outerRadius)
+        close()
+    }
+    drawPath(path = path, color = color)
 }
 
 @Composable
@@ -420,134 +531,89 @@ fun AiHeader(
     onViewSearchHistoryClick: () -> Unit,
     modifier: Modifier = Modifier,
     hasActiveConversation: Boolean = false,
-    conversationTitle: String = "IntelliFile AI",
+    conversationTitle: String = "Inteli AI",
     onNewChatClick: () -> Unit = {},
     onMicClick: () -> Unit = {}
 ) {
-    Column(
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 12.dp, bottom = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
+        // Left side: Back Button & (if active) Avatar + Title + Subtitle
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.weight(1f, fill = false)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f, fill = false)
-            ) {
-                IconButton(onClick = onBackClick) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-
-                if (hasActiveConversation) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    AiFluidOrbAvatar(size = 36.dp, iconSize = 20.dp)
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f, fill = false)) {
-                        Text(
-                            text = conversationTitle.ifBlank { "IntelliFile AI" },
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "I help to find the files",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                        )
-                    }
-                }
+            IconButton(onClick = onBackClick) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color(0xFF0F3E46)
+                )
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onMicClick) {
-                    Icon(
-                        imageVector = Icons.Default.Mic,
-                        contentDescription = "Voice Assistant",
-                        tint = MaterialTheme.colorScheme.primary
+            if (hasActiveConversation) {
+                Spacer(modifier = Modifier.width(4.dp))
+                AiFluidOrbAvatar(size = 38.dp, iconSize = 18.dp)
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f, fill = false)) {
+                    Text(
+                        text = conversationTitle.ifBlank { "Inteli AI" },
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F3E46),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                }
-
-                if (hasActiveConversation) {
-                    IconButton(onClick = onViewSearchHistoryClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.Chat,
-                            contentDescription = "Chat History",
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Row(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .clickable { onNewChatClick() }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "New Chat",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "New Chat",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    Text(
+                        text = "I help to find the files",
+                        fontSize = 11.sp,
+                        color = Color(0xFF5A7A80)
+                    )
                 }
             }
         }
 
-        if (!hasActiveConversation) {
-            Spacer(modifier = Modifier.height(4.dp))
+        // Right side:
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onMicClick) {
+                Icon(
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = "Voice Assistant",
+                    tint = Color(0xFF009688)
+                )
+            }
 
-            AiFluidOrbAvatar(
-                size = 90.dp,
-                iconSize = 48.dp
-            )
+            if (hasActiveConversation) {
+                IconButton(onClick = onViewSearchHistoryClick) {
+                    Icon(
+                        imageVector = Icons.Default.History,
+                        contentDescription = "Search History",
+                        tint = Color(0xFF0F3E46)
+                    )
+                }
 
-            Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
 
-            Text(
-                text = "IntelliFile AI",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = "I am IntelliFile AI and I help to find the files",
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            ViewSearchHistoryButton(
-                onClick = onViewSearchHistoryClick,
-                modifier = Modifier.padding(horizontal = 20.dp)
-            )
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFFE0F4F2))
+                        .clickable { onNewChatClick() }
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "+ New Chat",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF009688)
+                    )
+                }
+            }
         }
     }
 }
@@ -560,10 +626,10 @@ fun ViewSearchHistoryButton(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color(0xFFE0F4F2))
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 18.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -571,10 +637,10 @@ fun ViewSearchHistoryButton(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = Icons.Outlined.AutoAwesome,
+                imageVector = Icons.Default.AutoAwesome,
                 contentDescription = "AI Sparkle",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
+                tint = Color(0xFF009688),
+                modifier = Modifier.size(22.dp)
             )
 
             Spacer(modifier = Modifier.width(12.dp))
@@ -583,15 +649,15 @@ fun ViewSearchHistoryButton(
                 text = "View AI Search History",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                color = Color(0xFF0F3E46)
             )
         }
 
         Icon(
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = "View History",
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(20.dp)
+            tint = Color(0xFF009688),
+            modifier = Modifier.size(22.dp)
         )
     }
 }
@@ -603,39 +669,21 @@ fun UserMessageBubble(
     onEdit: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val enterAnim = remember { Animatable(0.92f) }
-    val alphaAnim = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        enterAnim.animateTo(1.0f, tween(250, easing = FastOutSlowInEasing))
-    }
-    LaunchedEffect(Unit) {
-        alphaAnim.animateTo(1.0f, tween(200, easing = FastOutSlowInEasing))
-    }
-
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .graphicsLayer(scaleX = enterAnim.value, scaleY = enterAnim.value, alpha = alphaAnim.value),
+        modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.End
     ) {
         Box(
             modifier = Modifier
-                .clip(
-                    RoundedCornerShape(
-                        topStart = 20.dp,
-                        topEnd = 20.dp,
-                        bottomStart = 20.dp,
-                        bottomEnd = 4.dp
-                    )
-                )
-                .background(MaterialTheme.colorScheme.primary)
-                .padding(horizontal = 18.dp, vertical = 12.dp)
+                .clip(CircleShape)
+                .background(Color(0xFF009688))
+                .padding(horizontal = 24.dp, vertical = 12.dp)
         ) {
             Text(
                 text = text,
                 fontSize = 14.sp,
                 color = Color.White,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.SemiBold
             )
         }
 
@@ -643,18 +691,20 @@ fun UserMessageBubble(
         Row(
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(top = 4.dp, end = 4.dp)
+            modifier = Modifier.padding(top = 4.dp, end = 6.dp)
         ) {
             MessageActionButton(
                 icon = Icons.Outlined.ContentCopy,
                 label = "Copy",
-                onClick = onCopy
+                onClick = onCopy,
+                tintColor = Color(0xFF009688)
             )
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(12.dp))
             MessageActionButton(
                 icon = Icons.Outlined.Edit,
                 label = "Edit",
-                onClick = onEdit
+                onClick = onEdit,
+                tintColor = Color(0xFF009688)
             )
         }
     }
@@ -671,15 +721,6 @@ fun AiMessageBubble(
     onEdit: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val enterAnim = remember { Animatable(0.92f) }
-    val alphaAnim = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        enterAnim.animateTo(1.0f, tween(280, easing = FastOutSlowInEasing))
-    }
-    LaunchedEffect(Unit) {
-        alphaAnim.animateTo(1.0f, tween(220, easing = FastOutSlowInEasing))
-    }
-
     val infiniteTransition = rememberInfiniteTransition(label = "aiThinkingPulse")
     val thinkingAlpha by infiniteTransition.animateFloat(
         initialValue = 0.45f,
@@ -693,53 +734,17 @@ fun AiMessageBubble(
 
     Column(
         modifier = modifier
-            .fillMaxWidth()
-            .graphicsLayer(scaleX = enterAnim.value, scaleY = enterAnim.value, alpha = alphaAnim.value),
+            .fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
         horizontalAlignment = Alignment.Start
     ) {
-        // Dusky Aqua AI Response Bubble
+        // Light mint AI response card matching reference image
         Box(
             modifier = Modifier
-                .shadow(
-                    elevation = 3.dp,
-                    shape = RoundedCornerShape(
-                        topStart = 20.dp,
-                        topEnd = 20.dp,
-                        bottomStart = 4.dp,
-                        bottomEnd = 20.dp
-                    ),
-                    ambientColor = Color(0xFF207583).copy(alpha = 0.15f),
-                    spotColor = Color(0xFF207583).copy(alpha = 0.22f),
-                    clip = false
-                )
-                .clip(
-                    RoundedCornerShape(
-                        topStart = 20.dp,
-                        topEnd = 20.dp,
-                        bottomStart = 4.dp,
-                        bottomEnd = 20.dp
-                    )
-                )
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFE6F5F5), // Soft Dusky Aqua Light
-                            Color(0xFFD6EFEF)  // Dusky Aqua Surface
-                        )
-                    )
-                )
-                .border(
-                    width = 1.2.dp,
-                    color = Color(0xFFA4D8DD).copy(alpha = 0.85f),
-                    shape = RoundedCornerShape(
-                        topStart = 20.dp,
-                        topEnd = 20.dp,
-                        bottomStart = 4.dp,
-                        bottomEnd = 20.dp
-                    )
-                )
-                .padding(horizontal = 18.dp, vertical = 12.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFFE6F7F5))
+                .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
             if (isLoading) {
                 Row(
@@ -747,25 +752,38 @@ fun AiMessageBubble(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(18.dp),
                         strokeWidth = 2.dp,
-                        color = Color(0xFF207583)
+                        color = Color(0xFF009688)
                     )
                     Text(
                         text = text,
                         fontSize = 13.sp,
                         fontStyle = FontStyle.Italic,
-                        color = Color(0xFF207583).copy(alpha = thinkingAlpha)
+                        color = Color(0xFF0F3E46).copy(alpha = thinkingAlpha)
                     )
                 }
             } else {
-                Text(
-                    text = text,
-                    fontSize = 14.sp,
-                    color = Color(0xFF0F3E46), // Deep Dusky Aqua for sharp, beautiful legibility
-                    fontWeight = FontWeight.Medium,
-                    lineHeight = 20.sp
-                )
+                Row(
+                    verticalAlignment = Alignment.Top,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color(0xFF00BFA5),
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = text,
+                        fontSize = 14.sp,
+                        color = Color(0xFF0F3E46),
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = 20.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         }
 
@@ -782,7 +800,7 @@ fun AiMessageBubble(
             }
         }
 
-        // Action Options: Copy & Edit (only when response is ready)
+        // Action Options: Copy only (Do not show the user Edit option below AI-generated responses)
         if (!isLoading) {
             Row(
                 horizontalArrangement = Arrangement.Start,
@@ -793,14 +811,7 @@ fun AiMessageBubble(
                     icon = Icons.Outlined.ContentCopy,
                     label = "Copy",
                     onClick = onCopy,
-                    tintColor = Color(0xFF207583) // Dusky Aqua
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                MessageActionButton(
-                    icon = Icons.Outlined.Edit,
-                    label = "Edit",
-                    onClick = onEdit,
-                    tintColor = Color(0xFF207583) // Dusky Aqua
+                    tintColor = Color(0xFF009688)
                 )
             }
         }
@@ -815,24 +826,24 @@ fun MessageActionButton(
     modifier: Modifier = Modifier,
     tintColor: Color? = null
 ) {
-    val activeColor = tintColor ?: MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f)
+    val activeColor = tintColor ?: Color(0xFF009688)
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = 6.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = activeColor.copy(alpha = 0.75f),
-            modifier = Modifier.size(13.dp)
+            tint = activeColor,
+            modifier = Modifier.size(14.dp)
         )
         Spacer(modifier = Modifier.width(4.dp))
         Text(
             text = label,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
             color = activeColor
         )
@@ -1137,7 +1148,7 @@ fun AiScreenPreview() {
 @Composable
 fun AnimatedEditMessageDialog(
     isOpen: Boolean,
-    isUserMessage: Boolean,
+    isUserMessage: Boolean = true,
     initialText: String,
     onDismiss: () -> Unit,
     onSave: (String) -> Unit,
@@ -1148,212 +1159,56 @@ fun AnimatedEditMessageDialog(
 
     var currentText by remember(initialText) { mutableStateOf(initialText) }
 
-    // Spring Entrance Animation
-    val scaleAnim = remember { Animatable(0.72f) }
-    val alphaAnim = remember { Animatable(0f) }
-    val offsetYAnim = remember { Animatable(36f) }
-
-    LaunchedEffect(Unit) {
-        launch {
-            scaleAnim.animateTo(
-                targetValue = 1f,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessLow
-                )
-            )
-        }
-        launch {
-            alphaAnim.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
-            )
-        }
-        launch {
-            offsetYAnim.animateTo(
-                targetValue = 0f,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessMediumLow
-                )
-            )
-        }
-    }
-
-    // Ambient AI Living Glow & Shimmer Transitions
-    val infiniteTransition = rememberInfiniteTransition(label = "aiDialogPulse")
-
-    val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.30f,
-        targetValue = 0.65f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "glowAlpha"
-    )
-
-    val borderOffset by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1200f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(4500, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "borderOffset"
-    )
-
-    val shimmerProgress by infiniteTransition.animateFloat(
-        initialValue = -0.4f,
-        targetValue = 1.4f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "shimmerProgress"
-    )
-
-    val sparkleRotation by infiniteTransition.animateFloat(
-        initialValue = -14f,
-        targetValue = 14f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "sparkleRotation"
-    )
-
-    val sparkleScale by infiniteTransition.animateFloat(
-        initialValue = 0.92f,
-        targetValue = 1.10f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1300, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "sparkleScale"
-    )
-
-    // Dusky Aqua Dynamic Living Holographic Border
-    val livingBorderBrush = Brush.linearGradient(
-        colors = if (!isUserMessage) {
-            listOf(
-                Color(0xFF134E57), // Deep Dusky Aqua
-                Color(0xFF207583), // Primary Dusky Aqua
-                Color(0xFF3293A0), // Medium Dusky Aqua
-                Color(0xFF5AB3BE), // Light Dusky Aqua
-                Color(0xFF7DD3DC), // Aqua Highlight
-                Color(0xFF207583), // Primary Dusky Aqua
-                Color(0xFF134E57)  // Loop
-            )
-        } else {
-            listOf(
-                Color(0xFF6366F1),
-                Color(0xFF8B5CF6),
-                Color(0xFFEC4899),
-                Color(0xFF06B6D4),
-                Color(0xFF3B82F6),
-                Color(0xFF6366F1)
-            )
-        },
-        start = Offset(borderOffset, 0f),
-        end = Offset(borderOffset + 450f, 650f)
-    )
-
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
             dismissOnBackPress = true,
             dismissOnClickOutside = true
         )
     ) {
-        // Scrim with smooth fade
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.58f * alphaAnim.value))
+                .background(Color.Black.copy(alpha = 0.52f))
+                .imePadding()
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = onDismiss
                 )
-                .padding(horizontal = 20.dp, vertical = 28.dp),
+                .padding(horizontal = 22.dp, vertical = 24.dp),
             contentAlignment = Alignment.Center
         ) {
-            // Main Animated Dialog Card
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .graphicsLayer {
-                        scaleX = scaleAnim.value
-                        scaleY = scaleAnim.value
-                        alpha = alphaAnim.value
-                        translationY = offsetYAnim.value
-                    }
                     .shadow(
-                        elevation = 22.dp,
+                        elevation = 14.dp,
                         shape = RoundedCornerShape(26.dp),
-                        ambientColor = if (!isUserMessage) Color(0xFF207583).copy(alpha = glowAlpha) else Color(0xFF8B5CF6).copy(alpha = glowAlpha),
-                        spotColor = if (!isUserMessage) Color(0xFF134E57).copy(alpha = glowAlpha) else Color(0xFF6366F1).copy(alpha = glowAlpha),
-                        clip = false
+                        ambientColor = Color.Black.copy(alpha = 0.08f),
+                        spotColor = Color.Black.copy(alpha = 0.12f)
                     )
                     .clip(RoundedCornerShape(26.dp))
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFFFFFFFF),
-                                Color(0xFFFBFBFE),
-                                Color(0xFFF8FAFC)
-                            )
-                        )
-                    )
-                    .border(
-                        width = 2.dp,
-                        brush = livingBorderBrush,
-                        shape = RoundedCornerShape(26.dp)
-                    )
+                    .background(Color.White)
+                    .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(26.dp))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                        onClick = {} // Consume click
+                        onClick = {} // Consume touch events
                     )
             ) {
-                // Specular Light Sheen Overlay
-                Canvas(modifier = Modifier.matchParentSize()) {
-                    val sweepX = size.width * shimmerProgress
-                    val sweepBrush = Brush.linearGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.White.copy(alpha = 0.40f),
-                            Color.Transparent
-                        ),
-                        start = Offset(sweepX - 80.dp.toPx(), 0f),
-                        end = Offset(sweepX + 80.dp.toPx(), size.height * 0.7f)
-                    )
-                    drawRect(brush = sweepBrush)
-
-                    // Subtle radial specular gleam in top-left
-                    val cornerGleam = Brush.radialGradient(
-                        colors = listOf(
-                            (if (!isUserMessage) Color(0xFFA4D8DD) else Color(0xFFC7D2FE)).copy(alpha = 0.40f),
-                            Color.Transparent
-                        ),
-                        center = Offset(30.dp.toPx(), 30.dp.toPx()),
-                        radius = 130.dp.toPx()
-                    )
-                    drawRect(brush = cornerGleam)
-                }
-
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(22.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Header: Animated AI Sparkle Orb, Title, and Close Button
+                    // Header: Circular AI Sparkle Badge, Title, User Query Badge, Subtitle & Close Button
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
+                        verticalAlignment = Alignment.Top,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(
@@ -1361,56 +1216,35 @@ fun AnimatedEditMessageDialog(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            // Pulsating AI 3D Orb Icon with Dusky Aqua
+                            // Circular Teal Orb Badge with White Sparkles
                             Box(
                                 modifier = Modifier
-                                    .size(44.dp)
-                                    .shadow(
-                                        elevation = 8.dp,
-                                        shape = CircleShape,
-                                        ambientColor = if (!isUserMessage) Color(0xFF207583).copy(alpha = 0.45f) else Color(0xFF7C3AED).copy(alpha = 0.45f),
-                                        spotColor = if (!isUserMessage) Color(0xFF134E57).copy(alpha = 0.55f) else Color(0xFF4F46E5).copy(alpha = 0.55f)
-                                    )
+                                    .size(46.dp)
                                     .clip(CircleShape)
                                     .background(
-                                        brush = Brush.radialGradient(
-                                            colors = if (!isUserMessage) {
-                                                listOf(
-                                                    Color(0xFF459CA9), // Dusky Aqua light
-                                                    Color(0xFF207583), // Dusky Aqua primary
-                                                    Color(0xFF134E57)  // Dusky Aqua deep
-                                                )
-                                            } else {
-                                                listOf(
-                                                    Color(0xFF8B5CF6),
-                                                    Color(0xFF6366F1),
-                                                    Color(0xFF4F46E5)
-                                                )
-                                            }
+                                        Brush.linearGradient(
+                                            colors = listOf(
+                                                Color(0xFF00BFA5),
+                                                Color(0xFF009688),
+                                                Color(0xFF00897B)
+                                            )
                                         )
-                                    )
-                                    .border(1.5.dp, Color.White.copy(alpha = 0.75f), CircleShape),
+                                    ),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.AutoAwesome,
                                     contentDescription = "AI Sparkle",
                                     tint = Color.White,
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .graphicsLayer {
-                                            rotationZ = sparkleRotation
-                                            scaleX = sparkleScale
-                                            scaleY = sparkleScale
-                                        }
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
 
                             Column {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = if (isUserMessage) "Edit Prompt" else "Edit AI Response",
-                                        fontSize = 17.sp,
+                                        text = "Edit Message",
+                                        fontSize = 18.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color(0xFF0F172A)
                                     )
@@ -1418,21 +1252,21 @@ fun AnimatedEditMessageDialog(
                                     Box(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(6.dp))
-                                            .background(if (!isUserMessage) Color(0xFFE0F4F4) else Color(0xFFEEF2FF))
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            .background(Color(0xFFCCFBF1))
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
                                     ) {
                                         Text(
-                                            text = if (isUserMessage) "User Query" else "AI Smart Edit",
-                                            fontSize = 10.sp,
+                                            text = "User Query",
+                                            fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (!isUserMessage) Color(0xFF134E57) else Color(0xFF4F46E5)
+                                            color = Color(0xFF0D9488)
                                         )
                                     }
                                 }
-                                Spacer(modifier = Modifier.height(2.dp))
+                                Spacer(modifier = Modifier.height(3.dp))
                                 Text(
-                                    text = if (isUserMessage) "Refine your prompt to update search results" else "Personalize or fix this AI response in chat",
-                                    fontSize = 12.sp,
+                                    text = "Refine your message to update the search results.",
+                                    fontSize = 12.5.sp,
                                     color = Color(0xFF64748B),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -1440,7 +1274,7 @@ fun AnimatedEditMessageDialog(
                             }
                         }
 
-                        // Close Button with smooth hover effect
+                        // Close Button
                         IconButton(
                             onClick = onDismiss,
                             modifier = Modifier
@@ -1451,237 +1285,193 @@ fun AnimatedEditMessageDialog(
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = "Close",
-                                tint = Color(0xFF64748B),
+                                tint = Color(0xFF475569),
                                 modifier = Modifier.size(16.dp)
                             )
                         }
                     }
 
-                    // Text Editor Box with Dusky Aqua Styling
-                    Column(
+                    // Compact Message Editing Text Field
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(if (!isUserMessage) Color(0xFFF0F9F9) else Color(0xFFF8FAFC))
-                            .border(
-                                width = 1.2.dp,
-                                color = if (!isUserMessage) Color(0xFFA4D8DD) else Color(0xFFCBD5E1),
-                                shape = RoundedCornerShape(16.dp)
-                            )
-                            .padding(14.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color.White)
+                            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(14.dp))
+                            .padding(horizontal = 16.dp, vertical = 13.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        OutlinedTextField(
+                        BasicTextField(
                             value = currentText,
                             onValueChange = { currentText = it },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 110.dp, max = 220.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            placeholder = {
-                                Text(
-                                    text = if (isUserMessage) "Type your prompt here..." else "Type or refine AI response text...",
-                                    color = Color(0xFF94A3B8),
-                                    fontSize = 14.sp
-                                )
-                            },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = if (!isUserMessage) Color(0xFF207583) else Color(0xFF6366F1),
-                                unfocusedBorderColor = if (!isUserMessage) Color(0xFFBFE3E6) else Color(0xFFE2E8F0),
-                                focusedContainerColor = Color.White,
-                                unfocusedContainerColor = Color.White,
-                                cursorColor = if (!isUserMessage) Color(0xFF207583) else Color(0xFF6366F1)
-                            )
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF0F172A)
+                            ),
+                            cursorBrush = SolidColor(Color(0xFF009688)),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = "Edit",
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    // Dynamic Character & Word Count + Clear Option
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val charCount = currentText.length
+                        val wordCount = remember(currentText) {
+                            currentText.trim().split(Regex("\\s+")).count { it.isNotBlank() }
+                        }
+                        val charLabel = "$charCount ${if (charCount == 1) "character" else "characters"}"
+                        val wordLabel = "$wordCount ${if (wordCount == 1) "word" else "words"}"
+                        Text(
+                            text = "$charLabel • $wordLabel",
+                            fontSize = 12.sp,
+                            color = Color(0xFF64748B)
                         )
 
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Character & Word Counter Row
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { currentText = "" }
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            val wordCount = remember(currentText) {
-                                currentText.trim().split(Regex("\\s+")).count { it.isNotBlank() }
-                            }
-                            Text(
-                                text = "${currentText.length} characters · $wordCount words",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFF64748B)
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Clear",
+                                tint = Color(0xFF475569),
+                                modifier = Modifier.size(12.dp)
                             )
-
-                            if (currentText.isNotEmpty()) {
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .clickable { currentText = "" }
-                                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Clear,
-                                        contentDescription = "Clear",
-                                        tint = Color(0xFF94A3B8),
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text(
-                                        text = "Clear",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Color(0xFF94A3B8)
-                                    )
-                                }
-                            }
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "Clear",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF475569)
+                            )
                         }
                     }
 
-                    // Auxiliary Action: Copy to Input Bar
+                    // Copy Text to Input Bar Button
                     if (onCopyToInputBar != null) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(if (!isUserMessage) Color(0xFFE0F4F4) else Color(0xFFEEF2FF))
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFFE0F4F2))
                                 .clickable { onCopyToInputBar(currentText) }
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .padding(vertical = 12.dp, horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.ContentCopy,
                                 contentDescription = null,
-                                tint = if (!isUserMessage) Color(0xFF207583) else Color(0xFF4F46E5),
-                                modifier = Modifier.size(14.dp)
+                                tint = Color(0xFF00695C),
+                                modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = "Copy text to input bar",
-                                fontSize = 12.sp,
+                                fontSize = 13.5.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = if (!isUserMessage) Color(0xFF134E57) else Color(0xFF4F46E5)
+                                color = Color(0xFF004D40)
                             )
                         }
                     }
 
-                    // Action Buttons Row (Cancel, Save & Ask AI, Save)
+                    // Bottom Action Buttons Row (Cancel, Save & Ask, Save)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Cancel Button
-                        DialogBouncyButton(
-                            text = "Cancel",
+                        Button(
                             onClick = onDismiss,
-                            modifier = Modifier.weight(0.85f),
-                            isPrimary = false
-                        )
-
-                        // Save & Ask AI (User prompt)
-                        if (isUserMessage && onSaveAndAskAi != null) {
-                            DialogBouncyButton(
-                                text = "Save & Ask",
-                                icon = Icons.Default.AutoAwesome,
-                                onClick = { onSaveAndAskAi(currentText) },
-                                modifier = Modifier.weight(1.15f),
-                                isPrimary = true,
-                                gradientColors = listOf(Color(0xFF2563EB), Color(0xFF4F46E5))
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp)
+                        ) {
+                            Text(
+                                text = "Cancel",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF334155)
                             )
                         }
 
-                        // Save Button
-                        DialogBouncyButton(
-                            text = "Save",
-                            icon = Icons.Default.Check,
-                            onClick = { onSave(currentText) },
-                            modifier = Modifier.weight(1f),
-                            isPrimary = true,
-                            gradientColors = if (!isUserMessage) {
-                                listOf(Color(0xFF207583), Color(0xFF134E57)) // Dusky Aqua Primary
-                            } else {
-                                listOf(Color(0xFF6366F1), Color(0xFF8B5CF6))
+                        // Save & Ask Button
+                        if (onSaveAndAskAi != null) {
+                            Button(
+                                onClick = { onSaveAndAskAi(currentText) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF009688)),
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp),
+                                modifier = Modifier
+                                    .weight(1.3f)
+                                    .height(46.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Save & Ask",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
                             }
-                        )
+                        }
+
+                        // Save Button
+                        Button(
+                            onClick = { onSave(currentText) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC7F1EB)),
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(46.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = Color(0xFF00695C),
+                                modifier = Modifier.size(17.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Save",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF00695C)
+                            )
+                        }
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun DialogBouncyButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
-    isPrimary: Boolean = false,
-    gradientColors: List<Color> = listOf(Color(0xFF6366F1), Color(0xFF8B5CF6))
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.93f else 1.0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "btnScale"
-    )
-
-    Box(
-        modifier = modifier
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .clip(RoundedCornerShape(12.dp))
-            .then(
-                if (isPrimary) {
-                    Modifier
-                        .shadow(
-                            elevation = 6.dp,
-                            shape = RoundedCornerShape(12.dp),
-                            ambientColor = gradientColors.first().copy(alpha = 0.4f),
-                            spotColor = gradientColors.last().copy(alpha = 0.5f)
-                        )
-                        .background(brush = Brush.horizontalGradient(gradientColors))
-                } else {
-                    Modifier
-                        .background(Color(0xFFF1F5F9))
-                        .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
-                }
-            )
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            )
-            .padding(vertical = 12.dp, horizontal = 12.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = if (isPrimary) Color.White else Color(0xFF475569),
-                    modifier = Modifier.size(15.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-            }
-            Text(
-                text = text,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (isPrimary) Color.White else Color(0xFF475569),
-                maxLines = 1
-            )
         }
     }
 }
