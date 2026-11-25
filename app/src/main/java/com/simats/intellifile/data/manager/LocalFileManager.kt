@@ -57,6 +57,17 @@ object LocalFileManager {
         }
     }
 
+    @Volatile
+    private var cachedFiles: List<LocalFileItem>? = null
+    @Volatile
+    private var lastScanTimeMs: Long = 0L
+    private const val CACHE_DURATION_MS = 60_000L // 60 seconds
+
+    fun invalidateCache() {
+        cachedFiles = null
+        lastScanTimeMs = 0L
+    }
+
     /**
      * Scans real document files on the user's phone via Android MediaStore and storage.
      * Combines retrieved files with offline SQLite metadata (priority, bookmarks, vault status).
@@ -64,7 +75,12 @@ object LocalFileManager {
      * priority is null unless explicitly assigned by the user.
      * Strictly on-device: does NOT upload any file.
      */
-    fun getDeviceFiles(context: Context): List<LocalFileItem> {
+    fun getDeviceFiles(context: Context, forceRefresh: Boolean = false): List<LocalFileItem> {
+        val now = System.currentTimeMillis()
+        if (!forceRefresh && cachedFiles != null && (now - lastScanTimeMs < CACHE_DURATION_MS)) {
+            return cachedFiles!!
+        }
+
         val dbHelper = LocalFileDatabaseHelper.getInstance(context)
         val metadataMap = dbHelper.getAllMetadata()
         val fileList = mutableListOf<LocalFileItem>()
@@ -170,7 +186,10 @@ object LocalFileManager {
             }
         }
 
-        return fileList.sortedByDescending { it.dateModifiedMs }
+        val sorted = fileList.sortedByDescending { it.dateModifiedMs }
+        cachedFiles = sorted
+        lastScanTimeMs = System.currentTimeMillis()
+        return sorted
     }
 
     private fun scanDirectory(

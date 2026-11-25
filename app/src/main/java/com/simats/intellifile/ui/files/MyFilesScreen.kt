@@ -1,6 +1,8 @@
 package com.simats.intellifile.ui.files
 
 import android.net.Uri
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -211,33 +213,24 @@ fun MyFilesScreen(
         }
     }
 
-    // Automatically refresh on resume whenever files are added, modified, or deleted across screens
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                refreshTrigger++
-                loadVault()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
-
-    // Query real local document files and all stored IntelliSpace files
+    // Query real local document files asynchronously
     LaunchedEffect(refreshTrigger, priorityUpdateVersion) {
-        isLoadingDeviceFiles = true
-        realFiles = LocalFileManager.getDeviceFiles(context)
+        if (realFiles.isEmpty()) {
+            isLoadingDeviceFiles = true
+        }
+        val loaded = withContext(Dispatchers.IO) {
+            LocalFileManager.getDeviceFiles(context)
+        }
+        realFiles = loaded
         isLoadingDeviceFiles = false
-        loadVault()
     }
 
-    // Ensure vault docs are refreshed when switching to IntelliSpace tab
+    // Ensure vault docs are loaded when switching to IntelliSpace tab
     LaunchedEffect(selectedSource) {
         if (selectedSource == StorageSourceTab.INTELLISPACE) {
-            loadVault()
+            if (vaultDocuments.isEmpty()) {
+                loadVault()
+            }
         }
     }
 

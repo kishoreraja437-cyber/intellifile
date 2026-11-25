@@ -1,8 +1,8 @@
 package com.simats.intellifile.ui.home
 
-
-
 import android.Manifest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 import androidx.compose.foundation.border
 
@@ -392,19 +392,16 @@ fun HomeScreen(
 
 
     // Query real document files asynchronously from storage
-
     LaunchedEffect(refreshTrigger, priorityUpdateVersion) {
-
-        isLoading = true
-
+        if (realFiles.isEmpty()) {
+            isLoading = true
+        }
         hasStoragePermission = LocalFileManager.hasStoragePermission(context)
-
-        val loaded = LocalFileManager.getDeviceFiles(context)
-
+        val loaded = withContext(Dispatchers.IO) {
+            LocalFileManager.getDeviceFiles(context)
+        }
         realFiles = loaded
-
         isLoading = false
-
     }
 
 

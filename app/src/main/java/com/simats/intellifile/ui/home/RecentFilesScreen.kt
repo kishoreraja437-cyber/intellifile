@@ -1,6 +1,8 @@
 package com.simats.intellifile.ui.home
 
 import android.widget.Toast
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -96,8 +98,13 @@ fun RecentFilesScreen(
     var showVaultConfirmDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(refreshTrigger) {
-        isLoading = true
-        realFiles = LocalFileManager.getDeviceFiles(context)
+        if (realFiles.isEmpty()) {
+            isLoading = true
+        }
+        val loaded = withContext(Dispatchers.IO) {
+            LocalFileManager.getDeviceFiles(context)
+        }
+        realFiles = loaded
         isLoading = false
     }
 

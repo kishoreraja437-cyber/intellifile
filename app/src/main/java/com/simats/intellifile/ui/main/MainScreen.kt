@@ -89,6 +89,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 
 import androidx.compose.ui.draw.clip
 
@@ -226,6 +227,7 @@ fun MainScreen(
     val priorityUpdateVersion by chatViewModel.priorityUpdateVersion.collectAsState()
 
     var selectedTab by remember { mutableStateOf(BottomNavItem.HOME) }
+    var visitedTabs by remember { mutableStateOf(setOf(BottomNavItem.HOME)) }
 
     var savedPriorityFilter by remember { mutableStateOf(PriorityFilter.ALL) }
 
@@ -285,6 +287,7 @@ fun MainScreen(
             tabBackStack.add(newTab)
             selectedTab = newTab
         }
+        visitedTabs = visitedTabs + newTab
         isVoiceAssistantOpen = false
         isRecentFilesOpen = false
         isAiHistoryOpen = false
@@ -328,11 +331,13 @@ fun MainScreen(
             tabBackStack.size > 1 -> {
                 tabBackStack.removeAt(tabBackStack.lastIndex)
                 selectedTab = tabBackStack.last()
+                visitedTabs = visitedTabs + selectedTab
             }
             selectedTab != BottomNavItem.HOME -> {
                 selectedTab = BottomNavItem.HOME
                 tabBackStack.clear()
                 tabBackStack.add(BottomNavItem.HOME)
+                visitedTabs = visitedTabs + BottomNavItem.HOME
             }
         }
     }
@@ -403,7 +408,7 @@ fun MainScreen(
 
             isRecentFilesOpen -> "recent_files"
 
-            else -> "tab_${selectedTab.name}"
+            else -> "tabs"
 
         }
 
@@ -424,54 +429,25 @@ fun MainScreen(
                 targetState = currentNavigationKey,
 
                 transitionSpec = {
-                    val isInitialTab = initialState.startsWith("tab_")
-                    val isTargetTab = targetState.startsWith("tab_")
-
-                    // Butter-smooth Material 3 Emphasized Decelerate motion curve
-                    val fluidEasing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
-
-                    if (isInitialTab && isTargetTab) {
-                        val tabOrder = listOf("tab_HOME", "tab_AI", "tab_FILES", "tab_SAVED", "tab_PROFILE")
-                        val initialIdx = tabOrder.indexOf(initialState).takeIf { it >= 0 } ?: 0
-                        val targetIdx = tabOrder.indexOf(targetState).takeIf { it >= 0 } ?: 0
-                        val isForward = targetIdx > initialIdx
-
-                        if (isForward) {
-                            (slideInHorizontally(animationSpec = tween(380, easing = fluidEasing)) { fullWidth -> (fullWidth * 0.28f).toInt() } +
-                                scaleIn(initialScale = 0.96f, animationSpec = tween(380, easing = fluidEasing)) +
-                                fadeIn(animationSpec = tween(280)))
-                                .togetherWith(
-                                    slideOutHorizontally(animationSpec = tween(340, easing = fluidEasing)) { fullWidth -> -(fullWidth * 0.20f).toInt() } +
-                                    scaleOut(targetScale = 0.96f, animationSpec = tween(340, easing = fluidEasing)) +
-                                    fadeOut(animationSpec = tween(220))
-                                )
-                        } else {
-                            (slideInHorizontally(animationSpec = tween(380, easing = fluidEasing)) { fullWidth -> -(fullWidth * 0.28f).toInt() } +
-                                scaleIn(initialScale = 0.96f, animationSpec = tween(380, easing = fluidEasing)) +
-                                fadeIn(animationSpec = tween(280)))
-                                .togetherWith(
-                                    slideOutHorizontally(animationSpec = tween(340, easing = fluidEasing)) { fullWidth -> (fullWidth * 0.20f).toInt() } +
-                                    scaleOut(targetScale = 0.96f, animationSpec = tween(340, easing = fluidEasing)) +
-                                    fadeOut(animationSpec = tween(220))
-                                )
-                        }
-                    } else if (isTargetTab && !isInitialTab) {
-                        // Returning from Overlay back to Tab
-                        (scaleIn(initialScale = 0.94f, animationSpec = tween(360, easing = fluidEasing)) +
-                            fadeIn(animationSpec = tween(280)))
+                    if (targetState != "tabs" && initialState == "tabs") {
+                        // Entering an overlay screen from tabs
+                        (slideInVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)) { fullHeight -> (fullHeight * 0.08f).toInt() } +
+                            fadeIn(animationSpec = tween(180)))
                             .togetherWith(
-                                slideOutVertically(animationSpec = tween(320, easing = fluidEasing)) { fullHeight -> (fullHeight * 0.15f).toInt() } +
-                                scaleOut(targetScale = 0.92f, animationSpec = tween(320, easing = fluidEasing)) +
-                                fadeOut(animationSpec = tween(220))
+                                fadeOut(animationSpec = tween(140))
+                            )
+                    } else if (targetState == "tabs" && initialState != "tabs") {
+                        // Returning from overlay screen back to tabs
+                        fadeIn(animationSpec = tween(180))
+                            .togetherWith(
+                                slideOutVertically(animationSpec = tween(200, easing = FastOutSlowInEasing)) { fullHeight -> (fullHeight * 0.08f).toInt() } +
+                                fadeOut(animationSpec = tween(160))
                             )
                     } else {
-                        // Entering an Overlay (Document Viewer, File Detail, etc.)
-                        (slideInVertically(animationSpec = tween(380, easing = fluidEasing)) { fullHeight -> (fullHeight * 0.12f).toInt() } +
-                            scaleIn(initialScale = 0.92f, animationSpec = tween(380, easing = fluidEasing)) +
-                            fadeIn(animationSpec = tween(300)))
+                        // Overlay to overlay transition
+                        fadeIn(animationSpec = tween(180))
                             .togetherWith(
-                                scaleOut(targetScale = 0.95f, animationSpec = tween(300, easing = fluidEasing)) +
-                                fadeOut(animationSpec = tween(220))
+                                fadeOut(animationSpec = tween(140))
                             )
                     }
                 },
@@ -608,7 +584,7 @@ fun MainScreen(
 
                             isDocumentViewerOpen = false
 
-                            selectedTab = BottomNavItem.SAVED
+                            navigateToTab(BottomNavItem.SAVED)
 
                         },
 
@@ -620,7 +596,7 @@ fun MainScreen(
 
                             isDocumentViewerOpen = false
 
-                            selectedTab = BottomNavItem.HOME
+                            navigateToTab(BottomNavItem.HOME)
 
                         }
 
@@ -824,7 +800,7 @@ fun MainScreen(
 
                             isContactSuccessOpen = false
 
-                            selectedTab = BottomNavItem.HOME
+                            navigateToTab(BottomNavItem.HOME)
 
                         }
 
@@ -858,7 +834,7 @@ fun MainScreen(
 
                             isFeedbackSuccessOpen = false
 
-                            selectedTab = BottomNavItem.HOME
+                            navigateToTab(BottomNavItem.HOME)
 
                         }
 
@@ -892,279 +868,215 @@ fun MainScreen(
 
 
 
-                        else -> AnimatedContent(
-                            targetState = selectedTab,
-                            transitionSpec = {
-                                val forward = targetState.ordinal > initialState.ordinal
-                                if (forward) {
-                                    (slideInHorizontally(tween(220, easing = FastOutSlowInEasing)) { (it * 0.08f).toInt() } + fadeIn(tween(200)))
-                                        .togetherWith(slideOutHorizontally(tween(180, easing = FastOutSlowInEasing)) { -(it * 0.08f).toInt() } + fadeOut(tween(160)))
-                                } else {
-                                    (slideInHorizontally(tween(220, easing = FastOutSlowInEasing)) { -(it * 0.08f).toInt() } + fadeIn(tween(200)))
-                                        .togetherWith(slideOutHorizontally(tween(180, easing = FastOutSlowInEasing)) { (it * 0.08f).toInt() } + fadeOut(tween(160)))
-                                }
-                            },
-                            label = "tabScreenSlideTransition"
-                        ) { tab ->
-                            when (tab) {
+                        else -> {
+                            val allTabs = remember {
+                                listOf(
+                                    BottomNavItem.HOME,
+                                    BottomNavItem.AI,
+                                    BottomNavItem.FILES,
+                                    BottomNavItem.SAVED,
+                                    BottomNavItem.PROFILE
+                                )
+                            }
 
-                            BottomNavItem.HOME -> HomeScreen(
-                                priorityUpdateVersion = priorityUpdateVersion,
-                                externalSearchQuery = homeVoiceSearchQuery,
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                allTabs.forEach { tab ->
+                                    if (tab in visitedTabs) {
+                                        val isCurrent = tab == selectedTab
+                                        val tabAlpha by animateFloatAsState(
+                                            targetValue = if (isCurrent) 1f else 0f,
+                                            animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+                                            label = "tabAlpha_${tab.name}"
+                                        )
+                                        val tabTranslationX by animateFloatAsState(
+                                            targetValue = if (isCurrent) 0f else (if (tab.ordinal > selectedTab.ordinal) 30f else -30f),
+                                            animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+                                            label = "tabTrans_${tab.name}"
+                                        )
 
-                                onSeeAllClick = { isRecentFilesOpen = true },
+                                        if (tabAlpha > 0f || isCurrent) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .zIndex(if (isCurrent) 1f else 0f)
+                                                    .graphicsLayer {
+                                                        alpha = tabAlpha
+                                                        translationX = tabTranslationX
+                                                    }
+                                                    .then(
+                                                        if (!isCurrent) Modifier.clickable(
+                                                            interactionSource = remember { MutableInteractionSource() },
+                                                            indication = null,
+                                                            onClick = {}
+                                                        ) else Modifier
+                                                    )
+                                            ) {
+                                                when (tab) {
+                                                    BottomNavItem.HOME -> HomeScreen(
+                                                        priorityUpdateVersion = priorityUpdateVersion,
+                                                        externalSearchQuery = homeVoiceSearchQuery,
+                                                        onSeeAllClick = { isRecentFilesOpen = true },
+                                                        onFileClick = { file ->
+                                                            selectedDetailFile = FileDetailData(
+                                                                fileName = file.title,
+                                                                fileSize = file.size,
+                                                                fileType = "${file.format} Document",
+                                                                createdDate = file.dateText,
+                                                                modifiedDate = file.dateText,
+                                                                priority = file.priority,
+                                                                iconResId = file.iconResId,
+                                                                uriString = file.uriString,
+                                                                path = file.path,
+                                                                isVaultSynced = file.isVaultSynced
+                                                            )
+                                                        },
+                                                        onShareFileClick = { file ->
+                                                            selectedDetailFile = FileDetailData(
+                                                                fileName = file.title,
+                                                                fileSize = file.size,
+                                                                fileType = "${file.format} Document",
+                                                                createdDate = file.dateText,
+                                                                modifiedDate = file.dateText,
+                                                                priority = file.priority,
+                                                                iconResId = file.iconResId,
+                                                                uriString = file.uriString,
+                                                                path = file.path,
+                                                                isVaultSynced = file.isVaultSynced
+                                                            )
+                                                            isShareOpen = true
+                                                        },
+                                                        onPriorityCardClick = { priorityLevel ->
+                                                            savedPriorityFilter = when (priorityLevel) {
+                                                                PriorityLevel.IMPORTANT -> PriorityFilter.IMPORTANT
+                                                                PriorityLevel.NORMAL -> PriorityFilter.NORMAL
+                                                                PriorityLevel.LOW -> PriorityFilter.LOW
+                                                            }
+                                                            navigateToTab(BottomNavItem.SAVED)
+                                                        },
+                                                        onMicClick = { isVoiceAssistantOpen = true }
+                                                    )
 
-                                onFileClick = { file ->
+                                                    BottomNavItem.AI -> AiScreen(
+                                                        chatViewModel = chatViewModel,
+                                                        initialConversationId = activeAiConversationId,
+                                                        onBackClick = { handleGoBack() },
+                                                        onMicClick = { isVoiceAssistantOpen = true },
+                                                        onOpenFile = { aiFile ->
+                                                            val localMatch = LocalFileManager.getDeviceFiles(context).firstOrNull {
+                                                                it.title.equals(aiFile.title, ignoreCase = true) ||
+                                                                it.title.equals(aiFile.title.substringBeforeLast('.'), ignoreCase = true) ||
+                                                                (!aiFile.uriString.isNullOrBlank() && it.uri.toString() == aiFile.uriString) ||
+                                                                (!aiFile.filePath.isNullOrBlank() && it.path == aiFile.filePath)
+                                                            }
 
-                                    selectedDetailFile = FileDetailData(
+                                                            val finalUri = if (!aiFile.uriString.isNullOrBlank()) aiFile.uriString else (localMatch?.uri?.toString() ?: "")
+                                                            val finalPath = if (!aiFile.filePath.isNullOrBlank()) aiFile.filePath else (localMatch?.path ?: "")
 
-                                        fileName = file.title,
+                                                            val resolvedIcon = when (aiFile.format.trim().removePrefix(".").uppercase()) {
+                                                                "DOCX", "DOC" -> R.drawable.doc
+                                                                "PPT", "PPTX" -> R.drawable.ppt
+                                                                else -> R.drawable.pdf
+                                                            }
 
-                                        fileSize = file.size,
+                                                            selectedDetailFile = FileDetailData(
+                                                                fileName = aiFile.title,
+                                                                fileSize = aiFile.size,
+                                                                fileType = "${aiFile.format} Document",
+                                                                createdDate = aiFile.dateText,
+                                                                modifiedDate = aiFile.dateText,
+                                                                priority = aiFile.priority,
+                                                                iconResId = resolvedIcon,
+                                                                uriString = finalUri,
+                                                                path = finalPath
+                                                            )
+                                                            isDocumentViewerOpen = true
+                                                        },
+                                                        onViewSearchHistoryClick = { isAiHistoryOpen = true },
+                                                        onNewChatClick = {
+                                                            activeAiConversationId = null
+                                                        }
+                                                    )
 
-                                        fileType = "${file.format} Document",
+                                                    BottomNavItem.FILES -> MyFilesScreen(
+                                                        priorityUpdateVersion = priorityUpdateVersion,
+                                                        onBackClick = { handleGoBack() },
+                                                        onMicClick = { isVoiceAssistantOpen = true },
+                                                        onQuickAccessClick = { priorityLevel ->
+                                                            savedPriorityFilter = when (priorityLevel) {
+                                                                PriorityLevel.IMPORTANT -> PriorityFilter.IMPORTANT
+                                                                PriorityLevel.NORMAL -> PriorityFilter.NORMAL
+                                                                PriorityLevel.LOW -> PriorityFilter.LOW
+                                                            }
+                                                            navigateToTab(BottomNavItem.SAVED)
+                                                        },
+                                                        onNavigateToAiChat = { _ ->
+                                                            navigateToTab(BottomNavItem.AI)
+                                                        },
+                                                        onOpenFile = { fileDetail ->
+                                                            selectedDetailFile = fileDetail
+                                                            isDocumentViewerOpen = true
+                                                        }
+                                                    )
 
-                                        createdDate = file.dateText,
+                                                    BottomNavItem.SAVED -> SavedScreen(
+                                                        priorityUpdateVersion = priorityUpdateVersion,
+                                                        initialFilter = savedPriorityFilter,
+                                                        onBackClick = { handleGoBack() },
+                                                        onMicClick = { isVoiceAssistantOpen = true },
+                                                        onOpenFile = { file ->
+                                                            val ext = file.title.substringAfterLast('.', "").uppercase()
+                                                            val detectedType = if (ext.isNotBlank()) "$ext Document" else "Document"
+                                                            selectedDetailFile = FileDetailData(
+                                                                fileName = file.title,
+                                                                fileSize = file.size,
+                                                                fileType = detectedType,
+                                                                createdDate = file.dateText,
+                                                                modifiedDate = file.dateText,
+                                                                category = "Saved Document",
+                                                                location = if (file.path.isNotBlank()) file.path else "Internal Storage",
+                                                                priority = file.priority,
+                                                                iconResId = file.iconResId,
+                                                                uriString = file.uriString,
+                                                                path = file.path,
+                                                                isVaultSynced = file.isVaultSynced
+                                                            )
+                                                            isDocumentViewerOpen = true
+                                                        },
+                                                        onShareFileClick = { file ->
+                                                            val ext = file.title.substringAfterLast('.', "").uppercase()
+                                                            val detectedType = if (ext.isNotBlank()) "$ext Document" else "Document"
+                                                            selectedDetailFile = FileDetailData(
+                                                                fileName = file.title,
+                                                                fileSize = file.size,
+                                                                fileType = detectedType,
+                                                                priority = file.priority,
+                                                                iconResId = file.iconResId,
+                                                                uriString = file.uriString,
+                                                                path = file.path,
+                                                                isVaultSynced = file.isVaultSynced
+                                                            )
+                                                            isShareOpen = true
+                                                        }
+                                                    )
 
-                                        modifiedDate = file.dateText,
-
-                                        priority = file.priority,
-
-                                        iconResId = file.iconResId,
-
-                                        uriString = file.uriString,
-
-                                        path = file.path,
-
-                                        isVaultSynced = file.isVaultSynced
-
-                                    )
-
-                                },
-
-                                onShareFileClick = { file ->
-
-                                    selectedDetailFile = FileDetailData(
-
-                                        fileName = file.title,
-
-                                        fileSize = file.size,
-
-                                        fileType = "${file.format} Document",
-
-                                        createdDate = file.dateText,
-
-                                        modifiedDate = file.dateText,
-
-                                        priority = file.priority,
-
-                                        iconResId = file.iconResId,
-
-                                        uriString = file.uriString,
-
-                                        path = file.path,
-
-                                        isVaultSynced = file.isVaultSynced
-
-                                    )
-
-                                    isShareOpen = true
-
-                                },
-
-                                onPriorityCardClick = { priorityLevel ->
-
-                                    savedPriorityFilter = when (priorityLevel) {
-
-                                        PriorityLevel.IMPORTANT -> PriorityFilter.IMPORTANT
-
-                                        PriorityLevel.NORMAL -> PriorityFilter.NORMAL
-
-                                        PriorityLevel.LOW -> PriorityFilter.LOW
-
+                                                    BottomNavItem.PROFILE -> ProfileScreen(
+                                                        userName = sessionManager.getFullName(),
+                                                        userEmail = sessionManager.getEmail(),
+                                                        onBackClick = { handleGoBack() },
+                                                        onMicClick = { isVoiceAssistantOpen = true },
+                                                        onFilePermissionsClick = { isFilePermissionsOpen = true },
+                                                        onNotificationsClick = { isNotificationsOpen = true },
+                                                        onThemeClick = { isThemeOpen = true },
+                                                        onAboutClick = { isAboutOpen = true },
+                                                        onHelpSupportClick = { isHelpSupportOpen = true },
+                                                        onLogoutClick = onLogout
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
-
-                                    selectedTab = BottomNavItem.SAVED
-
-                                },
-
-                                onMicClick = { isVoiceAssistantOpen = true }
-
-                            )
-
-                            BottomNavItem.AI -> AiScreen(
-                                chatViewModel = chatViewModel,
-                                initialConversationId = activeAiConversationId,
-
-                                onBackClick = { handleGoBack() },
-
-                                onMicClick = { isVoiceAssistantOpen = true },
-
-                                onOpenFile = { aiFile ->
-                                    val localMatch = LocalFileManager.getDeviceFiles(context).firstOrNull {
-                                        it.title.equals(aiFile.title, ignoreCase = true) ||
-                                        it.title.equals(aiFile.title.substringBeforeLast('.'), ignoreCase = true) ||
-                                        (!aiFile.uriString.isNullOrBlank() && it.uri.toString() == aiFile.uriString) ||
-                                        (!aiFile.filePath.isNullOrBlank() && it.path == aiFile.filePath)
-                                    }
-
-                                    val finalUri = if (!aiFile.uriString.isNullOrBlank()) aiFile.uriString else (localMatch?.uri?.toString() ?: "")
-                                    val finalPath = if (!aiFile.filePath.isNullOrBlank()) aiFile.filePath else (localMatch?.path ?: "")
-
-                                    val resolvedIcon = when (aiFile.format.trim().removePrefix(".").uppercase()) {
-                                        "DOCX", "DOC" -> R.drawable.doc
-                                        "PPT", "PPTX" -> R.drawable.ppt
-                                        else -> R.drawable.pdf
-                                    }
-
-                                    selectedDetailFile = FileDetailData(
-                                        fileName = aiFile.title,
-                                        fileSize = aiFile.size,
-                                        fileType = "${aiFile.format} Document",
-                                        createdDate = aiFile.dateText,
-                                        modifiedDate = aiFile.dateText,
-                                        priority = aiFile.priority,
-                                        iconResId = resolvedIcon,
-                                        uriString = finalUri,
-                                        path = finalPath
-                                    )
-                                    isDocumentViewerOpen = true
-                                },
-
-                                onViewSearchHistoryClick = { isAiHistoryOpen = true },
-
-                                onNewChatClick = {
-
-                                    activeAiConversationId = null
-
                                 }
-
-                            )
-
-                            BottomNavItem.FILES -> MyFilesScreen(
-                                priorityUpdateVersion = priorityUpdateVersion,
-                                onBackClick = { handleGoBack() },
-                                onMicClick = { isVoiceAssistantOpen = true },
-                                onQuickAccessClick = { priorityLevel ->
-                                    savedPriorityFilter = when (priorityLevel) {
-                                        PriorityLevel.IMPORTANT -> PriorityFilter.IMPORTANT
-                                        PriorityLevel.NORMAL -> PriorityFilter.NORMAL
-                                        PriorityLevel.LOW -> PriorityFilter.LOW
-                                    }
-                                    selectedTab = BottomNavItem.SAVED
-                                },
-                                onNavigateToAiChat = { _ ->
-                                    selectedTab = BottomNavItem.AI
-                                },
-                                onOpenFile = { fileDetail ->
-                                    selectedDetailFile = fileDetail
-                                    isDocumentViewerOpen = true
-                                }
-                            )
-
-                            BottomNavItem.SAVED -> SavedScreen(
-                                priorityUpdateVersion = priorityUpdateVersion,
-                                initialFilter = savedPriorityFilter,
-
-                                onBackClick = { handleGoBack() },
-
-                                onMicClick = { isVoiceAssistantOpen = true },
-
-                                onOpenFile = { file ->
-
-                                    val ext = file.title.substringAfterLast('.', "").uppercase()
-
-                                    val detectedType = if (ext.isNotBlank()) "$ext Document" else "Document"
-
-                                    selectedDetailFile = FileDetailData(
-
-                                        fileName = file.title,
-
-                                        fileSize = file.size,
-
-                                        fileType = detectedType,
-
-                                        createdDate = file.dateText,
-
-                                        modifiedDate = file.dateText,
-
-                                        category = "Saved Document",
-
-                                        location = if (file.path.isNotBlank()) file.path else "Internal Storage",
-
-                                        priority = file.priority,
-
-                                        iconResId = file.iconResId,
-
-                                        uriString = file.uriString,
-
-                                        path = file.path,
-
-                                        isVaultSynced = file.isVaultSynced
-
-                                    )
-
-                                    isDocumentViewerOpen = true
-
-                                },
-
-                                onShareFileClick = { file ->
-
-                                    val ext = file.title.substringAfterLast('.', "").uppercase()
-
-                                    val detectedType = if (ext.isNotBlank()) "$ext Document" else "Document"
-
-                                    selectedDetailFile = FileDetailData(
-
-                                        fileName = file.title,
-
-                                        fileSize = file.size,
-
-                                        fileType = detectedType,
-
-                                        priority = file.priority,
-
-                                        iconResId = file.iconResId,
-
-                                        uriString = file.uriString,
-
-                                        path = file.path,
-
-                                        isVaultSynced = file.isVaultSynced
-
-                                    )
-
-                                    isShareOpen = true
-
-                                }
-
-                            )
-
-                            BottomNavItem.PROFILE -> ProfileScreen(
-
-                                userName = sessionManager.getFullName(),
-
-                                userEmail = sessionManager.getEmail(),
-
-                                onBackClick = { handleGoBack() },
-
-                                onMicClick = { isVoiceAssistantOpen = true },
-
-                                onFilePermissionsClick = { isFilePermissionsOpen = true },
-
-                                onNotificationsClick = { isNotificationsOpen = true },
-
-                                onThemeClick = { isThemeOpen = true },
-
-                                onAboutClick = { isAboutOpen = true },
-
-                                onHelpSupportClick = { isHelpSupportOpen = true },
-
-                                onLogoutClick = onLogout
-
-                            )
-
-                        }
+                            }
                         }
 
                     }

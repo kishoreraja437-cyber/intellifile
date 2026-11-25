@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import com.simats.intellifile.data.manager.LocalFileManager
 import com.simats.intellifile.ui.home.PriorityLevel
 
 /**
@@ -208,6 +209,7 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
             values,
             SQLiteDatabase.CONFLICT_REPLACE
         )
+        LocalFileManager.invalidateCache()
     }
 
     /**
@@ -231,6 +233,7 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
             values,
             SQLiteDatabase.CONFLICT_REPLACE
         )
+        LocalFileManager.invalidateCache()
     }
 
     /**
@@ -261,6 +264,7 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
             values,
             SQLiteDatabase.CONFLICT_REPLACE
         )
+        LocalFileManager.invalidateCache()
         return newBookmarked
     }
 
@@ -292,5 +296,6 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
             values,
             SQLiteDatabase.CONFLICT_REPLACE
         )
+        LocalFileManager.invalidateCache()
     }
 }
