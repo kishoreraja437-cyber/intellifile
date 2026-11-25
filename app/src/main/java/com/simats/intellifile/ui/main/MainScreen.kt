@@ -196,9 +196,9 @@ enum class BottomNavItem(
 
     HOME("Home", Icons.Default.Home, Icons.Outlined.Home),
 
-    FILES("Files", Icons.Default.Folder, Icons.Outlined.Folder),
-
     AI("AI", Icons.Default.AutoAwesome, Icons.Outlined.AutoAwesome),
+
+    FILES("Files", Icons.Default.Folder, Icons.Outlined.Folder),
 
     SAVED("Saved", Icons.Default.Bookmark, Icons.Outlined.BookmarkBorder),
 
