@@ -1,6 +1,12 @@
 package com.simats.intellifile.ui.viewer
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import android.webkit.WebView
+import androidx.compose.ui.viewinterop.AndroidView
+import java.io.File
 import androidx.activity.compose.BackHandler
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -83,6 +89,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -497,6 +504,17 @@ fun DocumentViewerScreen(
                             totalUnitsCount = result.rows.size.coerceAtLeast(1)
                             currentPageIndex = 1
                         }
+                        is ParsedDocumentContent.LogDocument -> {
+                            totalUnitsCount = result.lines.size.coerceAtLeast(1)
+                            currentPageIndex = 1
+                        }
+                        is ParsedDocumentContent.ArchiveDocument -> {
+                            totalUnitsCount = result.entries.size.coerceAtLeast(1)
+                            currentPageIndex = 1
+                        }
+                        is ParsedDocumentContent.HtmlDocument,
+                        is ParsedDocumentContent.MarkdownDocument,
+                        is ParsedDocumentContent.StructuredData,
                         is ParsedDocumentContent.PlainText -> {
                             totalUnitsCount = 1
                             currentPageIndex = 1
@@ -700,6 +718,20 @@ fun DocumentViewerScreen(
                                         p.elements.any { it.text.contains(searchQuery, ignoreCase = true) }
                             }.map { it.pageNumber }
                         }
+                        is ParsedDocumentContent.Spreadsheet -> {
+                            val matches = mutableListOf<Int>()
+                            content.rows.forEachIndexed { idx, row ->
+                                if (row.any { it.contains(searchQuery, ignoreCase = true) }) {
+                                    matches.add(idx + 1)
+                                }
+                            }
+                            matches
+                        }
+                        is ParsedDocumentContent.LogDocument -> {
+                            content.lines.filter {
+                                it.rawLine.contains(searchQuery, ignoreCase = true)
+                            }.map { it.lineNumber }
+                        }
                         else -> emptyList()
                     }
                 }
@@ -780,141 +812,273 @@ fun DocumentViewerScreen(
                     }
                 }
             } else {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = if (isLandscape) 2.dp else 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        IconButton(onClick = {
-                            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                            onBackClick()
-                        }) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(4.dp))
-
-                        Column {
-                            Text(
-                                text = fileName,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                maxLines = 1
-                            )
-                            val subtitle = when {
-                                isPdf -> "PDF Document · Page $currentPageIndex of $totalUnitsCount"
-                                isWordDoc -> {
-                                    val rich = parsedContent as? ParsedDocumentContent.RichDocument
-                                    if (rich != null && rich.wordCount > 0) "Word Document · Page $currentPageIndex of $totalUnitsCount · ${rich.wordCount} words"
-                                    else "Word Document · Page $currentPageIndex of $totalUnitsCount"
-                                }
-                                parsedContent is ParsedDocumentContent.Presentation -> "PowerPoint Presentation · Slide $currentPageIndex of $totalUnitsCount"
-                                parsedContent is ParsedDocumentContent.Spreadsheet -> "Excel Spreadsheet · ${(parsedContent as ParsedDocumentContent.Spreadsheet).rows.size} Rows"
-                                parsedContent is ParsedDocumentContent.RichDocument -> {
-                                    val rich = parsedContent as ParsedDocumentContent.RichDocument
-                                    if (rich.wordCount > 0) "Word Document · Page $currentPageIndex of $totalUnitsCount · ${rich.wordCount} words"
-                                    else "Word Document · Page $currentPageIndex of $totalUnitsCount"
-                                }
-                                else -> "$effectiveFormat Document"
-                            }
-                            Text(
-                                text = subtitle,
-                                fontSize = 12.sp,
-                                color = Color(0xFF6B7280)
-                            )
-                        }
+                val richWordCount = remember(parsedContent) {
+                    when (val content = parsedContent) {
+                        is ParsedDocumentContent.RichDocument -> content.wordCount.takeIf { it > 0 }
+                        is ParsedDocumentContent.PlainText -> content.text.trim().split("\\s+".toRegex()).size.takeIf { it > 0 }
+                        else -> null
                     }
+                }
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (parsedContent is ParsedDocumentContent.Presentation || effectiveFormat.uppercase() in listOf("PPT", "PPTX")) {
-                            IconButton(onClick = { openWithExternalApp() }) {
+                Surface(
+                    color = Color.White,
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (isLandscape) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                                    onBackClick()
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
                                 Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                                    contentDescription = "Open in PowerPoint / Office App",
-                                    tint = Color(0xFF55A9AF)
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
-                            IconButton(onClick = { isFullscreenSlideshow = true }) {
-                                Icon(
-                                    imageVector = Icons.Default.Slideshow,
-                                    contentDescription = "Fullscreen Slideshow",
-                                    tint = Color(0xFF111827)
-                                )
-                            }
-                        }
 
-                        if (isWordDoc || parsedContent is ParsedDocumentContent.RichDocument || effectiveFormat.uppercase() in listOf("DOC", "DOCX", "RTF")) {
-                            IconButton(onClick = { openWithExternalApp() }) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                                    contentDescription = "Open in Word / Office App",
-                                    tint = Color(0xFF55A9AF)
-                                )
-                            }
-                            IconButton(onClick = {
-                                wordDocViewMode = if (wordDocViewMode == WordDocViewMode.PAGE_VIEW) WordDocViewMode.CONTINUOUS else WordDocViewMode.PAGE_VIEW
-                            }) {
-                                Icon(
-                                    imageVector = if (wordDocViewMode == WordDocViewMode.PAGE_VIEW) Icons.Default.ViewAgenda else Icons.AutoMirrored.Filled.MenuBook,
-                                    contentDescription = if (wordDocViewMode == WordDocViewMode.PAGE_VIEW) "Switch to Continuous Reading" else "Switch to Page View",
-                                    tint = Color(0xFF111827)
-                                )
-                            }
-                        }
+                            Spacer(modifier = Modifier.width(6.dp))
 
-                        IconButton(onClick = { isSearchActive = true }) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "Search",
-                                tint = Color(0xFF111827)
+                            DocumentInfoSection(
+                                fileName = fileName,
+                                fileFormat = effectiveFormat,
+                                currentPage = currentPageIndex,
+                                totalPages = totalUnitsCount,
+                                wordCount = richWordCount,
+                                isCompact = true,
+                                modifier = Modifier.weight(1f)
                             )
-                        }
 
-                        IconButton(onClick = toggleOrientation) {
-                            Icon(
-                                imageVector = Icons.Default.ScreenRotation,
-                                contentDescription = "Rotate Orientation",
-                                tint = if (isLandscape) Color(0xFF55A9AF) else Color(0xFF111827)
-                            )
-                        }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                if (parsedContent is ParsedDocumentContent.Presentation || effectiveFormat.uppercase() in listOf("PPT", "PPTX")) {
+                                    IconButton(onClick = { openWithExternalApp() }, modifier = Modifier.size(36.dp)) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                            contentDescription = "Open in PowerPoint / Office App",
+                                            tint = Color(0xFF55A9AF),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    IconButton(onClick = { isFullscreenSlideshow = true }, modifier = Modifier.size(36.dp)) {
+                                        Icon(
+                                            imageVector = Icons.Default.Slideshow,
+                                            contentDescription = "Fullscreen Slideshow",
+                                            tint = Color(0xFF111827),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
 
-                        IconButton(onClick = {
-                            isBookmarked = !isBookmarked
-                            if (key.isNotBlank()) {
-                                LocalFileDatabaseHelper.getInstance(context).setBookmarked(key, fileName, isBookmarked)
-                                Toast.makeText(
-                                    context,
-                                    if (isBookmarked) "Added to Bookmarks" else "Removed from Bookmarks",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                if (isWordDoc || parsedContent is ParsedDocumentContent.RichDocument || effectiveFormat.uppercase() in listOf("DOC", "DOCX", "RTF")) {
+                                    IconButton(onClick = { openWithExternalApp() }, modifier = Modifier.size(36.dp)) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                            contentDescription = "Open in Word / Office App",
+                                            tint = Color(0xFF55A9AF),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    IconButton(onClick = {
+                                        wordDocViewMode = if (wordDocViewMode == WordDocViewMode.PAGE_VIEW) WordDocViewMode.CONTINUOUS else WordDocViewMode.PAGE_VIEW
+                                    }, modifier = Modifier.size(36.dp)) {
+                                        Icon(
+                                            imageVector = if (wordDocViewMode == WordDocViewMode.PAGE_VIEW) Icons.Default.ViewAgenda else Icons.AutoMirrored.Filled.MenuBook,
+                                            contentDescription = if (wordDocViewMode == WordDocViewMode.PAGE_VIEW) "Switch to Continuous Reading" else "Switch to Page View",
+                                            tint = Color(0xFF111827),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+
+                                IconButton(onClick = { isSearchActive = true }, modifier = Modifier.size(36.dp)) {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = "Search",
+                                        tint = Color(0xFF111827),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                IconButton(onClick = toggleOrientation, modifier = Modifier.size(36.dp)) {
+                                    Icon(
+                                        imageVector = Icons.Default.ScreenRotation,
+                                        contentDescription = "Rotate Orientation",
+                                        tint = if (isLandscape) Color(0xFF55A9AF) else Color(0xFF111827),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                IconButton(onClick = {
+                                    isBookmarked = !isBookmarked
+                                    if (key.isNotBlank()) {
+                                        LocalFileDatabaseHelper.getInstance(context).setBookmarked(key, fileName, isBookmarked)
+                                        Toast.makeText(
+                                            context,
+                                            if (isBookmarked) "Added to Bookmarks" else "Removed from Bookmarks",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }, modifier = Modifier.size(36.dp)) {
+                                    Icon(
+                                        imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
+                                        contentDescription = "Bookmark",
+                                        tint = if (isBookmarked) Color(0xFF6C5CE7) else Color(0xFF111827),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                IconButton(onClick = onShareClick, modifier = Modifier.size(36.dp)) {
+                                    Icon(
+                                        imageVector = Icons.Default.Share,
+                                        contentDescription = "Share",
+                                        tint = Color(0xFF111827),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
-                        }) {
-                            Icon(
-                                imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
-                                contentDescription = "Bookmark",
-                                tint = if (isBookmarked) Color(0xFF6C5CE7) else Color(0xFF111827)
-                            )
                         }
+                    } else {
+                        // Portrait Mode: 2-Tier Layout ensuring Document Information has full width and is never squeezed
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                                        onBackClick()
+                                    },
+                                    modifier = Modifier.size(38.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Back",
+                                        tint = MaterialTheme.colorScheme.onBackground
+                                    )
+                                }
 
-                        IconButton(onClick = {
-                            onMoreClick()
-                            onSetPriorityClick()
-                        }) {
-                            Icon(
-                                imageVector = Icons.Default.MoreVert,
-                                contentDescription = "More Options",
-                                tint = Color(0xFF111827)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    if (parsedContent is ParsedDocumentContent.Presentation || effectiveFormat.uppercase() in listOf("PPT", "PPTX")) {
+                                        IconButton(onClick = { openWithExternalApp() }, modifier = Modifier.size(36.dp)) {
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                                contentDescription = "Open in PowerPoint / Office App",
+                                                tint = Color(0xFF55A9AF),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                        IconButton(onClick = { isFullscreenSlideshow = true }, modifier = Modifier.size(36.dp)) {
+                                            Icon(
+                                                imageVector = Icons.Default.Slideshow,
+                                                contentDescription = "Fullscreen Slideshow",
+                                                tint = Color(0xFF111827),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+
+                                    if (isWordDoc || parsedContent is ParsedDocumentContent.RichDocument || effectiveFormat.uppercase() in listOf("DOC", "DOCX", "RTF")) {
+                                        IconButton(onClick = { openWithExternalApp() }, modifier = Modifier.size(36.dp)) {
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                                contentDescription = "Open in Word / Office App",
+                                                tint = Color(0xFF55A9AF),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                        IconButton(onClick = {
+                                            wordDocViewMode = if (wordDocViewMode == WordDocViewMode.PAGE_VIEW) WordDocViewMode.CONTINUOUS else WordDocViewMode.PAGE_VIEW
+                                        }, modifier = Modifier.size(36.dp)) {
+                                            Icon(
+                                                imageVector = if (wordDocViewMode == WordDocViewMode.PAGE_VIEW) Icons.Default.ViewAgenda else Icons.AutoMirrored.Filled.MenuBook,
+                                                contentDescription = if (wordDocViewMode == WordDocViewMode.PAGE_VIEW) "Switch to Continuous Reading" else "Switch to Page View",
+                                                tint = Color(0xFF111827),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+
+                                    IconButton(onClick = { isSearchActive = true }, modifier = Modifier.size(36.dp)) {
+                                        Icon(
+                                            imageVector = Icons.Default.Search,
+                                            contentDescription = "Search",
+                                            tint = Color(0xFF111827),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+
+                                    IconButton(onClick = toggleOrientation, modifier = Modifier.size(36.dp)) {
+                                        Icon(
+                                            imageVector = Icons.Default.ScreenRotation,
+                                            contentDescription = "Rotate Orientation",
+                                            tint = if (isLandscape) Color(0xFF55A9AF) else Color(0xFF111827),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+
+                                    IconButton(onClick = {
+                                        isBookmarked = !isBookmarked
+                                        if (key.isNotBlank()) {
+                                            LocalFileDatabaseHelper.getInstance(context).setBookmarked(key, fileName, isBookmarked)
+                                            Toast.makeText(
+                                                context,
+                                                if (isBookmarked) "Added to Bookmarks" else "Removed from Bookmarks",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    }, modifier = Modifier.size(36.dp)) {
+                                        Icon(
+                                            imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
+                                            contentDescription = "Bookmark",
+                                            tint = if (isBookmarked) Color(0xFF6C5CE7) else Color(0xFF111827),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+
+                                    IconButton(onClick = onShareClick, modifier = Modifier.size(36.dp)) {
+                                        Icon(
+                                            imageVector = Icons.Default.Share,
+                                            contentDescription = "Share",
+                                            tint = Color(0xFF111827),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Document Information Section: Full Width, properly spaced, readable font, no clipping
+                            DocumentInfoSection(
+                                fileName = fileName,
+                                fileFormat = effectiveFormat,
+                                currentPage = currentPageIndex,
+                                totalPages = totalUnitsCount,
+                                wordCount = richWordCount,
+                                isCompact = false,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 4.dp)
                             )
                         }
                     }
@@ -1311,13 +1475,62 @@ fun DocumentViewerScreen(
                         }
                     }
 
-                    // Plain Text View (TXT, JSON, MD, LOG)
+                    // Plain Text View (TXT, code files)
                     parsedContent is ParsedDocumentContent.PlainText -> {
                         val textDoc = parsedContent as ParsedDocumentContent.PlainText
                         PlainTextViewer(
                             textDoc = textDoc,
                             fileFormat = effectiveFormat,
                             zoomPercentage = zoomPercentage,
+                            searchQuery = searchQuery,
+                            onToggleControls = { areControlsVisible = !areControlsVisible }
+                        )
+                    }
+
+                    // HTML / HTM Web Document View
+                    parsedContent is ParsedDocumentContent.HtmlDocument -> {
+                        HtmlDocumentViewer(
+                            htmlDoc = parsedContent as ParsedDocumentContent.HtmlDocument,
+                            zoomPercentage = zoomPercentage,
+                            searchQuery = searchQuery,
+                            onToggleControls = { areControlsVisible = !areControlsVisible }
+                        )
+                    }
+
+                    // Markdown (MD) Formatted View
+                    parsedContent is ParsedDocumentContent.MarkdownDocument -> {
+                        MarkdownDocumentViewer(
+                            markdownDoc = parsedContent as ParsedDocumentContent.MarkdownDocument,
+                            zoomPercentage = zoomPercentage,
+                            searchQuery = searchQuery,
+                            onToggleControls = { areControlsVisible = !areControlsVisible }
+                        )
+                    }
+
+                    // Structured Data View (JSON & XML)
+                    parsedContent is ParsedDocumentContent.StructuredData -> {
+                        StructuredCodeViewer(
+                            codeDoc = parsedContent as ParsedDocumentContent.StructuredData,
+                            zoomPercentage = zoomPercentage,
+                            searchQuery = searchQuery,
+                            onToggleControls = { areControlsVisible = !areControlsVisible }
+                        )
+                    }
+
+                    // Log Document View (LOG)
+                    parsedContent is ParsedDocumentContent.LogDocument -> {
+                        LogDocumentViewer(
+                            logDoc = parsedContent as ParsedDocumentContent.LogDocument,
+                            zoomPercentage = zoomPercentage,
+                            searchQuery = searchQuery,
+                            onToggleControls = { areControlsVisible = !areControlsVisible }
+                        )
+                    }
+
+                    // Zip Archive Contents View (ZIP)
+                    parsedContent is ParsedDocumentContent.ArchiveDocument -> {
+                        ZipArchiveViewer(
+                            archiveDoc = parsedContent as ParsedDocumentContent.ArchiveDocument,
                             searchQuery = searchQuery,
                             onToggleControls = { areControlsVisible = !areControlsVisible }
                         )
@@ -1337,6 +1550,8 @@ fun DocumentViewerScreen(
                     val unitName = when {
                         parsedContent is ParsedDocumentContent.Presentation -> "Slide"
                         parsedContent is ParsedDocumentContent.Spreadsheet -> "Row"
+                        parsedContent is ParsedDocumentContent.LogDocument -> "Line"
+                        parsedContent is ParsedDocumentContent.ArchiveDocument -> "Item"
                         else -> "Page"
                     }
 
@@ -2775,7 +2990,7 @@ private fun FullscreenSlideshowDialog(
 }
 
 // ==========================================
-// 2. SPREADSHEET TABLE COMPOSABLE (XLS/XLSX/CSV)
+// 2. SPREADSHEET TABLE COMPOSABLE (XLS/XLSX/CSV/TSV)
 // ==========================================
 @Composable
 private fun SpreadsheetTableView(
@@ -2784,16 +2999,26 @@ private fun SpreadsheetTableView(
     searchQuery: String,
     onToggleControls: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    var activeSheetIndex by remember(spreadsheet) { mutableIntStateOf(spreadsheet.activeSheetIndex) }
+    var selectedCell by remember(activeSheetIndex) { mutableStateOf<Pair<Int, Int>?>(null) }
+
+    val currentSheet = remember(spreadsheet, activeSheetIndex) {
+        spreadsheet.sheets.getOrNull(activeSheetIndex)
+    }
+    val sheetHeaders = currentSheet?.headers ?: spreadsheet.headers
+    val sheetRows = currentSheet?.rows ?: spreadsheet.rows
+
     val scaleFactor = zoomPercentage / 100f
     val textSize = (13 * scaleFactor).sp
     val cellPaddingH = (14 * scaleFactor).dp
     val cellPaddingV = (10 * scaleFactor).dp
 
-    val filteredRows = remember(spreadsheet.rows, searchQuery) {
+    val filteredRows = remember(sheetRows, searchQuery) {
         if (searchQuery.isBlank()) {
-            spreadsheet.rows
+            sheetRows
         } else {
-            spreadsheet.rows.filter { row ->
+            sheetRows.filter { row ->
                 row.any { it.contains(searchQuery, ignoreCase = true) }
             }
         }
@@ -2827,7 +3052,7 @@ private fun SpreadsheetTableView(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "${spreadsheet.headers.size} Columns · ${filteredRows.size} Rows",
+                    text = "${currentSheet?.name ?: "Sheet"} · ${sheetHeaders.size} Cols · ${filteredRows.size} Rows",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF0369A1)
@@ -2836,10 +3061,105 @@ private fun SpreadsheetTableView(
 
             if (searchQuery.isNotBlank()) {
                 Text(
-                    text = "Showing matches for \"$searchQuery\"",
+                    text = "Matches for \"$searchQuery\"",
                     fontSize = 11.sp,
                     color = Color(0xFF64748B)
                 )
+            }
+        }
+
+        // Multi-Sheet Tabs Bar (if 2 or more sheets exist)
+        if (spreadsheet.sheets.size > 1) {
+            HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 0.5.dp)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFF1F5F9))
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                spreadsheet.sheets.forEachIndexed { sIdx, s ->
+                    val isSelected = sIdx == activeSheetIndex
+                    Surface(
+                        color = if (isSelected) Color.White else Color(0xFFE2E8F0),
+                        shape = RoundedCornerShape(6.dp),
+                        border = if (isSelected) BorderStroke(1.dp, Color(0xFFCBD5E1)) else null,
+                        modifier = Modifier.clickable {
+                            activeSheetIndex = sIdx
+                            selectedCell = null
+                        }
+                    ) {
+                        Text(
+                            text = s.name.ifBlank { "Sheet ${sIdx + 1}" },
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) Color(0xFF0284C7) else Color(0xFF64748B),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Cell Inspection Bar (When a cell is selected)
+        if (selectedCell != null) {
+            val rIdx = selectedCell!!.first
+            val cIdx = selectedCell!!.second
+            val cellVal = filteredRows.getOrNull(rIdx)?.getOrNull(cIdx) ?: ""
+            val colLetter = if (cIdx in 0..25) "${('A'.code + cIdx).toChar()}" else "C${cIdx + 1}"
+            val cellCoord = "$colLetter${rIdx + 1}"
+
+            HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 0.5.dp)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFF0FDF4))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        color = Color(0xFFDCFCE7),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = cellCoord,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF15803D),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = cellVal.ifBlank { "(Empty)" },
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF1E293B),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFFE2E8F0))
+                        .clickable {
+                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            cm.setPrimaryClip(ClipData.newPlainText("Cell Value", cellVal))
+                            Toast.makeText(context, "Copied cell value", Toast.LENGTH_SHORT).show()
+                        }
+                        .padding(horizontal = 6.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "Copy", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF475569))
+                }
             }
         }
 
@@ -2872,7 +3192,7 @@ private fun SpreadsheetTableView(
                             textAlign = TextAlign.Center
                         )
 
-                        spreadsheet.headers.forEach { header ->
+                        sheetHeaders.forEach { header ->
                             Text(
                                 text = header,
                                 fontSize = textSize,
@@ -2909,26 +3229,1100 @@ private fun SpreadsheetTableView(
                             textAlign = TextAlign.Center
                         )
 
-                        spreadsheet.headers.indices.forEach { colIdx ->
+                        sheetHeaders.indices.forEach { colIdx ->
                             val cellVal = row.getOrNull(colIdx) ?: ""
                             val isMatch = searchQuery.isNotBlank() && cellVal.contains(searchQuery, ignoreCase = true)
+                            val isSelected = selectedCell?.first == index && selectedCell?.second == colIdx
 
-                            Text(
-                                text = cellVal,
-                                fontSize = textSize,
-                                color = Color(0xFF334155),
+                            Box(
                                 modifier = Modifier
                                     .width(150.dp)
-                                    .border(0.5.dp, Color(0xFFF1F5F9))
-                                    .then(if (isMatch) Modifier.background(Color(0xFFFEF08A)) else Modifier)
-                                    .padding(horizontal = cellPaddingH, vertical = cellPaddingV),
-                                maxLines = 3
-                            )
+                                    .then(
+                                        when {
+                                            isSelected -> Modifier
+                                                .background(Color(0xFFEFF6FF))
+                                                .border(2.dp, Color(0xFF0284C7))
+                                            isMatch -> Modifier
+                                                .background(Color(0xFFFEF08A))
+                                                .border(0.5.dp, Color(0xFFF1F5F9))
+                                            else -> Modifier.border(0.5.dp, Color(0xFFF1F5F9))
+                                        }
+                                    )
+                                    .clickable {
+                                        selectedCell = Pair(index, colIdx)
+                                    }
+                                    .padding(horizontal = cellPaddingH, vertical = cellPaddingV)
+                            ) {
+                                Text(
+                                    text = cellVal,
+                                    fontSize = textSize,
+                                    color = if (isSelected) Color(0xFF0284C7) else Color(0xFF334155),
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    maxLines = 3
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+// ==========================================
+// 2B. HTML WEB DOCUMENT VIEWER
+// ==========================================
+@Composable
+private fun HtmlDocumentViewer(
+    htmlDoc: ParsedDocumentContent.HtmlDocument,
+    zoomPercentage: Int,
+    searchQuery: String,
+    onToggleControls: () -> Unit = {}
+) {
+    var isSourceMode by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White)
+            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(14.dp))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFFF8FAFC))
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    color = Color(0xFFFFF7ED),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(
+                        text = "HTML",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFEA580C),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (isSourceMode) "Source Code" else "Rendered Web Preview",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF334155)
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFE2E8F0))
+                    .padding(2.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (!isSourceMode) Color.White else Color.Transparent)
+                        .clickable { isSourceMode = false }
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "Preview",
+                        fontSize = 11.sp,
+                        fontWeight = if (!isSourceMode) FontWeight.Bold else FontWeight.Normal,
+                        color = if (!isSourceMode) Color(0xFF0F172A) else Color(0xFF64748B)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (isSourceMode) Color.White else Color.Transparent)
+                        .clickable { isSourceMode = true }
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "Source",
+                        fontSize = 11.sp,
+                        fontWeight = if (isSourceMode) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isSourceMode) Color(0xFF0F172A) else Color(0xFF64748B)
+                    )
+                }
+            }
+        }
+
+        HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 1.dp)
+
+        if (!isSourceMode) {
+            AndroidView(
+                factory = { ctx ->
+                    WebView(ctx).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.useWideViewPort = true
+                        settings.loadWithOverviewMode = true
+                        settings.builtInZoomControls = true
+                        settings.displayZoomControls = false
+                        settings.textZoom = zoomPercentage.coerceIn(50, 300)
+                        setBackgroundColor(android.graphics.Color.WHITE)
+                        loadDataWithBaseURL(null, htmlDoc.htmlContent, "text/html", "UTF-8", null)
+                    }
+                },
+                update = { webView ->
+                    webView.settings.textZoom = zoomPercentage.coerceIn(50, 300)
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = { onToggleControls() })
+                    }
+            )
+        } else {
+            PlainTextViewer(
+                textDoc = ParsedDocumentContent.PlainText(
+                    title = htmlDoc.title,
+                    text = htmlDoc.rawSource,
+                    linesCount = htmlDoc.rawSource.lines().size
+                ),
+                fileFormat = "HTML",
+                zoomPercentage = zoomPercentage,
+                searchQuery = searchQuery,
+                onToggleControls = onToggleControls
+            )
+        }
+    }
+}
+
+// ==========================================
+// 2C. MARKDOWN DOCUMENT VIEWER
+// ==========================================
+private sealed class MarkdownBlock {
+    data class Header(val level: Int, val text: String) : MarkdownBlock()
+    data class BulletItem(val text: String) : MarkdownBlock()
+    data class NumberedItem(val index: Int, val text: String) : MarkdownBlock()
+    data class Blockquote(val text: String) : MarkdownBlock()
+    data class CodeBlock(val code: String, val language: String) : MarkdownBlock()
+    data class Table(val headers: List<String>, val rows: List<List<String>>) : MarkdownBlock()
+    object Divider : MarkdownBlock()
+    data class Paragraph(val text: String) : MarkdownBlock()
+}
+
+private fun parseMarkdownBlocks(text: String): List<MarkdownBlock> {
+    val blocks = mutableListOf<MarkdownBlock>()
+    val lines = text.lines()
+    var i = 0
+    val total = lines.size
+
+    while (i < total) {
+        val line = lines[i]
+        val trimmed = line.trim()
+
+        when {
+            trimmed.isEmpty() -> {
+                i++
+            }
+            trimmed.startsWith("```") -> {
+                val lang = trimmed.removePrefix("```").trim()
+                val codeLines = mutableListOf<String>()
+                i++
+                while (i < total && !lines[i].trim().startsWith("```")) {
+                    codeLines.add(lines[i])
+                    i++
+                }
+                if (i < total) i++
+                blocks.add(MarkdownBlock.CodeBlock(codeLines.joinToString("\n"), lang))
+            }
+            trimmed.startsWith("# ") -> {
+                blocks.add(MarkdownBlock.Header(1, trimmed.removePrefix("# ").trim()))
+                i++
+            }
+            trimmed.startsWith("## ") -> {
+                blocks.add(MarkdownBlock.Header(2, trimmed.removePrefix("## ").trim()))
+                i++
+            }
+            trimmed.startsWith("### ") -> {
+                blocks.add(MarkdownBlock.Header(3, trimmed.removePrefix("### ").trim()))
+                i++
+            }
+            trimmed == "---" || trimmed == "***" || trimmed == "___" -> {
+                blocks.add(MarkdownBlock.Divider)
+                i++
+            }
+            trimmed.startsWith("> ") -> {
+                blocks.add(MarkdownBlock.Blockquote(trimmed.removePrefix("> ").trim()))
+                i++
+            }
+            trimmed.startsWith("* ") || trimmed.startsWith("- ") || trimmed.startsWith("+ ") -> {
+                blocks.add(MarkdownBlock.BulletItem(trimmed.substring(2).trim()))
+                i++
+            }
+            Regex("""^\d+\.\s""").containsMatchIn(trimmed) -> {
+                val num = trimmed.substringBefore('.').toIntOrNull() ?: 1
+                val content = trimmed.substringAfter(". ").trim()
+                blocks.add(MarkdownBlock.NumberedItem(num, content))
+                i++
+            }
+            trimmed.startsWith("|") && trimmed.endsWith("|") -> {
+                val tableLines = mutableListOf<String>()
+                while (i < total && lines[i].trim().startsWith("|") && lines[i].trim().endsWith("|")) {
+                    tableLines.add(lines[i].trim())
+                    i++
+                }
+                if (tableLines.isNotEmpty()) {
+                    val headerLine = tableLines.first()
+                    val headers = headerLine.split("|").filter { it.isNotBlank() }.map { it.trim() }
+                    val dataRows = tableLines.drop(1).filter { !it.contains("---") }.map { r ->
+                        r.split("|").filter { it.isNotBlank() }.map { it.trim() }
+                    }
+                    blocks.add(MarkdownBlock.Table(headers, dataRows))
+                }
+            }
+            else -> {
+                blocks.add(MarkdownBlock.Paragraph(trimmed))
+                i++
+            }
+        }
+    }
+    return blocks
+}
+
+@Composable
+private fun RenderMarkdownBlock(
+    block: MarkdownBlock,
+    scaleFactor: Float,
+    searchQuery: String,
+    context: Context
+) {
+    val isMatch = searchQuery.isNotBlank() && when (block) {
+        is MarkdownBlock.Header -> block.text.contains(searchQuery, ignoreCase = true)
+        is MarkdownBlock.Paragraph -> block.text.contains(searchQuery, ignoreCase = true)
+        is MarkdownBlock.BulletItem -> block.text.contains(searchQuery, ignoreCase = true)
+        is MarkdownBlock.NumberedItem -> block.text.contains(searchQuery, ignoreCase = true)
+        is MarkdownBlock.Blockquote -> block.text.contains(searchQuery, ignoreCase = true)
+        is MarkdownBlock.CodeBlock -> block.code.contains(searchQuery, ignoreCase = true)
+        else -> false
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (isMatch) Modifier.background(Color(0xFFFEF08A)) else Modifier)
+    ) {
+        when (block) {
+            is MarkdownBlock.Header -> {
+                Column {
+                    Text(
+                        text = block.text,
+                        fontSize = when (block.level) {
+                            1 -> (22 * scaleFactor).sp
+                            2 -> (18 * scaleFactor).sp
+                            else -> (15 * scaleFactor).sp
+                        },
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F172A)
+                    )
+                    if (block.level == 1) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 1.dp)
+                    }
+                }
+            }
+            is MarkdownBlock.Paragraph -> {
+                Text(
+                    text = block.text,
+                    fontSize = (13 * scaleFactor).sp,
+                    color = Color(0xFF334155),
+                    lineHeight = (19 * scaleFactor).sp
+                )
+            }
+            is MarkdownBlock.BulletItem -> {
+                Row(modifier = Modifier.padding(start = 8.dp)) {
+                    Text(text = "•", fontSize = (14 * scaleFactor).sp, color = Color(0xFF55A9AF), modifier = Modifier.padding(end = 8.dp))
+                    Text(text = block.text, fontSize = (13 * scaleFactor).sp, color = Color(0xFF334155))
+                }
+            }
+            is MarkdownBlock.NumberedItem -> {
+                Row(modifier = Modifier.padding(start = 8.dp)) {
+                    Text(text = "${block.index}.", fontSize = (13 * scaleFactor).sp, fontWeight = FontWeight.Bold, color = Color(0xFF55A9AF), modifier = Modifier.padding(end = 8.dp))
+                    Text(text = block.text, fontSize = (13 * scaleFactor).sp, color = Color(0xFF334155))
+                }
+            }
+            is MarkdownBlock.Blockquote -> {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFFF8FAFC))
+                        .border(BorderStroke(3.dp, Color(0xFF55A9AF)), RoundedCornerShape(topStart = 4.dp, bottomStart = 4.dp))
+                        .padding(10.dp)
+                ) {
+                    Text(
+                        text = block.text,
+                        fontSize = (13 * scaleFactor).sp,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        color = Color(0xFF475569)
+                    )
+                }
+            }
+            is MarkdownBlock.CodeBlock -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF0F172A))
+                        .padding(12.dp)
+                ) {
+                    if (block.language.isNotBlank()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = block.language.uppercase(),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF94A3B8)
+                            )
+                            IconButton(
+                                onClick = {
+                                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    cm.setPrimaryClip(ClipData.newPlainText("Code", block.code))
+                                    Toast.makeText(context, "Code copied", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = "Copy", tint = Color(0xFF94A3B8), modifier = Modifier.size(14.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                    Text(
+                        text = block.code,
+                        fontSize = (12 * scaleFactor).sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color(0xFFE2E8F0),
+                        modifier = Modifier.horizontalScroll(rememberScrollState())
+                    )
+                }
+            }
+            is MarkdownBlock.Table -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(8.dp))
+                        .horizontalScroll(rememberScrollState())
+                ) {
+                    Row(modifier = Modifier.background(Color(0xFFF1F5F9))) {
+                        block.headers.forEach { h ->
+                            Text(
+                                text = h,
+                                fontSize = (12 * scaleFactor).sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1E293B),
+                                modifier = Modifier
+                                    .width(130.dp)
+                                    .padding(8.dp)
+                            )
+                        }
+                    }
+                    block.rows.forEachIndexed { rIdx, row ->
+                        Row(modifier = Modifier.background(if (rIdx % 2 == 1) Color(0xFFF8FAFC) else Color.White)) {
+                            block.headers.indices.forEach { colIdx ->
+                                Text(
+                                    text = row.getOrNull(colIdx) ?: "",
+                                    fontSize = (12 * scaleFactor).sp,
+                                    color = Color(0xFF334155),
+                                    modifier = Modifier
+                                        .width(130.dp)
+                                        .padding(8.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            is MarkdownBlock.Divider -> {
+                HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 1.dp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MarkdownDocumentViewer(
+    markdownDoc: ParsedDocumentContent.MarkdownDocument,
+    zoomPercentage: Int,
+    searchQuery: String,
+    onToggleControls: () -> Unit = {}
+) {
+    var isRawMode by remember { mutableStateOf(false) }
+    val scaleFactor = zoomPercentage / 100f
+    val context = LocalContext.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White)
+            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(14.dp))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFFF8FAFC))
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    color = Color(0xFFF1F5F9),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(
+                        text = "MARKDOWN",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF475569),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (isRawMode) "Raw Markdown" else "Formatted Preview",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF334155)
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFE2E8F0))
+                    .padding(2.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (!isRawMode) Color.White else Color.Transparent)
+                        .clickable { isRawMode = false }
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "Rendered",
+                        fontSize = 11.sp,
+                        fontWeight = if (!isRawMode) FontWeight.Bold else FontWeight.Normal,
+                        color = if (!isRawMode) Color(0xFF0F172A) else Color(0xFF64748B)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (isRawMode) Color.White else Color.Transparent)
+                        .clickable { isRawMode = true }
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "Raw",
+                        fontSize = 11.sp,
+                        fontWeight = if (isRawMode) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isRawMode) Color(0xFF0F172A) else Color(0xFF64748B)
+                    )
+                }
+            }
+        }
+
+        HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 1.dp)
+
+        if (!isRawMode) {
+            val blocks = remember(markdownDoc.markdownText) {
+                parseMarkdownBlocks(markdownDoc.markdownText)
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = { onToggleControls() })
+                    }
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                blocks.forEach { block ->
+                    RenderMarkdownBlock(block, scaleFactor, searchQuery, context)
+                }
+            }
+        } else {
+            PlainTextViewer(
+                textDoc = ParsedDocumentContent.PlainText(
+                    title = markdownDoc.title,
+                    text = markdownDoc.rawSource,
+                    linesCount = markdownDoc.rawSource.lines().size
+                ),
+                fileFormat = "MD",
+                zoomPercentage = zoomPercentage,
+                searchQuery = searchQuery,
+                onToggleControls = onToggleControls
+            )
+        }
+    }
+}
+
+// ==========================================
+// 2D. STRUCTURED CODE VIEWER (JSON & XML)
+// ==========================================
+@Composable
+private fun RenderSyntaxCodeLine(line: String, dataType: String, fontSize: androidx.compose.ui.unit.TextUnit) {
+    if (dataType == "JSON") {
+        val keyRegex = Regex("""^(\s*)(".*?")(\s*:\s*)(.*)$""")
+        val match = keyRegex.find(line)
+        if (match != null) {
+            val indent = match.groupValues[1]
+            val key = match.groupValues[2]
+            val colon = match.groupValues[3]
+            val rest = match.groupValues[4]
+
+            Row {
+                if (indent.isNotEmpty()) {
+                    Text(text = indent, fontSize = fontSize, fontFamily = FontFamily.Monospace)
+                }
+                Text(text = key, fontSize = fontSize, color = Color(0xFF0284C7), fontWeight = FontWeight.Medium, fontFamily = FontFamily.Monospace)
+                Text(text = colon, fontSize = fontSize, color = Color(0xFF64748B), fontFamily = FontFamily.Monospace)
+                val restColor = when {
+                    rest.startsWith("\"") -> Color(0xFF16A34A)
+                    rest.trim().startsWith("true") || rest.trim().startsWith("false") -> Color(0xFFD97706)
+                    rest.trim().startsWith("null") -> Color(0xFF94A3B8)
+                    rest.trim().firstOrNull()?.isDigit() == true || rest.trim().startsWith("-") -> Color(0xFFD97706)
+                    else -> Color(0xFF0F172A)
+                }
+                Text(text = rest, fontSize = fontSize, color = restColor, fontFamily = FontFamily.Monospace)
+            }
+            return
+        }
+    } else if (dataType == "XML") {
+        val tagRegex = Regex("""^(<\/?)([a-zA-Z0-9_\-:]+)(.*?)(\/?>)$""")
+        val match = tagRegex.find(line.trim())
+        if (match != null) {
+            val indentLen = line.indexOf('<').coerceAtLeast(0)
+            val indent = " ".repeat(indentLen)
+            Row {
+                if (indent.isNotEmpty()) {
+                    Text(text = indent, fontSize = fontSize, fontFamily = FontFamily.Monospace)
+                }
+                Text(text = match.groupValues[1], fontSize = fontSize, color = Color(0xFF64748B), fontFamily = FontFamily.Monospace)
+                Text(text = match.groupValues[2], fontSize = fontSize, color = Color(0xFF2563EB), fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                Text(text = match.groupValues[3], fontSize = fontSize, color = Color(0xFFD97706), fontFamily = FontFamily.Monospace)
+                Text(text = match.groupValues[4], fontSize = fontSize, color = Color(0xFF64748B), fontFamily = FontFamily.Monospace)
+            }
+            return
+        }
+    }
+    Text(
+        text = line,
+        fontSize = fontSize,
+        color = Color(0xFF0F172A),
+        fontFamily = FontFamily.Monospace
+    )
+}
+
+@Composable
+private fun StructuredCodeViewer(
+    codeDoc: ParsedDocumentContent.StructuredData,
+    zoomPercentage: Int,
+    searchQuery: String,
+    onToggleControls: () -> Unit = {}
+) {
+    val scaleFactor = zoomPercentage / 100f
+    val bodySize = (13 * scaleFactor).sp
+    val context = LocalContext.current
+    val lines = remember(codeDoc.formattedContent) { codeDoc.formattedContent.lines() }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White)
+            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(14.dp))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFFF8FAFC))
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    color = if (codeDoc.dataType == "JSON") Color(0xFFE0F2FE) else Color(0xFFEDE9FE),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(
+                        text = codeDoc.dataType,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (codeDoc.dataType == "JSON") Color(0xFF0369A1) else Color(0xFF6D28D9),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "${lines.size} Lines · Formatted",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF64748B)
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFFE2E8F0))
+                    .clickable {
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("Formatted ${codeDoc.dataType}", codeDoc.formattedContent))
+                        Toast.makeText(context, "Copied ${codeDoc.dataType} to clipboard", Toast.LENGTH_SHORT).show()
+                    }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "Copy",
+                    tint = Color(0xFF475569),
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Copy",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF334155)
+                )
+            }
+        }
+
+        HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 1.dp)
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = { onToggleControls() })
+                }
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .verticalScroll(rememberScrollState())
+                .horizontalScroll(rememberScrollState())
+        ) {
+            Column {
+                lines.forEachIndexed { idx, line ->
+                    val isMatch = searchQuery.isNotBlank() && line.contains(searchQuery, ignoreCase = true)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(if (isMatch) Modifier.background(Color(0xFFFEF08A)) else Modifier),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${idx + 1}".padStart(4),
+                            fontSize = (bodySize.value * 0.85f).sp,
+                            color = Color(0xFF94A3B8),
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(end = 12.dp)
+                        )
+                        RenderSyntaxCodeLine(line, codeDoc.dataType, bodySize)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// 2E. LOG DOCUMENT VIEWER (LOG)
+// ==========================================
+@Composable
+private fun FilterChipPill(
+    label: String,
+    isSelected: Boolean,
+    badgeColor: Color,
+    bgColor: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        color = if (isSelected) badgeColor else bgColor,
+        shape = RoundedCornerShape(6.dp),
+        modifier = Modifier.clickable { onClick() }
+    ) {
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (isSelected) Color.White else badgeColor,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun LogDocumentViewer(
+    logDoc: ParsedDocumentContent.LogDocument,
+    zoomPercentage: Int,
+    searchQuery: String,
+    onToggleControls: () -> Unit = {}
+) {
+    var selectedLevelFilter by remember { mutableStateOf("ALL") }
+    val scaleFactor = zoomPercentage / 100f
+    val bodySize = (12 * scaleFactor).sp
+
+    val filteredLines = remember(logDoc.lines, selectedLevelFilter, searchQuery) {
+        logDoc.lines.filter { item ->
+            val matchesFilter = when (selectedLevelFilter) {
+                "ERROR" -> item.level in listOf("ERROR", "FATAL", "CRITICAL")
+                "WARN" -> item.level in listOf("WARN", "WARNING")
+                "INFO" -> item.level == "INFO"
+                else -> true
+            }
+            val matchesSearch = if (searchQuery.isBlank()) true
+            else item.rawLine.contains(searchQuery, ignoreCase = true)
+            matchesFilter && matchesSearch
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White)
+            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(14.dp))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFFF8FAFC))
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChipPill(
+                label = "All (${logDoc.lines.size})",
+                isSelected = selectedLevelFilter == "ALL",
+                badgeColor = Color(0xFF475569),
+                bgColor = Color(0xFFF1F5F9),
+                onClick = { selectedLevelFilter = "ALL" }
+            )
+
+            if (logDoc.errorCount > 0) {
+                FilterChipPill(
+                    label = "Errors (${logDoc.errorCount})",
+                    isSelected = selectedLevelFilter == "ERROR",
+                    badgeColor = Color(0xFFDC2626),
+                    bgColor = Color(0xFFFEE2E2),
+                    onClick = { selectedLevelFilter = if (selectedLevelFilter == "ERROR") "ALL" else "ERROR" }
+                )
+            }
+
+            if (logDoc.warnCount > 0) {
+                FilterChipPill(
+                    label = "Warn (${logDoc.warnCount})",
+                    isSelected = selectedLevelFilter == "WARN",
+                    badgeColor = Color(0xFFD97706),
+                    bgColor = Color(0xFFFEF3C7),
+                    onClick = { selectedLevelFilter = if (selectedLevelFilter == "WARN") "ALL" else "WARN" }
+                )
+            }
+
+            if (logDoc.infoCount > 0) {
+                FilterChipPill(
+                    label = "Info (${logDoc.infoCount})",
+                    isSelected = selectedLevelFilter == "INFO",
+                    badgeColor = Color(0xFF2563EB),
+                    bgColor = Color(0xFFEFF6FF),
+                    onClick = { selectedLevelFilter = if (selectedLevelFilter == "INFO") "ALL" else "INFO" }
+                )
+            }
+        }
+
+        HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 1.dp)
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = { onToggleControls() })
+                }
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .verticalScroll(rememberScrollState())
+                .horizontalScroll(rememberScrollState())
+        ) {
+            Column {
+                filteredLines.forEach { item ->
+                    val isMatch = searchQuery.isNotBlank() && item.rawLine.contains(searchQuery, ignoreCase = true)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(if (isMatch) Modifier.background(Color(0xFFFEF08A)) else Modifier)
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${item.lineNumber}".padStart(4),
+                            fontSize = (bodySize.value * 0.85f).sp,
+                            color = Color(0xFF94A3B8),
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+
+                        val levelBadgeBg = when (item.level) {
+                            "ERROR", "FATAL", "CRITICAL" -> Color(0xFFFEE2E2)
+                            "WARN", "WARNING" -> Color(0xFFFEF3C7)
+                            "INFO" -> Color(0xFFEFF6FF)
+                            else -> Color(0xFFF1F5F9)
+                        }
+                        val levelBadgeText = when (item.level) {
+                            "ERROR", "FATAL", "CRITICAL" -> Color(0xFFDC2626)
+                            "WARN", "WARNING" -> Color(0xFFD97706)
+                            "INFO" -> Color(0xFF2563EB)
+                            else -> Color(0xFF64748B)
+                        }
+
+                        Surface(
+                            color = levelBadgeBg,
+                            shape = RoundedCornerShape(3.dp),
+                            modifier = Modifier.padding(end = 6.dp)
+                        ) {
+                            Text(
+                                text = item.level.take(5),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = levelBadgeText,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+
+                        if (item.timestamp.isNotBlank()) {
+                            Text(
+                                text = item.timestamp,
+                                fontSize = (bodySize.value * 0.9f).sp,
+                                color = Color(0xFF64748B),
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                        }
+
+                        Text(
+                            text = item.message,
+                            fontSize = bodySize,
+                            color = Color(0xFF0F172A),
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// 2F. ZIP ARCHIVE CONTENTS VIEWER (ZIP)
+// ==========================================
+@Composable
+private fun ZipArchiveViewer(
+    archiveDoc: ParsedDocumentContent.ArchiveDocument,
+    searchQuery: String,
+    onToggleControls: () -> Unit = {}
+) {
+    val context = LocalContext.current
+    var extractedFileToOpen by remember { mutableStateOf<File?>(null) }
+    var extractionError by remember { mutableStateOf<String?>(null) }
+
+    val filteredEntries = remember(archiveDoc.entries, searchQuery) {
+        if (searchQuery.isBlank()) archiveDoc.entries
+        else archiveDoc.entries.filter { it.path.contains(searchQuery, ignoreCase = true) }
+    }
+
+    val dirCount = remember(archiveDoc.entries) { archiveDoc.entries.count { it.isDirectory } }
+    val fileCount = remember(archiveDoc.entries) { archiveDoc.entries.size - dirCount }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White)
+            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(14.dp))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFFF8FAFC))
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    color = Color(0xFFEEF2FF),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(
+                        text = "ZIP ARCHIVE",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF4F46E5),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "$fileCount Files · $dirCount Folders",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF334155)
+                )
+            }
+
+            Text(
+                text = "${LocalFileManager.formatFileSize(archiveDoc.totalSizeBytes)} total",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF64748B)
+            )
+        }
+
+        HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 1.dp)
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = { onToggleControls() })
+                }
+                .padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            itemsIndexed(filteredEntries) { _, entry ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (entry.isDirectory) Color(0xFFF8FAFC) else Color.White)
+                        .clickable {
+                            if (!entry.isDirectory) {
+                                try {
+                                    val safeName = entry.name.ifBlank { "extracted_file" }
+                                    val targetFile = File(context.cacheDir, "extracted_${System.currentTimeMillis()}_$safeName")
+                                    val ok = DocumentContentParser.extractZipEntry(
+                                        archiveDoc.zipBytes,
+                                        entry.path,
+                                        targetFile
+                                    )
+                                    if (ok) {
+                                        extractedFileToOpen = targetFile
+                                    } else {
+                                        extractionError = "Could not extract ${entry.name}"
+                                    }
+                                } catch (e: Exception) {
+                                    extractionError = "Extraction failed: ${e.localizedMessage}"
+                                }
+                            }
+                        }
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (entry.isDirectory) Icons.Default.GridView else Icons.Default.Description,
+                        contentDescription = null,
+                        tint = if (entry.isDirectory) Color(0xFFF59E0B) else when (entry.extension) {
+                            "PDF" -> Color(0xFFDC2626)
+                            "DOC", "DOCX" -> Color(0xFF2563EB)
+                            "PPT", "PPTX" -> Color(0xFFD97706)
+                            "XLS", "XLSX", "CSV", "TSV" -> Color(0xFF059669)
+                            "PNG", "JPG", "JPEG" -> Color(0xFF7C3AED)
+                            else -> Color(0xFF64748B)
+                        },
+                        modifier = Modifier.size(24.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = entry.name.ifBlank { entry.path },
+                            fontSize = 13.sp,
+                            fontWeight = if (entry.isDirectory) FontWeight.SemiBold else FontWeight.Medium,
+                            color = Color(0xFF0F172A),
+                            maxLines = 1
+                        )
+                        if (entry.path != entry.name && entry.path.contains("/")) {
+                            Text(
+                                text = entry.path,
+                                fontSize = 11.sp,
+                                color = Color(0xFF94A3B8),
+                                maxLines = 1
+                            )
+                        }
+                    }
+
+                    if (!entry.isDirectory) {
+                        Text(
+                            text = LocalFileManager.formatFileSize(entry.sizeBytes),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF64748B)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (extractedFileToOpen != null) {
+        val target = extractedFileToOpen!!
+        AlertDialog(
+            onDismissRequest = { extractedFileToOpen = null },
+            title = { Text("Extracted File", fontWeight = FontWeight.Bold) },
+            text = { Text("Successfully extracted '${target.name}'. Would you like to view this file?") },
+            confirmButton = {
+                Button(onClick = {
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        target
+                    )
+                    val mime = LocalFileManager.resolveMimeType(target.name)
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, mime)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    try {
+                        context.startActivity(Intent.createChooser(intent, "Open Extracted File"))
+                    } catch (_: Exception) {
+                        Toast.makeText(context, "No app available to open this file", Toast.LENGTH_SHORT).show()
+                    }
+                    extractedFileToOpen = null
+                }) {
+                    Text("View File")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { extractedFileToOpen = null }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    if (extractionError != null) {
+        Toast.makeText(context, extractionError, Toast.LENGTH_SHORT).show()
+        extractionError = null
     }
 }
 

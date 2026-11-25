@@ -19,10 +19,18 @@ sealed class ParsedDocumentContent {
         val slides: List<SlideData>
     ) : ParsedDocumentContent()
 
+    data class SpreadsheetSheet(
+        val name: String,
+        val headers: List<String>,
+        val rows: List<List<String>>
+    )
+
     data class Spreadsheet(
         val title: String,
         val headers: List<String>,
-        val rows: List<List<String>>
+        val rows: List<List<String>>,
+        val sheets: List<SpreadsheetSheet> = emptyList(),
+        val activeSheetIndex: Int = 0
     ) : ParsedDocumentContent()
 
     data class RichDocument(
@@ -36,6 +44,80 @@ sealed class ParsedDocumentContent {
         val allImages: List<DocumentImage> = emptyList(),
         val allTables: List<DocumentTable> = emptyList()
     ) : ParsedDocumentContent()
+
+    data class HtmlDocument(
+        val title: String,
+        val htmlContent: String,
+        val rawSource: String
+    ) : ParsedDocumentContent()
+
+    data class MarkdownDocument(
+        val title: String,
+        val markdownText: String,
+        val rawSource: String
+    ) : ParsedDocumentContent()
+
+    data class StructuredData(
+        val title: String,
+        val formattedContent: String,
+        val rawContent: String,
+        val dataType: String // "JSON" or "XML"
+    ) : ParsedDocumentContent()
+
+    data class LogLine(
+        val lineNumber: Int,
+        val timestamp: String,
+        val level: String,
+        val message: String,
+        val rawLine: String
+    )
+
+    data class LogDocument(
+        val title: String,
+        val lines: List<LogLine>,
+        val rawContent: String,
+        val errorCount: Int = 0,
+        val warnCount: Int = 0,
+        val infoCount: Int = 0
+    ) : ParsedDocumentContent()
+
+    data class ArchiveEntry(
+        val path: String,
+        val name: String,
+        val sizeBytes: Long,
+        val compressedSizeBytes: Long,
+        val isDirectory: Boolean,
+        val lastModifiedMs: Long,
+        val extension: String
+    )
+
+    data class ArchiveDocument(
+        val title: String,
+        val entries: List<ArchiveEntry>,
+        val totalSizeBytes: Long,
+        val totalCompressedBytes: Long,
+        val zipBytes: ByteArray
+    ) : ParsedDocumentContent() {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+            other as ArchiveDocument
+            if (title != other.title) return false
+            if (entries != other.entries) return false
+            if (totalSizeBytes != other.totalSizeBytes) return false
+            if (totalCompressedBytes != other.totalCompressedBytes) return false
+            return zipBytes.contentEquals(other.zipBytes)
+        }
+
+        override fun hashCode(): Int {
+            var result = title.hashCode()
+            result = 31 * result + entries.hashCode()
+            result = 31 * result + totalSizeBytes.hashCode()
+            result = 31 * result + totalCompressedBytes.hashCode()
+            result = 31 * result + zipBytes.contentHashCode()
+            return result
+        }
+    }
 
     data class PlainText(
         val title: String,
@@ -266,11 +348,11 @@ object DocumentContentParser {
 
         return try {
             when {
-                // Priority 1: PPT/PPTX presentations
+                // Priority 1: PPT/PPTX presentations (Strictly preserved)
                 zipHasPpt || isPptHint -> parsePresentation(bytes, fileName)
 
-                // Priority 2: Word documents
-                zipHasWord || isWordHint -> {
+                // Priority 2: Word documents (Strictly preserved)
+                zipHasWord || (isWordHint && rawExt != "rtf") -> {
                     if (isZip || rawExt == "docx") {
                         try {
                             val docx = parseDocx(bytes, fileName)
@@ -284,9 +366,9 @@ object DocumentContentParser {
                     }
                 }
 
-                // Priority 3: Excel spreadsheets
-                zipHasExcel || (isExcelHint && !isCsvHint) -> {
-                    if (isZip || rawExt == "xlsx") {
+                // Priority 3: Excel spreadsheets (Enhanced multi-sheet)
+                zipHasExcel || rawExt in listOf("xlsx", "xls", "xlsm", "xlsb", "ods") -> {
+                    if (isZip || rawExt == "xlsx" || rawExt == "xlsm") {
                         try {
                             parseXlsx(bytes, fileName)
                         } catch (_: Exception) {
@@ -297,11 +379,33 @@ object DocumentContentParser {
                     }
                 }
 
-                // Priority 4: CSV files
-                isCsvHint -> parseCsv(bytes, fileName)
+                // Priority 4: CSV & TSV
+                rawExt == "tsv" -> parseDelimited(bytes, fileName, '\t')
+                rawExt == "csv" || isCsvHint -> parseDelimited(bytes, fileName, null)
 
-                // Priority 5: Plain text & code
-                rawExt in listOf("txt", "json", "md", "xml", "html", "htm", "log", "rtf", "yaml", "yml", "kt", "java", "py", "sql") -> {
+                // Priority 5: HTML / HTM
+                rawExt in listOf("html", "htm") -> parseHtml(bytes, fileName)
+
+                // Priority 6: Markdown (MD)
+                rawExt == "md" -> parseMarkdown(bytes, fileName)
+
+                // Priority 7: JSON
+                rawExt == "json" -> parseJson(bytes, fileName)
+
+                // Priority 8: XML
+                rawExt == "xml" -> parseXml(bytes, fileName)
+
+                // Priority 9: LOG
+                rawExt == "log" -> parseLog(bytes, fileName)
+
+                // Priority 10: RTF
+                rawExt == "rtf" -> parseRtf(bytes, fileName)
+
+                // Priority 11: ZIP Archive
+                rawExt == "zip" -> parseZip(bytes, fileName)
+
+                // Priority 12: Plain text & code
+                rawExt in listOf("txt", "yaml", "yml", "kt", "java", "py", "sql", "sh", "bat", "ini", "conf", "properties") -> {
                     parsePlainText(bytes, fileName)
                 }
 
@@ -310,10 +414,13 @@ object DocumentContentParser {
                     val pptx = parsePptx(bytes, fileName)
                     if (pptx != null && pptx.slides.isNotEmpty()) pptx
                     else {
-                        try { parseDocx(bytes, fileName) }
-                        catch (_: Exception) {
+                        try {
+                            val docx = parseDocx(bytes, fileName)
+                            if (docx.pages.isNotEmpty() && docx.fullText.isNotBlank()) docx
+                            else parseZip(bytes, fileName)
+                        } catch (_: Exception) {
                             try { parseXlsx(bytes, fileName) }
-                            catch (_: Exception) { parseFallback(bytes, fileName) }
+                            catch (_: Exception) { parseZip(bytes, fileName) }
                         }
                     }
                 }
@@ -1783,105 +1890,190 @@ object DocumentContentParser {
     }
 
     // ==========================================
-    // 3. SPREADSHEET PARSERS (XLSX, XLS, CSV)
+    // 3. SPREADSHEET PARSERS (XLSX, XLS, CSV, TSV)
     // ==========================================
+
+    private fun columnLetterToIndex(colStr: String): Int {
+        var index = 0
+        for (ch in colStr.uppercase()) {
+            if (ch in 'A'..'Z') {
+                index = index * 26 + (ch - 'A' + 1)
+            }
+        }
+        return (index - 1).coerceAtLeast(0)
+    }
 
     private fun parseXlsx(bytes: ByteArray, fileName: String): ParsedDocumentContent {
         val zip = ZipInputStream(ByteArrayInputStream(bytes))
         var entry = zip.nextEntry
         val sharedStrings = mutableListOf<String>()
-        var sheetXml: String? = null
 
         val byteEntries = mutableMapOf<String, ByteArray>()
         while (entry != null) {
             val name = entry.name.replace('\\', '/')
-            if (name.contains("sharedStrings.xml", ignoreCase = true) || name.contains("worksheets/sheet", ignoreCase = true)) {
-                val out = ByteArrayOutputStream()
-                val buf = ByteArray(4096)
-                var len: Int
-                while (zip.read(buf).also { len = it } > 0) {
-                    out.write(buf, 0, len)
-                }
-                byteEntries[name.lowercase()] = out.toByteArray()
+            val out = ByteArrayOutputStream()
+            val buf = ByteArray(4096)
+            var len: Int
+            while (zip.read(buf).also { len = it } > 0) {
+                out.write(buf, 0, len)
             }
+            byteEntries[name.lowercase()] = out.toByteArray()
             entry = zip.nextEntry
         }
 
+        // 1. Parse Shared Strings
         val sstEntryKey = byteEntries.keys.firstOrNull { it.contains("sharedstrings.xml") }
         if (sstEntryKey != null) {
             val sstXml = String(byteEntries[sstEntryKey]!!, StandardCharsets.UTF_8)
-            val tRegex = Regex("<t[^>]*>(.*?)</t>")
+            val tRegex = Regex("<t[^>]*>(.*?)</t>", RegexOption.DOT_MATCHES_ALL)
             for (m in tRegex.findAll(sstXml)) {
                 sharedStrings.add(unescapeXml(m.groupValues[1]))
             }
         }
 
-        val firstSheetKey = byteEntries.keys.firstOrNull { it.contains("worksheets/sheet") }
-        if (firstSheetKey != null) {
-            sheetXml = String(byteEntries[firstSheetKey]!!, StandardCharsets.UTF_8)
-        }
-
-        if (sheetXml.isNullOrBlank()) {
-            return ParsedDocumentContent.Error("Unable to locate worksheet in Excel workbook.")
-        }
-
-        val rows = mutableListOf<List<String>>()
-        val rowRegex = Regex("<row[ >](.*?)</row>", RegexOption.DOT_MATCHES_ALL)
-        val cellRegex = Regex("<c[^>]*r=\"([A-Z]+[0-9]+)\"[^>]*(?:t=\"([^\"]*)\")?[^>]*>(.*?)</c>", RegexOption.DOT_MATCHES_ALL)
-        val vRegex = Regex("<v>(.*?)</v>")
-        val inlineStrRegex = Regex("<is><t[^>]*>(.*?)</t></is>")
-
-        for (rowMatch in rowRegex.findAll(sheetXml)) {
-            val rowContent = rowMatch.value
-            val cellList = mutableListOf<String>()
-
-            for (cellMatch in cellRegex.findAll(rowContent)) {
-                val cellType = cellMatch.groupValues[2]
-                val cellBody = cellMatch.groupValues[3]
-
-                var cellVal = ""
-                if (cellType == "s") {
-                    val idx = vRegex.find(cellBody)?.groupValues?.get(1)?.toIntOrNull()
-                    if (idx != null && idx in 0 until sharedStrings.size) {
-                        cellVal = sharedStrings[idx]
-                    }
-                } else if (cellType == "inlineStr") {
-                    cellVal = inlineStrRegex.find(cellBody)?.groupValues?.get(1) ?: ""
-                } else {
-                    cellVal = vRegex.find(cellBody)?.groupValues?.get(1) ?: ""
+        // 2. Discover Worksheets (from workbook.xml if present, else by path pattern)
+        val discoveredSheets = mutableListOf<Pair<String, String>>() // (SheetName, EntryKey)
+        val workbookKey = byteEntries.keys.firstOrNull { it.contains("workbook.xml") && !it.contains(".rels") }
+        if (workbookKey != null) {
+            val wbXml = String(byteEntries[workbookKey]!!, StandardCharsets.UTF_8)
+            val sheetRegex = Regex("<sheet[^>]*name=\"([^\"]+)\"[^>]*(?:sheetId=\"([^\"]+)\")?[^>]*(?:r:id=\"([^\"]+)\")?", RegexOption.IGNORE_CASE)
+            var idx = 1
+            for (m in sheetRegex.findAll(wbXml)) {
+                val sName = m.groupValues[1]
+                val sId = m.groupValues[2].ifBlank { idx.toString() }
+                // Look for sheet matching sId
+                val candidateKey = byteEntries.keys.firstOrNull {
+                    it.contains("worksheets/sheet$sId.xml") || it.contains("worksheets/sheet$idx.xml")
                 }
-                cellList.add(unescapeXml(cellVal))
-            }
-
-            if (cellList.any { it.isNotBlank() }) {
-                rows.add(cellList)
+                if (candidateKey != null) {
+                    discoveredSheets.add(Pair(sName, candidateKey))
+                }
+                idx++
             }
         }
 
-        if (rows.isEmpty()) {
-            return ParsedDocumentContent.Spreadsheet(
-                title = fileName,
-                headers = listOf("A", "B", "C"),
-                rows = listOf(listOf("Empty spreadsheet"))
+        // Fallback discovery if workbook.xml wasn't parsed or yielded empty
+        if (discoveredSheets.isEmpty()) {
+            val sheetKeys = byteEntries.keys.filter { it.contains("worksheets/sheet") && it.endsWith(".xml") }.sorted()
+            sheetKeys.forEachIndexed { i, key ->
+                val num = Regex("""sheet(\d+)\.xml""").find(key)?.groupValues?.get(1) ?: (i + 1).toString()
+                discoveredSheets.add(Pair("Sheet $num", key))
+            }
+        }
+
+        if (discoveredSheets.isEmpty()) {
+            return ParsedDocumentContent.Error("Unable to locate worksheets in Excel workbook.")
+        }
+
+        val allSheets = mutableListOf<ParsedDocumentContent.SpreadsheetSheet>()
+        val rowRegex = Regex("<row[^>]*r=\"(\\d+)\"[^>]*>(.*?)</row>|<row[^>]*>(.*?)</row>", RegexOption.DOT_MATCHES_ALL)
+        val cellRegex = Regex("<c[^>]*r=\"([A-Z]+)(\\d+)\"[^>]*(?:t=\"([^\"]*)\")?[^>]*>(.*?)</c>|<c[^>]*(?:t=\"([^\"]*)\")?[^>]*>(.*?)</c>", RegexOption.DOT_MATCHES_ALL)
+        val vRegex = Regex("<v>(.*?)</v>", RegexOption.DOT_MATCHES_ALL)
+        val inlineStrRegex = Regex("<is>.*?<t[^>]*>(.*?)</t>.*?</is>", RegexOption.DOT_MATCHES_ALL)
+
+        for ((sheetName, sheetKey) in discoveredSheets) {
+            val sheetXmlBytes = byteEntries[sheetKey] ?: continue
+            val sheetXml = String(sheetXmlBytes, StandardCharsets.UTF_8)
+
+            val parsedRowList = mutableListOf<List<String>>()
+            var maxRowCols = 0
+
+            for (rowMatch in rowRegex.findAll(sheetXml)) {
+                val rowContent = rowMatch.value
+                val cellMap = mutableMapOf<Int, String>()
+                var sequentialCol = 0
+
+                for (cellMatch in cellRegex.findAll(rowContent)) {
+                    val colLetters = cellMatch.groupValues[1]
+                    val cellType = cellMatch.groupValues[3].ifBlank { cellMatch.groupValues[5] }
+                    val cellBody = cellMatch.groupValues[4].ifBlank { cellMatch.groupValues[6] }
+
+                    var cellVal = ""
+                    if (cellType == "s") {
+                        val sIdx = vRegex.find(cellBody)?.groupValues?.get(1)?.toIntOrNull()
+                        if (sIdx != null && sIdx in 0 until sharedStrings.size) {
+                            cellVal = sharedStrings[sIdx]
+                        }
+                    } else if (cellType == "inlineStr") {
+                        cellVal = inlineStrRegex.find(cellBody)?.groupValues?.get(1) ?: ""
+                    } else {
+                        cellVal = vRegex.find(cellBody)?.groupValues?.get(1) ?: ""
+                    }
+                    val cleanVal = unescapeXml(cellVal).trim()
+
+                    val targetCol = if (colLetters.isNotBlank()) {
+                        columnLetterToIndex(colLetters)
+                    } else {
+                        sequentialCol
+                    }
+                    cellMap[targetCol] = cleanVal
+                    sequentialCol = targetCol + 1
+                }
+
+                if (cellMap.isNotEmpty()) {
+                    val highestCol = cellMap.keys.maxOrNull() ?: 0
+                    if (highestCol + 1 > maxRowCols) maxRowCols = highestCol + 1
+                    val rowItems = ArrayList<String>(highestCol + 1)
+                    for (c in 0..highestCol) {
+                        rowItems.add(cellMap[c] ?: "")
+                    }
+                    if (rowItems.any { it.isNotBlank() }) {
+                        parsedRowList.add(rowItems)
+                    }
+                }
+            }
+
+            if (parsedRowList.isEmpty()) {
+                allSheets.add(
+                    ParsedDocumentContent.SpreadsheetSheet(
+                        name = sheetName,
+                        headers = listOf("A", "B", "C"),
+                        rows = listOf(listOf("Empty sheet"))
+                    )
+                )
+                continue
+            }
+
+            val sheetMaxCols = maxRowCols.coerceAtLeast(1)
+            val firstRow = parsedRowList.first()
+            val headers = firstRow.mapIndexed { idx, col ->
+                if (col.isNotBlank()) col else "Column ${('A'.code + (idx % 26)).toChar()}"
+            }.toMutableList()
+
+            while (headers.size < sheetMaxCols) {
+                headers.add("Column ${('A'.code + (headers.size % 26)).toChar()}")
+            }
+
+            val dataRows = if (parsedRowList.size > 1) {
+                parsedRowList.drop(1).map { r ->
+                    val padded = r.toMutableList()
+                    while (padded.size < sheetMaxCols) padded.add("")
+                    padded.toList()
+                }
+            } else {
+                parsedRowList
+            }
+
+            allSheets.add(
+                ParsedDocumentContent.SpreadsheetSheet(
+                    name = sheetName,
+                    headers = headers,
+                    rows = dataRows
+                )
             )
         }
 
-        val firstRow = rows.first()
-        val maxCols = rows.maxOf { it.size }
-        val headers = firstRow.mapIndexed { idx, col ->
-            if (col.isNotBlank()) col else "Column ${('A'.code + idx).toChar()}"
-        }.toMutableList()
-
-        while (headers.size < maxCols) {
-            headers.add("Column ${('A'.code + headers.size).toChar()}")
+        if (allSheets.isEmpty()) {
+            return ParsedDocumentContent.Error("No readable worksheet data found in Excel workbook.")
         }
 
-        val dataRows = if (rows.size > 1) rows.drop(1) else rows
-
+        val primarySheet = allSheets.first()
         return ParsedDocumentContent.Spreadsheet(
             title = fileName,
-            headers = headers,
-            rows = dataRows
+            headers = primarySheet.headers,
+            rows = primarySheet.rows,
+            sheets = allSheets,
+            activeSheetIndex = 0
         )
     }
 
@@ -1889,78 +2081,499 @@ object DocumentContentParser {
         val textLines = scanTextFromBinary(bytes)
 
         if (textLines.isEmpty()) {
-            return ParsedDocumentContent.Spreadsheet(
-                title = fileName,
+            val emptySheet = ParsedDocumentContent.SpreadsheetSheet(
+                name = "Sheet 1",
                 headers = listOf("Column A", "Column B"),
                 rows = listOf(listOf("Excel file opened", "No cell data detected"))
+            )
+            return ParsedDocumentContent.Spreadsheet(
+                title = fileName,
+                headers = emptySheet.headers,
+                rows = emptySheet.rows,
+                sheets = listOf(emptySheet)
             )
         }
 
         val rows = textLines.chunked(4).map { chunk ->
             chunk.map { it.trim() }
         }
+        val maxCols = rows.maxOfOrNull { it.size } ?: 2
+        val headers = listOf("A", "B", "C", "D").take(maxCols)
 
-        val headers = listOf("A", "B", "C", "D").take(rows.firstOrNull()?.size ?: 2)
-
-        return ParsedDocumentContent.Spreadsheet(
-            title = fileName,
+        val sheet = ParsedDocumentContent.SpreadsheetSheet(
+            name = "Sheet 1",
             headers = headers,
             rows = rows
         )
-    }
-
-    private fun parseCsv(bytes: ByteArray, fileName: String): ParsedDocumentContent {
-        val text = String(bytes, StandardCharsets.UTF_8)
-        val allLines = text.lines().filter { it.isNotBlank() }
-
-        if (allLines.isEmpty()) {
-            return ParsedDocumentContent.Spreadsheet(
-                title = fileName,
-                headers = listOf("Column 1"),
-                rows = listOf(listOf("Empty CSV file"))
-            )
-        }
-
-        val firstLine = allLines.first()
-        val sep = when {
-            firstLine.count { it == ',' } >= firstLine.count { it == ';' } &&
-                    firstLine.count { it == ',' } >= firstLine.count { it == '\t' } -> ','
-            firstLine.count { it == ';' } >= firstLine.count { it == '\t' } -> ';'
-            else -> '\t'
-        }
-
-        val rows = allLines.map { line -> parseCsvLine(line, sep) }
-        val headers = rows.first()
-        val dataRows = if (rows.size > 1) rows.drop(1) else rows
 
         return ParsedDocumentContent.Spreadsheet(
             title = fileName,
             headers = headers,
-            rows = dataRows
+            rows = rows,
+            sheets = listOf(sheet)
         )
     }
 
-    private fun parseCsvLine(line: String, sep: Char): List<String> {
-        val tokens = mutableListOf<String>()
-        val sb = java.lang.StringBuilder()
-        var inQuotes = false
+    private fun parseDelimited(bytes: ByteArray, fileName: String, delimiter: Char? = null): ParsedDocumentContent {
+        val text = String(bytes, StandardCharsets.UTF_8)
+        if (text.isBlank()) {
+            val emptySheet = ParsedDocumentContent.SpreadsheetSheet(
+                name = "Data",
+                headers = listOf("Column A"),
+                rows = listOf(listOf("Empty file"))
+            )
+            return ParsedDocumentContent.Spreadsheet(
+                title = fileName,
+                headers = emptySheet.headers,
+                rows = emptySheet.rows,
+                sheets = listOf(emptySheet)
+            )
+        }
 
-        for (ch in line) {
+        val sep = delimiter ?: run {
+            val firstLine = text.lineSequence().firstOrNull { it.isNotBlank() } ?: ""
             when {
-                ch == '\"' -> inQuotes = !inQuotes
-                ch == sep && !inQuotes -> {
-                    tokens.add(sb.toString().trim())
-                    sb.clear()
-                }
-                else -> sb.append(ch)
+                firstLine.count { it == '\t' } > firstLine.count { it == ',' } &&
+                        firstLine.count { it == '\t' } > firstLine.count { it == ';' } -> '\t'
+                firstLine.count { it == ';' } > firstLine.count { it == ',' } -> ';'
+                else -> ','
             }
         }
-        tokens.add(sb.toString().trim())
-        return tokens
+
+        val allRows = mutableListOf<List<String>>()
+        val currentRow = mutableListOf<String>()
+        val currentField = java.lang.StringBuilder()
+        var inQuotes = false
+        var i = 0
+        val len = text.length
+
+        while (i < len) {
+            val c = text[i]
+            when {
+                c == '\"' -> {
+                    if (inQuotes && i + 1 < len && text[i + 1] == '\"') {
+                        currentField.append('\"')
+                        i++
+                    } else {
+                        inQuotes = !inQuotes
+                    }
+                }
+                c == sep && !inQuotes -> {
+                    currentRow.add(currentField.toString().trim())
+                    currentField.setLength(0)
+                }
+                (c == '\r' || c == '\n') && !inQuotes -> {
+                    if (c == '\r' && i + 1 < len && text[i + 1] == '\n') {
+                        i++
+                    }
+                    currentRow.add(currentField.toString().trim())
+                    currentField.setLength(0)
+                    if (currentRow.any { it.isNotBlank() }) {
+                        allRows.add(currentRow.toList())
+                    }
+                    currentRow.clear()
+                }
+                else -> {
+                    currentField.append(c)
+                }
+            }
+            i++
+        }
+        if (currentField.isNotEmpty() || currentRow.isNotEmpty()) {
+            currentRow.add(currentField.toString().trim())
+            if (currentRow.any { it.isNotBlank() }) {
+                allRows.add(currentRow.toList())
+            }
+        }
+
+        if (allRows.isEmpty()) {
+            val emptySheet = ParsedDocumentContent.SpreadsheetSheet(
+                name = "Data",
+                headers = listOf("Column A"),
+                rows = listOf(listOf("Empty data"))
+            )
+            return ParsedDocumentContent.Spreadsheet(
+                title = fileName,
+                headers = emptySheet.headers,
+                rows = emptySheet.rows,
+                sheets = listOf(emptySheet)
+            )
+        }
+
+        val maxCols = allRows.maxOf { it.size }
+        val firstRow = allRows.first()
+        val headers = firstRow.mapIndexed { idx, col ->
+            if (col.isNotBlank()) col else "Column ${('A'.code + (idx % 26)).toChar()}"
+        }.toMutableList()
+
+        while (headers.size < maxCols) {
+            headers.add("Column ${('A'.code + (headers.size % 26)).toChar()}")
+        }
+
+        val dataRows = if (allRows.size > 1) {
+            allRows.drop(1).map { row ->
+                val padded = row.toMutableList()
+                while (padded.size < maxCols) padded.add("")
+                padded.toList()
+            }
+        } else {
+            allRows
+        }
+
+        val sheet = ParsedDocumentContent.SpreadsheetSheet(
+            name = if (sep == '\t') "TSV Data" else "CSV Data",
+            headers = headers,
+            rows = dataRows
+        )
+
+        return ParsedDocumentContent.Spreadsheet(
+            title = fileName,
+            headers = headers,
+            rows = dataRows,
+            sheets = listOf(sheet)
+        )
     }
 
     // ==========================================
-    // 4. PLAIN TEXT & FALLBACK PARSERS
+    // 4. RICH WEB & MARKDOWN PARSERS
+    // ==========================================
+
+    private fun parseHtml(bytes: ByteArray, fileName: String): ParsedDocumentContent {
+        val rawText = String(bytes, StandardCharsets.UTF_8)
+        var html = rawText.trim()
+        val viewportMeta = "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=3.0\">"
+        val modernStyle = """
+            <style>
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #0f172a;
+                    background-color: #ffffff;
+                    padding: 16px;
+                    margin: 0;
+                    word-wrap: break-word;
+                }
+                img { max-width: 100%; height: auto; border-radius: 6px; }
+                table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+                th, td { border: 1px solid #cbd5e1; padding: 8px 12px; text-align: left; }
+                th { background-color: #f8fafc; font-weight: 600; }
+                pre, code { font-family: monospace; background-color: #f1f5f9; border-radius: 4px; padding: 2px 6px; font-size: 90%; }
+                pre { padding: 12px; overflow-x: auto; }
+                blockquote { border-left: 4px solid #55A9AF; margin: 12px 0; padding-left: 14px; color: #475569; }
+                a { color: #0284c7; text-decoration: none; }
+            </style>
+        """.trimIndent()
+
+        if (!html.contains("<meta", ignoreCase = true) || !html.contains("viewport", ignoreCase = true)) {
+            if (html.contains("<head>", ignoreCase = true)) {
+                html = html.replaceFirst(Regex("<head>", RegexOption.IGNORE_CASE), "<head>\n$viewportMeta\n$modernStyle\n")
+            } else if (html.contains("<html>", ignoreCase = true)) {
+                html = html.replaceFirst(Regex("<html>", RegexOption.IGNORE_CASE), "<html>\n<head>\n$viewportMeta\n$modernStyle\n</head>\n")
+            } else {
+                html = "<!DOCTYPE html>\n<html>\n<head>\n$viewportMeta\n$modernStyle\n</head>\n<body>\n$html\n</body>\n</html>"
+            }
+        }
+
+        return ParsedDocumentContent.HtmlDocument(
+            title = fileName,
+            htmlContent = html,
+            rawSource = rawText
+        )
+    }
+
+    private fun parseMarkdown(bytes: ByteArray, fileName: String): ParsedDocumentContent {
+        val rawText = String(bytes, StandardCharsets.UTF_8)
+        return ParsedDocumentContent.MarkdownDocument(
+            title = fileName,
+            markdownText = rawText,
+            rawSource = rawText
+        )
+    }
+
+    // ==========================================
+    // 5. STRUCTURED DATA PARSERS (JSON & XML)
+    // ==========================================
+
+    private fun parseJson(bytes: ByteArray, fileName: String): ParsedDocumentContent {
+        val rawText = String(bytes, StandardCharsets.UTF_8)
+        val formatted = try {
+            val trimmed = rawText.trim()
+            if (trimmed.startsWith("{")) {
+                org.json.JSONObject(trimmed).toString(2)
+            } else if (trimmed.startsWith("[")) {
+                org.json.JSONArray(trimmed).toString(2)
+            } else {
+                rawText
+            }
+        } catch (_: Exception) {
+            rawText
+        }
+
+        return ParsedDocumentContent.StructuredData(
+            title = fileName,
+            formattedContent = formatted,
+            rawContent = rawText,
+            dataType = "JSON"
+        )
+    }
+
+    private fun parseXml(bytes: ByteArray, fileName: String): ParsedDocumentContent {
+        val rawText = String(bytes, StandardCharsets.UTF_8)
+        val formatted = try {
+            formatXmlString(rawText)
+        } catch (_: Exception) {
+            rawText
+        }
+
+        return ParsedDocumentContent.StructuredData(
+            title = fileName,
+            formattedContent = formatted,
+            rawContent = rawText,
+            dataType = "XML"
+        )
+    }
+
+    private fun formatXmlString(xml: String): String {
+        val sb = java.lang.StringBuilder()
+        var indent = 0
+        val tokens = xml.replace("><", ">\n<").lines()
+
+        for (rawToken in tokens) {
+            val token = rawToken.trim()
+            if (token.isEmpty()) continue
+
+            if (token.startsWith("</")) {
+                indent = (indent - 1).coerceAtLeast(0)
+            }
+
+            for (k in 0 until indent) sb.append("  ")
+            sb.append(token).append("\n")
+
+            if (token.startsWith("<") && !token.startsWith("</") && !token.startsWith("<?") && !token.startsWith("<!") && !token.endsWith("/>") && !token.contains("</")) {
+                indent++
+            }
+        }
+        return sb.toString().trimEnd()
+    }
+
+    // ==========================================
+    // 6. LOG & RTF PARSERS
+    // ==========================================
+
+    private fun parseLog(bytes: ByteArray, fileName: String): ParsedDocumentContent {
+        val rawText = String(bytes, StandardCharsets.UTF_8)
+        val allLines = rawText.lines()
+        val logLines = mutableListOf<ParsedDocumentContent.LogLine>()
+        var errorCount = 0
+        var warnCount = 0
+        var infoCount = 0
+
+        val timeRegex = Regex("""(\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?|\[\d{2}:\d{2}:\d{2}(?:\.\d+)?\])""")
+        val levelRegex = Regex("""\b(ERROR|FATAL|CRITICAL|WARN|WARNING|INFO|DEBUG|TRACE)\b""", RegexOption.IGNORE_CASE)
+
+        allLines.forEachIndexed { idx, line ->
+            val timeMatch = timeRegex.find(line)?.value ?: ""
+            val levelMatch = levelRegex.find(line)?.value?.uppercase() ?: "INFO"
+
+            when {
+                levelMatch in listOf("ERROR", "FATAL", "CRITICAL") -> errorCount++
+                levelMatch in listOf("WARN", "WARNING") -> warnCount++
+                levelMatch == "INFO" -> infoCount++
+            }
+
+            var msg = line
+            if (timeMatch.isNotBlank()) msg = msg.replace(timeMatch, "").trim()
+            if (levelMatch.isNotBlank()) msg = msg.replaceFirst(Regex("""\b$levelMatch\b""", RegexOption.IGNORE_CASE), "").trim()
+
+            logLines.add(
+                ParsedDocumentContent.LogLine(
+                    lineNumber = idx + 1,
+                    timestamp = timeMatch,
+                    level = levelMatch,
+                    message = msg.ifBlank { line },
+                    rawLine = line
+                )
+            )
+        }
+
+        return ParsedDocumentContent.LogDocument(
+            title = fileName,
+            lines = logLines,
+            rawContent = rawText,
+            errorCount = errorCount,
+            warnCount = warnCount,
+            infoCount = infoCount
+        )
+    }
+
+    private fun parseRtf(bytes: ByteArray, fileName: String): ParsedDocumentContent {
+        val text = String(bytes, StandardCharsets.ISO_8859_1)
+        val sb = java.lang.StringBuilder()
+        var i = 0
+        val len = text.length
+        var inGroup = 0
+        var skipGroup = false
+
+        while (i < len) {
+            val c = text[i]
+            when (c) {
+                '{' -> {
+                    inGroup++
+                    val nextWord = text.substring(i + 1, (i + 15).coerceAtMost(len))
+                    if (nextWord.startsWith("\\fonttbl") || nextWord.startsWith("\\colortbl") ||
+                        nextWord.startsWith("\\stylesheet") || nextWord.startsWith("\\*\\") ||
+                        nextWord.startsWith("\\info")) {
+                        skipGroup = true
+                    }
+                    i++
+                }
+                '}' -> {
+                    inGroup--
+                    if (inGroup <= 1) skipGroup = false
+                    i++
+                }
+                '\\' -> {
+                    i++
+                    if (i < len) {
+                        val ctrlStart = i
+                        while (i < len && text[i].isLetter()) {
+                            i++
+                        }
+                        val ctrlWord = text.substring(ctrlStart, i)
+                        while (i < len && (text[i].isDigit() || text[i] == '-')) {
+                            i++
+                        }
+                        if (i < len && text[i] == ' ') i++
+
+                        if (!skipGroup) {
+                            when (ctrlWord) {
+                                "par", "line" -> sb.append('\n')
+                                "tab" -> sb.append("    ")
+                                "emdash" -> sb.append("—")
+                                "endash" -> sb.append("–")
+                                "bullet" -> sb.append("• ")
+                                "'" -> {
+                                    if (i + 1 < len) {
+                                        val hex = text.substring(i, i + 2)
+                                        val charCode = hex.toIntOrNull(16)
+                                        if (charCode != null) sb.append(charCode.toChar())
+                                        i += 2
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                '\r', '\n' -> i++
+                else -> {
+                    if (!skipGroup && inGroup >= 0) {
+                        sb.append(c)
+                    }
+                    i++
+                }
+            }
+        }
+
+        val clean = sb.toString().trim()
+        val result = if (clean.isNotBlank()) clean else scanTextFromBinary(bytes).joinToString("\n\n")
+
+        return ParsedDocumentContent.PlainText(
+            title = fileName,
+            text = result.ifBlank { "Rich Text document opened ($fileName)." },
+            linesCount = result.lines().size
+        )
+    }
+
+    // ==========================================
+    // 7. ZIP ARCHIVE PARSER
+    // ==========================================
+
+    private fun parseZip(bytes: ByteArray, fileName: String): ParsedDocumentContent {
+        val entries = mutableListOf<ParsedDocumentContent.ArchiveEntry>()
+        var totalSize = 0L
+        var totalCompressed = 0L
+
+        try {
+            val zis = ZipInputStream(ByteArrayInputStream(bytes))
+            var entry = zis.nextEntry
+            while (entry != null) {
+                val name = entry.name
+                val isDir = entry.isDirectory || name.endsWith("/")
+                val size = if (entry.size >= 0) entry.size else 0L
+                val compSize = if (entry.compressedSize >= 0) entry.compressedSize else 0L
+                val time = entry.time
+                val ext = if (!isDir) name.substringAfterLast('.', "").uppercase() else "DIR"
+
+                totalSize += size
+                totalCompressed += compSize
+
+                entries.add(
+                    ParsedDocumentContent.ArchiveEntry(
+                        path = name,
+                        name = name.trimEnd('/').substringAfterLast('/'),
+                        sizeBytes = size,
+                        compressedSizeBytes = compSize,
+                        isDirectory = isDir,
+                        lastModifiedMs = if (time > 0) time else System.currentTimeMillis(),
+                        extension = ext
+                    )
+                )
+                zis.closeEntry()
+                entry = zis.nextEntry
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        if (entries.isEmpty()) {
+            return ParsedDocumentContent.PlainText(
+                title = fileName,
+                text = "Zip Archive opened ($fileName). The archive contains no files or could not be read.",
+                linesCount = 1
+            )
+        }
+
+        val sortedEntries = entries.sortedWith(
+            compareBy<ParsedDocumentContent.ArchiveEntry> { !it.isDirectory }
+                .thenBy { it.path.lowercase() }
+        )
+
+        return ParsedDocumentContent.ArchiveDocument(
+            title = fileName,
+            entries = sortedEntries,
+            totalSizeBytes = totalSize,
+            totalCompressedBytes = totalCompressed,
+            zipBytes = bytes
+        )
+    }
+
+    fun extractZipEntry(zipBytes: ByteArray, targetEntryPath: String, destFile: File): Boolean {
+        return try {
+            val zis = ZipInputStream(ByteArrayInputStream(zipBytes))
+            var entry = zis.nextEntry
+            var found = false
+            while (entry != null) {
+                if (entry.name == targetEntryPath) {
+                    destFile.parentFile?.mkdirs()
+                    destFile.outputStream().use { out ->
+                        zis.copyTo(out)
+                    }
+                    found = true
+                    zis.closeEntry()
+                    break
+                }
+                zis.closeEntry()
+                entry = zis.nextEntry
+            }
+            found && destFile.exists() && destFile.length() > 0
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    // ==========================================
+    // 8. PLAIN TEXT & FALLBACK PARSERS
     // ==========================================
 
     private fun parsePlainText(bytes: ByteArray, fileName: String): ParsedDocumentContent {

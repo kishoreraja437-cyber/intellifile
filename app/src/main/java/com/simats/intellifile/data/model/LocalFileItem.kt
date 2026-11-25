@@ -62,12 +62,17 @@ data class LocalFileItem(
             fileType = "$format Document",
             createdDate = dateText,
             modifiedDate = dateText,
-            category = when (format) {
+            category = when (format.uppercase()) {
                 "PDF" -> "Document"
                 "DOC", "DOCX" -> "Word Document"
                 "PPT", "PPTX" -> "Presentation"
-                "XLS", "XLSX", "CSV" -> "Spreadsheet"
-                "TXT", "JSON" -> "Text Document"
+                "XLS", "XLSX", "CSV", "TSV" -> "Spreadsheet"
+                "TXT", "LOG" -> "Text Document"
+                "JSON", "XML" -> "Structured Data"
+                "HTML", "HTM" -> "Web Document"
+                "MD" -> "Markdown Document"
+                "RTF" -> "Rich Text Document"
+                "ZIP" -> "Archive"
                 else -> "Document"
             },
             location = if (path.isNotBlank()) path else "Internal Storage",

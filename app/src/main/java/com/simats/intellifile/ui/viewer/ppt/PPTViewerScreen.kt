@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.ui.platform.LocalConfiguration
 import com.simats.intellifile.data.local.LocalFileDatabaseHelper
+import com.simats.intellifile.ui.viewer.DocumentInfoSection
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import kotlinx.coroutines.Dispatchers
@@ -417,119 +418,207 @@ private fun PPTViewerTopBar(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = if (isLandscape) 2.dp else 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Back Button
-                IconButton(onClick = onBackClick) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = DarkOceanTeal
-                    )
-                }
-
-                // File Title & Slide Badge
-                Column(
+            if (isLandscape) {
+                // Landscape: Compact single row across wide screen
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 4.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = fileName,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = DarkOceanTeal,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                    IconButton(onClick = onBackClick, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = DarkOceanTeal,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    DocumentInfoSection(
+                        fileName = fileName,
+                        fileFormat = "PPTX",
+                        currentPage = currentSlideNumber,
+                        totalPages = totalSlides,
+                        wordCount = null,
+                        isCompact = true,
+                        modifier = Modifier.weight(1f)
                     )
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 2.dp)
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(ContainerAqua)
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = "SLIDE $currentSlideNumber OF $totalSlides",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = DuskyAqua
+                        IconButton(onClick = onToggleSearch, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = if (isSearchActive) DuskyAqua else DarkOceanTeal,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        IconButton(onClick = onToggleBookmark, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
+                                contentDescription = "Bookmark",
+                                tint = if (isBookmarked) Color(0xFF6C5CE7) else DarkOceanTeal,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        if (hasNotes) {
+                            IconButton(onClick = onToggleNotes, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    imageVector = Icons.Default.Description,
+                                    contentDescription = "Speaker Notes",
+                                    tint = DuskyAqua,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        IconButton(onClick = onToggleThumbnails, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.GridView,
+                                contentDescription = "Thumbnails",
+                                tint = if (isThumbnailsOpen) DuskyAqua else DarkOceanTeal,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        IconButton(onClick = onToggleOrientation, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.ScreenRotation,
+                                contentDescription = "Rotate Screen",
+                                tint = if (isLandscape) DuskyAqua else DarkOceanTeal,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        IconButton(onClick = onShareClick, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "Share",
+                                tint = DarkOceanTeal,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        IconButton(onClick = onToggleFullscreen, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.Fullscreen,
+                                contentDescription = "Fullscreen",
+                                tint = DarkOceanTeal,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
                 }
+            } else {
+                // Portrait Mode: 2-Tier Layout ensuring Document Information has full width and is never squeezed
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        IconButton(onClick = onBackClick, modifier = Modifier.size(38.dp)) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = DarkOceanTeal
+                            )
+                        }
 
-                // Action Buttons
-                // Search
-                IconButton(onClick = onToggleSearch) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = if (isSearchActive) DuskyAqua else DarkOceanTeal
-                    )
-                }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            IconButton(onClick = onToggleSearch, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Search",
+                                    tint = if (isSearchActive) DuskyAqua else DarkOceanTeal,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
 
-                // Bookmark
-                IconButton(onClick = onToggleBookmark) {
-                    Icon(
-                        imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
-                        contentDescription = "Bookmark",
-                        tint = if (isBookmarked) Color(0xFF6C5CE7) else DarkOceanTeal
-                    )
-                }
+                            IconButton(onClick = onToggleBookmark, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
+                                    contentDescription = "Bookmark",
+                                    tint = if (isBookmarked) Color(0xFF6C5CE7) else DarkOceanTeal,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
 
-                // Speaker Notes
-                if (hasNotes) {
-                    IconButton(onClick = onToggleNotes) {
-                        Icon(
-                            imageVector = Icons.Default.Description,
-                            contentDescription = "Speaker Notes",
-                            tint = DuskyAqua
-                        )
+                            if (hasNotes) {
+                                IconButton(onClick = onToggleNotes, modifier = Modifier.size(36.dp)) {
+                                    Icon(
+                                        imageVector = Icons.Default.Description,
+                                        contentDescription = "Speaker Notes",
+                                        tint = DuskyAqua,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+
+                            IconButton(onClick = onToggleThumbnails, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    imageVector = Icons.Default.GridView,
+                                    contentDescription = "Thumbnails",
+                                    tint = if (isThumbnailsOpen) DuskyAqua else DarkOceanTeal,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            IconButton(onClick = onToggleOrientation, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    imageVector = Icons.Default.ScreenRotation,
+                                    contentDescription = "Rotate Screen",
+                                    tint = if (isLandscape) DuskyAqua else DarkOceanTeal,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            IconButton(onClick = onShareClick, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = "Share",
+                                    tint = DarkOceanTeal,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            IconButton(onClick = onToggleFullscreen, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    imageVector = Icons.Default.Fullscreen,
+                                    contentDescription = "Fullscreen",
+                                    tint = DarkOceanTeal,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
-                }
 
-                // Thumbnails
-                IconButton(onClick = onToggleThumbnails) {
-                    Icon(
-                        imageVector = Icons.Default.GridView,
-                        contentDescription = "Thumbnails",
-                        tint = if (isThumbnailsOpen) DuskyAqua else DarkOceanTeal
-                    )
-                }
-
-                // Rotate Screen (Portrait <-> Landscape)
-                IconButton(onClick = onToggleOrientation) {
-                    Icon(
-                        imageVector = Icons.Default.ScreenRotation,
-                        contentDescription = "Rotate Screen",
-                        tint = if (isLandscape) DuskyAqua else DarkOceanTeal
-                    )
-                }
-
-                // Share
-                IconButton(onClick = onShareClick) {
-                    Icon(
-                        imageVector = Icons.Default.Share,
-                        contentDescription = "Share",
-                        tint = DarkOceanTeal
-                    )
-                }
-
-                // Fullscreen
-                IconButton(onClick = onToggleFullscreen) {
-                    Icon(
-                        imageVector = Icons.Default.Fullscreen,
-                        contentDescription = "Fullscreen",
-                        tint = DarkOceanTeal
+                    // Document Information Section: Full Width, properly spaced, readable font, no clipping
+                    DocumentInfoSection(
+                        fileName = fileName,
+                        fileFormat = "PPTX",
+                        currentPage = currentSlideNumber,
+                        totalPages = totalSlides,
+                        wordCount = null,
+                        isCompact = false,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 4.dp)
                     )
                 }
             }

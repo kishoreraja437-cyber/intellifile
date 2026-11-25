@@ -39,7 +39,8 @@ object LocalFileManager {
      * Strictly document formats. No images, audio, video, or music.
      */
     private val SUPPORTED_DOCUMENT_EXTENSIONS = setOf(
-        "pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "txt", "csv", "json"
+        "pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "txt", "csv", "json",
+        "tsv", "xml", "html", "htm", "md", "rtf", "log", "zip"
     )
 
     /**
@@ -212,7 +213,7 @@ object LocalFileManager {
     }
 
     /**
-     * Resolves the user-facing format label (PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, TXT, CSV, JSON).
+     * Resolves the user-facing format label (PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, TXT, CSV, JSON, TSV, XML, HTML, MD, RTF, LOG, ZIP).
      */
     fun resolveFormat(fileName: String, mimeType: String?): String {
         val ext = fileName.substringAfterLast('.', "").uppercase()
@@ -223,8 +224,15 @@ object LocalFileManager {
                 "PPT", "PPTX" -> ext
                 "XLS", "XLSX" -> ext
                 "CSV" -> "CSV"
+                "TSV" -> "TSV"
                 "TXT" -> "TXT"
                 "JSON" -> "JSON"
+                "XML" -> "XML"
+                "HTML", "HTM" -> "HTML"
+                "MD" -> "MD"
+                "RTF" -> "RTF"
+                "LOG" -> "LOG"
+                "ZIP" -> "ZIP"
                 else -> ext
             }
         }
@@ -236,7 +244,13 @@ object LocalFileManager {
                 mimeType.contains("excel", true) || mimeType.contains("spreadsheet", true) -> "XLSX"
                 mimeType.contains("text/plain", true) -> "TXT"
                 mimeType.contains("csv", true) -> "CSV"
+                mimeType.contains("tab-separated", true) -> "TSV"
                 mimeType.contains("json", true) -> "JSON"
+                mimeType.contains("xml", true) -> "XML"
+                mimeType.contains("html", true) -> "HTML"
+                mimeType.contains("markdown", true) -> "MD"
+                mimeType.contains("rtf", true) -> "RTF"
+                mimeType.contains("zip", true) -> "ZIP"
                 else -> "DOC"
             }
         }
@@ -270,7 +284,14 @@ object LocalFileManager {
             "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             "txt" -> "text/plain"
             "csv" -> "text/csv"
+            "tsv" -> "text/tab-separated-values"
             "json" -> "application/json"
+            "xml" -> "application/xml"
+            "html", "htm" -> "text/html"
+            "md" -> "text/markdown"
+            "rtf" -> "application/rtf"
+            "log" -> "text/plain"
+            "zip" -> "application/zip"
             else -> MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "application/octet-stream"
         }
     }
@@ -536,7 +557,7 @@ object LocalFileManager {
         val stream = openInputStream(context, uriString, path) ?: return ""
         return try {
             when (format.uppercase()) {
-                "TXT", "CSV", "JSON", "MD" -> {
+                "TXT", "CSV", "TSV", "JSON", "XML", "HTML", "HTM", "MD", "LOG", "RTF" -> {
                     stream.bufferedReader().use { reader ->
                         val buffer = CharArray(maxChars)
                         val read = reader.read(buffer, 0, maxChars)
