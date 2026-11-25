@@ -188,6 +188,8 @@ data class DocumentDto(
 
     @SerializedName("insight_status") val insight_status: String = "PENDING",
 
+    @SerializedName("document_overview") val document_overview: String? = null,
+
     @SerializedName("insight_overview") val insight_overview: String? = null,
 
     @SerializedName("insight_topics") val insight_topics: List<String> = emptyList(),
@@ -195,6 +197,8 @@ data class DocumentDto(
     @SerializedName("insight_key_points") val insight_key_points: List<String> = emptyList(),
 
     @SerializedName("insight_details") val insight_details: List<String> = emptyList(),
+
+    @SerializedName("insight_insights") val insight_insights: List<String> = emptyList(),
 
     @SerializedName("insight_terms") val insight_terms: List<String> = emptyList(),
 
@@ -475,10 +479,12 @@ data class AiSummarizeResponse(
     @SerializedName("title") val title: String? = null,
     @SerializedName("format") val format: String? = null,
     @SerializedName("status") val status: String? = null,
+    @SerializedName("document_overview") val document_overview: String? = null,
     @SerializedName("overview") val overview: String? = null,
     @SerializedName("main_topics") val main_topics: List<String> = emptyList(),
     @SerializedName("key_points") val key_points: List<String> = emptyList(),
     @SerializedName("important_details") val important_details: List<String> = emptyList(),
+    @SerializedName("important_insights") val important_insights: List<String> = emptyList(),
     @SerializedName("important_terms") val important_terms: List<String> = emptyList(),
     @SerializedName("conclusion") val conclusion: String? = null,
     @SerializedName("summary") val summary: String? = null,
@@ -487,20 +493,32 @@ data class AiSummarizeResponse(
     @SerializedName("message") val message: String? = null,
     @SerializedName("error") val error: String? = null
 ) {
-    val effectiveOverview: String
-        get() = overview?.takeIf { it.isNotBlank() } ?: summary ?: ""
+    val effectiveDocumentOverview: String
+        get() = document_overview?.takeIf { it.isNotBlank() } ?: overview?.takeIf { it.isNotBlank() } ?: summary ?: ""
 
-    val effectiveKeyPoints: List<String>
-        get() = if (key_points.isNotEmpty()) key_points else bullet_points
+    val effectiveOverview: String
+        get() = effectiveDocumentOverview
+
+    val effectiveMainTopics: List<String>
+        get() = main_topics
 
     val effectiveTopics: List<String>
         get() = main_topics
 
-    val effectiveDetails: List<String>
-        get() = important_details
+    val effectiveKeyPoints: List<String>
+        get() = if (key_points.isNotEmpty()) key_points else bullet_points
+
+    val effectiveImportantTerms: List<String>
+        get() = important_terms
 
     val effectiveTerms: List<String>
         get() = important_terms
+
+    val effectiveImportantInsights: List<String>
+        get() = if (important_insights.isNotEmpty()) important_insights else important_details
+
+    val effectiveDetails: List<String>
+        get() = effectiveImportantInsights
 
     val effectiveConclusion: String
         get() = conclusion ?: ""

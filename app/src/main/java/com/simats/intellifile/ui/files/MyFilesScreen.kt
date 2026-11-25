@@ -154,16 +154,19 @@ fun MyFilesScreen(
         // Instant render if already available in DocumentDto and not retrying
         if (!retry && doc.insight_status.equals("READY", ignoreCase = true) && !doc.insight_overview.isNullOrBlank()) {
             isGeneratingInsights = false
+            val effectiveInsights = if (doc.insight_insights.isNotEmpty()) doc.insight_insights else doc.insight_details
             aiInsightsResult = AiSummarizeResponse(
                 success = true,
                 title = doc.title,
                 format = doc.format,
                 status = "READY",
+                document_overview = doc.document_overview ?: doc.insight_overview,
                 overview = doc.insight_overview,
                 main_topics = doc.insight_topics,
                 key_points = doc.insight_key_points,
-                important_details = doc.insight_details,
                 important_terms = doc.insight_terms,
+                important_insights = effectiveInsights,
+                important_details = effectiveInsights,
                 conclusion = doc.insight_conclusion,
                 summary = doc.insight_overview,
                 bullet_points = doc.insight_key_points,
@@ -478,7 +481,7 @@ fun MyFilesScreen(
                     } else if (aiInsightsResult != null) {
                         val insights = aiInsightsResult!!
 
-                        // 1. OVERVIEW SECTION
+                        // 1. DOCUMENT OVERVIEW SECTION
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -496,7 +499,7 @@ fun MyFilesScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "1. Executive Overview",
+                                    text = "1. Document Overview",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     color = Color(0xFF166534)
@@ -504,7 +507,7 @@ fun MyFilesScreen(
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = insights.effectiveOverview.ifBlank { "Overview generated from document content." },
+                                text = insights.effectiveDocumentOverview.ifBlank { "Overview generated from document content." },
                                 fontSize = 13.sp,
                                 color = Color(0xFF1E293B),
                                 lineHeight = 19.sp
@@ -512,7 +515,7 @@ fun MyFilesScreen(
                         }
 
                         // 2. MAIN TOPICS SECTION
-                        if (insights.effectiveTopics.isNotEmpty()) {
+                        if (insights.effectiveMainTopics.isNotEmpty()) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -530,7 +533,7 @@ fun MyFilesScreen(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "2. Main Topics & Themes",
+                                        text = "2. Main Topics",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp,
                                         color = Color(0xFF3730A3)
@@ -538,7 +541,7 @@ fun MyFilesScreen(
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    insights.effectiveTopics.forEach { topic ->
+                                    insights.effectiveMainTopics.forEach { topic ->
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Box(
                                                 modifier = Modifier
@@ -578,7 +581,7 @@ fun MyFilesScreen(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "3. Core Key Points",
+                                        text = "3. Key Points",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp,
                                         color = Color(0xFF334155)
@@ -619,58 +622,8 @@ fun MyFilesScreen(
                             }
                         }
 
-                        // 4. IMPORTANT DETAILS SECTION
-                        if (insights.effectiveDetails.isNotEmpty()) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color(0xFFFFFBEB))
-                                    .border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(12.dp))
-                                    .padding(12.dp)
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.Visibility,
-                                        contentDescription = null,
-                                        tint = Color(0xFFD97706),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "4. Critical Facts, Numbers & Details",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = Color(0xFF92400E)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                insights.effectiveDetails.forEach { detail ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 2.dp),
-                                        verticalAlignment = Alignment.Top
-                                    ) {
-                                        Text(
-                                            text = "▪ ",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFFD97706)
-                                        )
-                                        Text(
-                                            text = detail,
-                                            fontSize = 12.sp,
-                                            color = Color(0xFF451A03),
-                                            lineHeight = 17.sp
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // 5. IMPORTANT TERMS & DEFINITIONS SECTION
-                        if (insights.effectiveTerms.isNotEmpty()) {
+                        // 4. IMPORTANT TERMS SECTION
+                        if (insights.effectiveImportantTerms.isNotEmpty()) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -688,14 +641,14 @@ fun MyFilesScreen(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "5. Key Terms & Definitions",
+                                        text = "4. Important Terms",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp,
                                         color = Color(0xFF86198F)
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
-                                insights.effectiveTerms.forEach { termItem ->
+                                insights.effectiveImportantTerms.forEach { termItem ->
                                     val parts = termItem.split("—", limit = 2)
                                     Column(modifier = Modifier.padding(vertical = 3.dp)) {
                                         Text(
@@ -712,6 +665,56 @@ fun MyFilesScreen(
                                                 lineHeight = 15.sp
                                             )
                                         }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 5. IMPORTANT INSIGHTS SECTION
+                        if (insights.effectiveImportantInsights.isNotEmpty()) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFFFFFBEB))
+                                    .border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(12.dp))
+                                    .padding(12.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Visibility,
+                                        contentDescription = null,
+                                        tint = Color(0xFFD97706),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "5. Important Insights",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = Color(0xFF92400E)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                insights.effectiveImportantInsights.forEach { insightItem ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 2.dp),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Text(
+                                            text = "▪ ",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFD97706)
+                                        )
+                                        Text(
+                                            text = insightItem,
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF451A03),
+                                            lineHeight = 17.sp
+                                        )
                                     }
                                 }
                             }
@@ -736,7 +739,7 @@ fun MyFilesScreen(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "6. Conclusion & Takeaway",
+                                        text = "6. Conclusion",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp,
                                         color = Color(0xFF1E293B)
