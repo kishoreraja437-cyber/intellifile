@@ -513,96 +513,90 @@ fun FileDetailScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 18.dp, vertical = 6.dp)
+                .padding(horizontal = 20.dp)
+                .verticalScroll(rememberScrollState())
         ) {
-            // 1. Header Bar with Back Button and Actions
+            // Header Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 2.dp),
+                    .padding(top = 12.dp, bottom = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = onBackClick,
-                    modifier = Modifier.size(36.dp)
-                ) {
+                IconButton(onClick = onBackClick) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.size(22.dp)
+                        tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
 
                 Text(
                     text = "File Details",
-                    fontSize = 18.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
-                Spacer(modifier = Modifier.size(36.dp))
+                Spacer(modifier = Modifier.size(48.dp))
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // 2. File Name, File Size, and File Format (Compact Identity Card)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFFF8FAFC))
-                    .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically
+            // Large File Icon
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
             ) {
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .size(110.dp)
+                        .clip(RoundedCornerShape(24.dp))
                         .background(Color(0xFFFFEAEE)),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
                         painter = painterResource(id = fileData.iconResId),
                         contentDescription = "File Icon",
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(10.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = fileData.fileName,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF111827),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "$fileSize · $fileFormat",
-                        fontSize = 12.sp,
-                        color = Color(0xFF6B7280),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        modifier = Modifier.size(64.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // 3. IntelliSpace (Server Synced) Status Card
+            // Title and Subtitle
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = fileData.fileName,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF111827)
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "${fileData.fileSize} · ${fileData.fileType}",
+                    fontSize = 14.sp,
+                    color = Color(0xFF6B7280)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // IntelliSpace Status Card
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(16.dp))
                     .background(if (isVaultSynced) Color(0xFFEFF6FF) else Color(0xFFF9FAFB))
-                    .border(1.dp, if (isVaultSynced) Color(0xFFBFDBFE) else Color(0xFFE5E7EB), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 12.dp, vertical = 7.dp)
+                    .border(1.dp, if (isVaultSynced) Color(0xFFBFDBFE) else Color(0xFFE5E7EB), RoundedCornerShape(16.dp))
+                    .padding(16.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -617,28 +611,24 @@ fun FileDetailScreen(
                             imageVector = if (isVaultSynced) Icons.Default.CloudDone else Icons.Outlined.CloudUpload,
                             contentDescription = null,
                             tint = if (isVaultSynced) Color(0xFF2563EB) else Color(0xFF6B7280),
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(24.dp)
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
                                 text = if (isVaultSynced) "In IntelliSpace (Server Synced)" else "Device File (Local Only)",
-                                fontSize = 12.5.sp,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isVaultSynced) Color(0xFF1E40AF) else Color(0xFF374151),
-                                maxLines = 1
+                                color = if (isVaultSynced) Color(0xFF1E40AF) else Color(0xFF374151)
                             )
-                            Spacer(modifier = Modifier.height(1.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = if (isVaultSynced) "AI semantic search & Q&A active" else "Kept private on phone",
-                                fontSize = 11.sp,
-                                color = Color(0xFF6B7280),
-                                maxLines = 1
+                                fontSize = 12.sp,
+                                color = Color(0xFF6B7280)
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.width(8.dp))
 
                     if (isVaultSynced) {
                         Button(
@@ -648,20 +638,20 @@ fun FileDetailScreen(
                                 disabledContainerColor = Color(0xFFD1FAE5),
                                 disabledContentColor = Color(0xFF065F46)
                             ),
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            modifier = Modifier.height(30.dp)
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier.height(34.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Check,
                                 contentDescription = null,
-                                modifier = Modifier.size(13.dp),
+                                modifier = Modifier.size(15.dp),
                                 tint = Color(0xFF059669)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Added",
-                                fontSize = 11.sp,
+                                text = "Added to IntelliSpace",
+                                fontSize = 11.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFF065F46)
                             )
@@ -671,148 +661,138 @@ fun FileDetailScreen(
                             onClick = { showVaultConfirmDialog = true },
                             enabled = !isUploadingToVault && !isCheckingVaultStatus,
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            modifier = Modifier.height(30.dp)
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.height(34.dp)
                         ) {
                             if (isUploadingToVault || isCheckingVaultStatus) {
                                 CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
+                                    modifier = Modifier.size(16.dp),
                                     color = Color.White,
                                     strokeWidth = 2.dp
                                 )
                             } else {
-                                Text("Add to IntelliSpace", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Text("Add to IntelliSpace", fontSize = 12.sp)
                             }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // 4. File Information Card (5 Dynamically Retrieved Rows)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFFF9FAFB))
-                    .border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
+            // Dynamically Retrieved Metadata Attributes List (5 Rows)
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    // 1. File Format
-                    MetadataRow(
-                        icon = Icons.Outlined.Description,
-                        label = "File Format",
-                        value = fileFormat
-                    )
+                // 1. File Format
+                MetadataRow(
+                    icon = Icons.Outlined.Description,
+                    label = "File Format",
+                    value = fileFormat
+                )
 
-                    // 2. File Size
-                    MetadataRow(
-                        icon = Icons.Outlined.SdStorage,
-                        label = "File Size",
-                        value = fileSize
-                    )
+                // 2. File Size
+                MetadataRow(
+                    icon = Icons.Outlined.SdStorage,
+                    label = "File Size",
+                    value = fileSize
+                )
 
-                    // 3. Page / Slide Count
-                    val countIcon = when (fileFormat.uppercase()) {
-                        "PPT", "PPTX", "PPS", "PPSX", "POT", "POTX" -> Icons.Outlined.Slideshow
-                        "XLS", "XLSX", "CSV", "TSV", "ODS" -> Icons.Outlined.TableChart
-                        else -> Icons.Outlined.AutoStories
-                    }
-                    MetadataRow(
-                        icon = countIcon,
-                        label = contentCountLabel,
-                        value = contentCountValue
-                    )
-
-                    // 4. Date Added to Device
-                    MetadataRow(
-                        icon = Icons.Outlined.CalendarToday,
-                        label = "Date Added to Device",
-                        value = dateAddedText
-                    )
-
-                    // 5. Last Opened
-                    MetadataRow(
-                        icon = Icons.Outlined.Schedule,
-                        label = "Last Opened",
-                        value = lastOpenedText
-                    )
+                // 3. Page / Slide Count
+                val countIcon = when (fileFormat.uppercase()) {
+                    "PPT", "PPTX", "PPS", "PPSX", "POT", "POTX" -> Icons.Outlined.Slideshow
+                    "XLS", "XLSX", "CSV", "TSV", "ODS" -> Icons.Outlined.TableChart
+                    else -> Icons.Outlined.AutoStories
                 }
+                MetadataRow(
+                    icon = countIcon,
+                    label = contentCountLabel,
+                    value = contentCountValue
+                )
+
+                // 4. Date Added to Device
+                MetadataRow(
+                    icon = Icons.Outlined.CalendarToday,
+                    label = "Date Added to Device",
+                    value = dateAddedText
+                )
+
+                // 5. Last Opened
+                MetadataRow(
+                    icon = Icons.Outlined.Schedule,
+                    label = "Last Opened",
+                    value = lastOpenedText
+                )
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // 5. Priority Section with Important, Normal, and Low in a Single Horizontal Row
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Priority",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (selectedPriority != null) "(${selectedPriority?.title})" else "(Not Set)",
-                        fontSize = 12.sp,
-                        color = if (selectedPriority != null) selectedPriority!!.textColor else Color(0xFF6B7280),
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
+            // Priority Section Title
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Priority",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (selectedPriority != null) "(${selectedPriority?.title})" else "(Not Set)",
+                    fontSize = 13.sp,
+                    color = if (selectedPriority != null) selectedPriority!!.textColor else Color(0xFF6B7280),
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
 
-                Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    PriorityLevel.entries.forEach { priority ->
-                        val isSelected = priority == selectedPriority
-                        SelectablePriorityCard(
-                            priority = priority,
-                            isSelected = isSelected,
-                            onClick = {
-                                val newPriority = if (selectedPriority == priority) null else priority
-                                selectedPriority = newPriority
-                                val key = if (fileData.path.isNotBlank()) fileData.path else fileData.uriString
+            // Priority Cards Selection Row (User explicitly assigns or toggles off)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                PriorityLevel.entries.forEach { priority ->
+                    val isSelected = priority == selectedPriority
+                    SelectablePriorityCard(
+                        priority = priority,
+                        isSelected = isSelected,
+                        onClick = {
+                            val newPriority = if (selectedPriority == priority) null else priority
+                            selectedPriority = newPriority
+                            val key = if (fileData.path.isNotBlank()) fileData.path else fileData.uriString
+                            dbHelper.setPriority(
+                                uriOrPath = key,
+                                fileName = fileData.fileName,
+                                priority = newPriority
+                            )
+                            if (fileData.uriString.isNotBlank()) {
                                 dbHelper.setPriority(
-                                    uriOrPath = key,
+                                    uriOrPath = fileData.uriString,
                                     fileName = fileData.fileName,
                                     priority = newPriority
                                 )
-                                if (fileData.uriString.isNotBlank()) {
-                                    dbHelper.setPriority(
-                                        uriOrPath = fileData.uriString,
-                                        fileName = fileData.fileName,
-                                        priority = newPriority
-                                    )
-                                }
-                                if (fileData.fileName.isNotBlank()) {
-                                    dbHelper.setPriority(
-                                        uriOrPath = fileData.fileName,
-                                        fileName = fileData.fileName,
-                                        priority = newPriority
-                                    )
-                                }
-                                onPriorityChanged(newPriority)
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                            }
+                            if (fileData.fileName.isNotBlank()) {
+                                dbHelper.setPriority(
+                                    uriOrPath = fileData.fileName,
+                                    fileName = fileData.fileName,
+                                    priority = newPriority
+                                )
+                            }
+                            onPriorityChanged(newPriority)
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // 6. Save Priority Button
+            // Dedicated Save Priority Button directly in File Details Screen
             Button(
                 onClick = {
                     val key = if (fileData.path.isNotBlank()) fileData.path else fileData.uriString
@@ -855,11 +835,10 @@ fun FileDetailScreen(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary
                 ),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(38.dp),
-                contentPadding = PaddingValues(vertical = 0.dp)
+                    .height(48.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -869,49 +848,46 @@ fun FileDetailScreen(
                         imageVector = Icons.Default.Check,
                         contentDescription = "Save Priority",
                         tint = Color.White,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = if (selectedPriority != null) "Save Priority (${selectedPriority?.title})" else "Save Priority",
-                        fontSize = 13.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // 7. Open File Button (Presents In-App Viewer or External Chooser)
+            // Open File Button (Presents In-App Viewer or External Chooser)
             Button(
                 onClick = { showOpenOptionsDialog = true },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(40.dp),
-                contentPadding = PaddingValues(vertical = 0.dp)
+                    .height(54.dp)
             ) {
                 Text(
                     text = "Open File",
-                    fontSize = 14.5.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // 8. Share Button
             Button(
                 onClick = onShareClick,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(40.dp),
-                contentPadding = PaddingValues(vertical = 0.dp)
+                    .height(54.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -921,17 +897,19 @@ fun FileDetailScreen(
                         imageVector = Icons.Default.Share,
                         contentDescription = "Share",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Share",
-                        fontSize = 14.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
@@ -956,28 +934,28 @@ fun MetadataRow(
                 imageVector = icon,
                 contentDescription = label,
                 tint = Color(0xFF6B7280),
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(20.dp)
             )
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
             Text(
                 text = label,
-                fontSize = 12.5.sp,
+                fontSize = 15.sp,
                 color = Color(0xFF6B7280),
                 maxLines = 1
             )
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(12.dp))
 
         Text(
             text = value,
-            fontSize = 12.5.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF374151),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color(0xFF4B5563),
             textAlign = TextAlign.End,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false)
         )
@@ -1004,15 +982,15 @@ fun SelectablePriorityCard(
 
     val borderModifier = if (isSelected) {
         Modifier.border(
-            width = 1.8.dp,
+            width = 2.dp,
             color = priority.textColor,
-            shape = RoundedCornerShape(14.dp)
+            shape = RoundedCornerShape(22.dp)
         )
     } else {
         Modifier.border(
-            width = 1.dp,
+            width = 1.2.dp,
             color = priority.borderColor.copy(alpha = 0.7f),
-            shape = RoundedCornerShape(14.dp)
+            shape = RoundedCornerShape(22.dp)
         )
     }
 
@@ -1023,20 +1001,20 @@ fun SelectablePriorityCard(
                 scaleY = cardScale
             }
             .shadow(
-                elevation = if (isSelected) 4.dp else 1.dp,
-                shape = RoundedCornerShape(14.dp),
+                elevation = if (isSelected) 8.dp else 3.dp,
+                shape = RoundedCornerShape(22.dp),
                 ambientColor = if (isSelected) priority.glowColor else Color.Black.copy(alpha = 0.05f),
                 spotColor = if (isSelected) priority.glowColor else Color.Black.copy(alpha = 0.05f),
                 clip = false
             )
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(22.dp))
             .background(brush = Brush.verticalGradient(priority.gradientColors))
             .then(borderModifier)
             .clickable(interactionSource = interactionSource, indication = null) { onClick() }
     ) {
         // Specular 3D Glass Arc Highlight
         Canvas(modifier = Modifier.matchParentSize()) {
-            val cornerRadius = 14.dp.toPx()
+            val cornerRadius = 22.dp.toPx()
             val highlightWidth = size.width * 0.44f
             val highlightHeight = size.height * 0.32f
 
@@ -1050,8 +1028,24 @@ fun SelectablePriorityCard(
                     center = Offset(cornerRadius * 0.85f, cornerRadius * 0.80f),
                     radius = cornerRadius * 1.3f
                 ),
-                topLeft = Offset(4.dp.toPx(), 3.dp.toPx()),
+                topLeft = Offset(6.dp.toPx(), 5.dp.toPx()),
                 size = Size(highlightWidth, highlightHeight)
+            )
+
+            drawLine(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.85f),
+                        Color.White.copy(alpha = 0.40f),
+                        Color.Transparent
+                    ),
+                    startX = cornerRadius * 0.7f,
+                    endX = size.width * 0.65f
+                ),
+                start = Offset(cornerRadius * 0.7f, 2.5.dp.toPx()),
+                end = Offset(size.width * 0.65f, 2.5.dp.toPx()),
+                strokeWidth = 2.dp.toPx(),
+                cap = StrokeCap.Round
             )
         }
 
@@ -1060,8 +1054,8 @@ fun SelectablePriorityCard(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(4.dp)
-                    .size(15.dp)
+                    .padding(6.dp)
+                    .size(18.dp)
                     .clip(CircleShape)
                     .background(priority.textColor),
                 contentAlignment = Alignment.Center
@@ -1070,7 +1064,7 @@ fun SelectablePriorityCard(
                     imageVector = Icons.Default.Check,
                     contentDescription = "Selected",
                     tint = Color.White,
-                    modifier = Modifier.size(10.dp)
+                    modifier = Modifier.size(12.dp)
                 )
             }
         }
@@ -1078,21 +1072,21 @@ fun SelectablePriorityCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 7.dp, horizontal = 4.dp),
+                .padding(vertical = 14.dp, horizontal = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Image(
                 painter = painterResource(id = priority.badgeResId),
                 contentDescription = priority.title,
-                modifier = Modifier.size(26.dp)
+                modifier = Modifier.size(44.dp)
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = priority.title,
-                fontSize = 11.5.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = priority.textColor,
                 maxLines = 1
