@@ -748,20 +748,32 @@ fun AiMessageBubble(
         ) {
             if (isLoading) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = Color(0xFF009688)
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "Analyzing",
+                        tint = Color(0xFF00BFA5),
+                        modifier = Modifier.size(26.dp)
                     )
-                    Text(
-                        text = text,
-                        fontSize = 13.sp,
-                        fontStyle = FontStyle.Italic,
-                        color = Color(0xFF0F3E46).copy(alpha = thinkingAlpha)
-                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = if (text.isNotBlank() && !text.startsWith("Searching")) text else "Analyzing document...",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF0F3E46)
+                        )
+                        AiBouncingDotsIndicator(
+                            dotColor = Color(0xFF00BFA5),
+                            dotSize = 8.dp,
+                            spacing = 8.dp
+                        )
+                    }
                 }
             } else {
                 Row(
@@ -815,6 +827,113 @@ fun AiMessageBubble(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun AiBouncingDotsIndicator(
+    modifier: Modifier = Modifier,
+    dotColor: Color = Color(0xFF00BFA5),
+    dotSize: Dp = 8.dp,
+    spacing: Dp = 8.dp
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "bouncingDots")
+
+    val dot0Scale by infiniteTransition.animateFloat(
+        initialValue = 0.65f,
+        targetValue = 1.25f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 450, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dot0Scale"
+    )
+
+    val dot1Scale by infiniteTransition.animateFloat(
+        initialValue = 0.65f,
+        targetValue = 1.25f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 450, delayMillis = 150, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dot1Scale"
+    )
+
+    val dot2Scale by infiniteTransition.animateFloat(
+        initialValue = 0.65f,
+        targetValue = 1.25f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 450, delayMillis = 300, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dot2Scale"
+    )
+
+    val dot0Alpha by infiniteTransition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 450, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dot0Alpha"
+    )
+
+    val dot1Alpha by infiniteTransition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 450, delayMillis = 150, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dot1Alpha"
+    )
+
+    val dot2Alpha by infiniteTransition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 450, delayMillis = 300, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "dot2Alpha"
+    )
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(spacing),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(dotSize)
+                .graphicsLayer {
+                    scaleX = dot0Scale
+                    scaleY = dot0Scale
+                    alpha = dot0Alpha
+                }
+                .background(dotColor, CircleShape)
+        )
+        Box(
+            modifier = Modifier
+                .size(dotSize)
+                .graphicsLayer {
+                    scaleX = dot1Scale
+                    scaleY = dot1Scale
+                    alpha = dot1Alpha
+                }
+                .background(dotColor, CircleShape)
+        )
+        Box(
+            modifier = Modifier
+                .size(dotSize)
+                .graphicsLayer {
+                    scaleX = dot2Scale
+                    scaleY = dot2Scale
+                    alpha = dot2Alpha
+                }
+                .background(dotColor, CircleShape)
+        )
     }
 }
 

@@ -418,7 +418,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         val userMsg = ChatMessage.User(trimmed)
         val loadingMsg = ChatMessage.Ai(
-            text = "Searching files and analyzing context...",
+            text = "Analyzing document...",
             isLoading = true
         )
 

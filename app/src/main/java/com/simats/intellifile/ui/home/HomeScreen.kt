@@ -39,7 +39,10 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.CircularProgressIndicator
 
 import androidx.compose.animation.core.animateFloatAsState
 
@@ -393,12 +396,13 @@ fun HomeScreen(
 
     // Query real document files asynchronously from storage
     LaunchedEffect(refreshTrigger, priorityUpdateVersion) {
-        if (realFiles.isEmpty()) {
-            isLoading = true
-        }
+        isLoading = true
         hasStoragePermission = LocalFileManager.hasStoragePermission(context)
         val loaded = withContext(Dispatchers.IO) {
             LocalFileManager.getDeviceFiles(context)
+        }
+        if (realFiles.isNotEmpty()) {
+            delay(350)
         }
         realFiles = loaded
         isLoading = false
@@ -695,236 +699,146 @@ fun HomeScreen(
 
 
 
-            // Recent Files Header with Refresh button
-
-            item {
-
-                Row(
-
-                    modifier = Modifier
-
-                        .fillMaxWidth()
-
-                        .padding(top = 4.dp),
-
-                    horizontalArrangement = Arrangement.SpaceBetween,
-
-                    verticalAlignment = Alignment.CenterVertically
-
-                ) {
-
-                    Row(
-
-                        verticalAlignment = Alignment.CenterVertically,
-
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-
-                    ) {
-
-                        Text(
-
-                            text = "Recent Files",
-
-                            fontSize = 18.sp,
-
-                            fontWeight = FontWeight.Bold,
-
-                            color = Color(0xFF111827)
-
-                        )
-
-                        IconButton(
-
-                            onClick = { refreshTrigger++ },
-
-                            modifier = Modifier.size(28.dp)
-
-                        ) {
-
-                            Icon(
-
-                                imageVector = Icons.Default.Refresh,
-
-                                contentDescription = "Refresh Files",
-
-                                tint = Color(0xFF6B7280),
-
-                                modifier = Modifier.size(16.dp).graphicsLayer(rotationZ = refreshRotation.value)
-
-                            )
-
-                        }
-
-                    }
-
-
-
-                    Text(
-
-                        text = "See all (${allRecentFiles.size})",
-
-                        fontSize = 14.sp,
-
-                        fontWeight = FontWeight.SemiBold,
-
-                        color = Color(0xFF55A9AF),
-
-                        modifier = Modifier.clickable { onSeeAllClick() }
-
-                    )
-
-                }
-
-            }
-
-
-
-            // Empty state when phone has no scanned documents
-
-            if (!isLoading && filteredFiles.isEmpty()) {
-
+            if (isLoading) {
                 item {
-
-                    Column(
-
+                    RecentFilesLoadingCard(onSeeAllClick = onSeeAllClick)
+                }
+            } else {
+                // Recent Files Header with Refresh button
+                item {
+                    Row(
                         modifier = Modifier
-
                             .fillMaxWidth()
-
-                            .clip(RoundedCornerShape(18.dp))
-
-                            .background(MaterialTheme.colorScheme.surface)
-
-                            .padding(28.dp),
-
-                        horizontalAlignment = Alignment.CenterHorizontally,
-
-                        verticalArrangement = Arrangement.Center
-
+                            .padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-
-                        Icon(
-
-                            imageVector = Icons.Default.FolderOpen,
-
-                            contentDescription = "Empty",
-
-                            tint = Color(0xFF9CA3AF),
-
-                            modifier = Modifier.size(48.dp)
-
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text(
-
-                            text = if (searchQuery.isNotBlank()) "No files match \"$searchQuery\"" else "No documents found on device",
-
-                            fontSize = 16.sp,
-
-                            fontWeight = FontWeight.Bold,
-
-                            color = Color(0xFF1F2937),
-
-                            textAlign = TextAlign.Center
-
-                        )
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Text(
-                            text = "IntelliFile reads document files (PDF, Word, PowerPoint, Excel, Text) locally on your phone.",
-                            fontSize = 13.sp,
-                            color = Color(0xFF6B7280),
-                            textAlign = TextAlign.Center
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        if (!hasStoragePermission) {
-                            Button(
-                                onClick = { requestStoragePermission() },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF55A9AF)
-                                )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Recent Files",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF111827)
+                            )
+                            IconButton(
+                                onClick = { refreshTrigger++ },
+                                modifier = Modifier.size(28.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Folder,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Refresh Files",
+                                    tint = Color(0xFF6B7280),
+                                    modifier = Modifier.size(16.dp).graphicsLayer(rotationZ = refreshRotation.value)
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Grant Document Access", fontSize = 14.sp)
                             }
-                        } else {
-                            Button(
-                                onClick = {
-                                    openDocLauncher.launch(
-                                        arrayOf(
-                                            "application/pdf",
-                                            "application/msword",
-                                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                            "application/vnd.ms-excel",
-                                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                            "application/vnd.ms-powerpoint",
-                                            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                                            "text/plain",
-                                            "text/csv"
-                                        )
-                                    )
-                                },
-                                shape = RoundedCornerShape(12.dp),
-
-                                colors = ButtonDefaults.buttonColors(
-
-                                    containerColor = MaterialTheme.colorScheme.primary
-
-                                )
-
-                            ) {
-
-                                Icon(
-
-                                    imageVector = Icons.Default.Add,
-
-                                    contentDescription = null,
-
-                                    modifier = Modifier.size(18.dp)
-
-                                )
-
-                                Spacer(modifier = Modifier.width(6.dp))
-
-                                Text("Pick Documents to View", fontSize = 14.sp)
-
-                            }
-
                         }
 
+                        Text(
+                            text = "See all (${allRecentFiles.size})",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF55A9AF),
+                            modifier = Modifier.clickable { onSeeAllClick() }
+                        )
                     }
-
                 }
 
-            }
-
-
-
-            // Recent Real File Items
-
-            items(filteredFiles) { file ->
-
-                RecentFileCard(
-
-                    file = file,
-
-                    onClick = { onFileClick(file) },
-
-                    onShareClick = { onShareFileClick(file) }
-
-                )
-
+                // Empty state when phone has no scanned documents
+                if (filteredFiles.isEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .padding(28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FolderOpen,
+                                contentDescription = "Empty",
+                                tint = Color(0xFF9CA3AF),
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = if (searchQuery.isNotBlank()) "No files match \"$searchQuery\"" else "No documents found on device",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1F2937),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "IntelliFile reads document files (PDF, Word, PowerPoint, Excel, Text) locally on your phone.",
+                                fontSize = 13.sp,
+                                color = Color(0xFF6B7280),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            if (!hasStoragePermission) {
+                                Button(
+                                    onClick = { requestStoragePermission() },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF55A9AF)
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Folder,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Grant Document Access", fontSize = 14.sp)
+                                }
+                            } else {
+                                Button(
+                                    onClick = {
+                                        openDocLauncher.launch(
+                                            arrayOf(
+                                                "application/pdf",
+                                                "application/msword",
+                                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                                "application/vnd.ms-excel",
+                                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                                "application/vnd.ms-powerpoint",
+                                                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                                                "text/plain",
+                                                "text/csv"
+                                            )
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Pick Documents to View", fontSize = 14.sp)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Recent Real File Items
+                    items(filteredFiles) { file ->
+                        RecentFileCard(
+                            file = file,
+                            onClick = { onFileClick(file) },
+                            onShareClick = { onShareFileClick(file) }
+                        )
+                    }
+                }
             }
 
         }
@@ -1516,6 +1430,143 @@ fun PriorityTag(
 }
 
 
+
+@Composable
+fun RecentFilesLoadingCard(
+    onSeeAllClick: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    val shimmerTransition = rememberInfiniteTransition(label = "recentFilesShimmer")
+    val shimmerTranslate by shimmerTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1000f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmerTranslation"
+    )
+
+    val shimmerBrush = Brush.linearGradient(
+        colors = listOf(
+            Color(0xFFE2E8F0),
+            Color(0xFFF1F5F9),
+            Color(0xFFE2E8F0)
+        ),
+        start = Offset.Zero,
+        end = Offset(x = shimmerTranslate, y = shimmerTranslate)
+    )
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 2.dp,
+                shape = RoundedCornerShape(22.dp),
+                ambientColor = Color.Black.copy(alpha = 0.04f),
+                spotColor = Color.Black.copy(alpha = 0.06f)
+            ),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.5.dp, Color(0xFF55A9AF))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 18.dp)
+        ) {
+            // Header Row: Recent Files & See all
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Recent Files",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF111827)
+                )
+
+                Text(
+                    text = "See all",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF009688),
+                    modifier = Modifier.clickable { onSeeAllClick() }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // 3 Skeleton File Items
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                repeat(3) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Square icon thumbnail placeholder
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(shimmerBrush)
+                        )
+
+                        Spacer(modifier = Modifier.width(14.dp))
+
+                        // Title and subtitle bar placeholders
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.68f)
+                                    .height(12.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(shimmerBrush)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.36f)
+                                    .height(10.dp)
+                                    .clip(RoundedCornerShape(5.dp))
+                                    .background(shimmerBrush)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Circular Spinner & "Loading recent files..."
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(26.dp),
+                    strokeWidth = 2.5.dp,
+                    color = Color(0xFF009688)
+                )
+
+                Text(
+                    text = "Loading recent files...",
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF1E293B)
+                )
+            }
+        }
+    }
+}
 
 @Preview(showBackground = true)
 
