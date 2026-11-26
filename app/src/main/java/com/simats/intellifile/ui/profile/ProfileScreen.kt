@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Mail
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Visibility
@@ -73,6 +74,7 @@ fun ProfileScreen(
     onBackClick: () -> Unit = {},
     onFilePermissionsClick: () -> Unit = {},
     onNotificationsClick: () -> Unit = {},
+    onAppLockClick: () -> Unit = {},
     onThemeClick: () -> Unit = {},
     onAboutClick: () -> Unit = {},
     onHelpSupportClick: () -> Unit = {},
@@ -410,6 +412,14 @@ fun ProfileScreen(
                     icon = Icons.Outlined.Notifications,
                     label = "Notifications",
                     onClick = onNotificationsClick
+                )
+
+                HorizontalDivider(color = Color(0xFFF1F5F9), thickness = 1.dp)
+
+                ProfileOptionRow(
+                    icon = Icons.Outlined.Security,
+                    label = "App Lock",
+                    onClick = onAppLockClick
                 )
 
                 HorizontalDivider(color = Color(0xFFF1F5F9), thickness = 1.dp)

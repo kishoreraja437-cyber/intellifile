@@ -164,6 +164,7 @@ import com.simats.intellifile.ui.profile.ProfileScreen
 import com.simats.intellifile.ui.saved.FileSavedSuccessScreen
 
 import com.simats.intellifile.ui.saved.PriorityFilter
+import com.simats.intellifile.ui.security.AppLockSettingsScreen
 
 import com.simats.intellifile.ui.saved.SavedScreen
 
@@ -264,6 +265,8 @@ fun MainScreen(
 
     var isNotificationsOpen by remember { mutableStateOf(false) }
 
+    var isAppLockSettingsOpen by remember { mutableStateOf(false) }
+
     var isThemeOpen by remember { mutableStateOf(false) }
 
     var isAboutOpen by remember { mutableStateOf(false) }
@@ -298,6 +301,7 @@ fun MainScreen(
         isShareOpen = false
         isFilePermissionsOpen = false
         isNotificationsOpen = false
+        isAppLockSettingsOpen = false
         isThemeOpen = false
         isAboutOpen = false
         isHelpSupportOpen = false
@@ -320,6 +324,7 @@ fun MainScreen(
             isHelpSupportOpen -> isHelpSupportOpen = false
             isAboutOpen -> isAboutOpen = false
             isThemeOpen -> isThemeOpen = false
+            isAppLockSettingsOpen -> isAppLockSettingsOpen = false
             isNotificationsOpen -> isNotificationsOpen = false
             isFilePermissionsOpen -> isFilePermissionsOpen = false
             selectedDetailFile != null -> selectedDetailFile = null
@@ -341,7 +346,7 @@ fun MainScreen(
 
     val isOverlayScreenOpen = isVoiceAssistantOpen || isRecentFilesOpen || isAiHistoryOpen || selectedDetailFile != null ||
             isDocumentViewerOpen || isFileSavedSuccessOpen || isShareOpen || isFilePermissionsOpen ||
-            isNotificationsOpen || isThemeOpen || isAboutOpen ||
+            isNotificationsOpen || isAppLockSettingsOpen || isThemeOpen || isAboutOpen ||
             isHelpSupportOpen || isContactSupportOpen || isContactSuccessOpen ||
             isFeedbackOpen || isFeedbackSuccessOpen
 
@@ -400,6 +405,8 @@ fun MainScreen(
             isThemeOpen -> "theme"
 
             isNotificationsOpen -> "notifications"
+
+            isAppLockSettingsOpen -> "app_lock"
 
             isFilePermissionsOpen -> "file_permissions"
 
@@ -732,6 +739,14 @@ fun MainScreen(
                         onBackClick = { isNotificationsOpen = false },
 
                         onSaveSettingsClick = { isNotificationsOpen = false }
+
+                    )
+
+
+
+                    "app_lock" -> AppLockSettingsScreen(
+
+                        onBackClick = { isAppLockSettingsOpen = false }
 
                     )
 
@@ -1071,6 +1086,7 @@ fun MainScreen(
                                                         onMicClick = { isVoiceAssistantOpen = true },
                                                         onFilePermissionsClick = { isFilePermissionsOpen = true },
                                                         onNotificationsClick = { isNotificationsOpen = true },
+                                                        onAppLockClick = { isAppLockSettingsOpen = true },
                                                         onThemeClick = { isThemeOpen = true },
                                                         onAboutClick = { isAboutOpen = true },
                                                         onHelpSupportClick = { isHelpSupportOpen = true },

@@ -17,7 +17,9 @@ import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
+import com.simats.intellifile.data.security.AppLockManager
+import com.simats.intellifile.ui.security.AppLockScreen
 import androidx.activity.compose.setContent
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -71,7 +73,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 enum class AppScreen {
-    SPLASH, ONBOARD, LOGIN, SIGNUP, FORGOT_PASSWORD, PERMISSION, MAIN
+    SPLASH, APP_LOCK, ONBOARD, LOGIN, SIGNUP, FORGOT_PASSWORD, PERMISSION, MAIN
 }
 
 class AppNavigationViewModel(application: Application) : AndroidViewModel(application) {
@@ -90,14 +92,25 @@ class AppNavigationViewModel(application: Application) : AndroidViewModel(applic
     val themeMode: StateFlow<AppThemeMode> = _themeMode.asStateFlow()
 
     fun onSplashFinished() {
+        val appLockManager = AppLockManager.getInstance(getApplication())
         if (sessionManager.isLoggedIn()) {
-            if (!LocalFileManager.hasStoragePermission(getApplication())) {
+            if (appLockManager.isAppLockEnabled() && !AppLockManager.isAppUnlocked) {
+                _currentScreen.value = AppScreen.APP_LOCK
+            } else if (!LocalFileManager.hasStoragePermission(getApplication())) {
                 _currentScreen.value = AppScreen.PERMISSION
             } else {
                 _currentScreen.value = AppScreen.MAIN
             }
         } else {
             _currentScreen.value = AppScreen.ONBOARD
+        }
+    }
+
+    fun onAppLockUnlocked() {
+        if (!LocalFileManager.hasStoragePermission(getApplication())) {
+            _currentScreen.value = AppScreen.PERMISSION
+        } else {
+            _currentScreen.value = AppScreen.MAIN
         }
     }
 
@@ -173,7 +186,7 @@ data class ExternalDocument(
     val mimeType: String
 )
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     private val externalDocumentState = MutableStateFlow<ExternalDocument?>(null)
     private var isOpenedFromExternalIntent = false
@@ -525,6 +538,9 @@ class MainActivity : ComponentActivity() {
                         when (targetScreen) {
                             AppScreen.SPLASH -> SplashScreen(
                                 onSplashFinished = { appNavViewModel.onSplashFinished() }
+                            )
+                            AppScreen.APP_LOCK -> AppLockScreen(
+                                onUnlockSuccess = { appNavViewModel.onAppLockUnlocked() }
                             )
                             AppScreen.ONBOARD -> OnboardScreen(
                                 onGetStartedClick = { appNavViewModel.onGetStartedClicked() }
