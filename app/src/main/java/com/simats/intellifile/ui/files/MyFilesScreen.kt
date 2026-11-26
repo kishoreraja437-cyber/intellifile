@@ -6,6 +6,7 @@ import com.simats.intellifile.ui.common.AnimatedRefreshButton
 import com.simats.intellifile.ui.common.FilesLoadingCard
 import com.simats.intellifile.ui.common.IntelliSpaceIndexingDialog
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -145,6 +146,9 @@ fun MyFilesScreen(
         coroutineScope.launch {
             isVaultLoading = true
             val result = docRepo.getDocuments()
+            if (vaultDocuments.isNotEmpty()) {
+                delay(400)
+            }
             isVaultLoading = false
             result.onSuccess { docs ->
                 val distinct = docs.filter { it.id > 0 && it.title.isNotBlank() }
@@ -228,12 +232,13 @@ fun MyFilesScreen(
 
     // Query real local document files and IntelliSpace documents asynchronously
     LaunchedEffect(refreshTrigger, priorityUpdateVersion) {
+        isLoadingDeviceFiles = true
         loadVault()
-        if (realFiles.isEmpty()) {
-            isLoadingDeviceFiles = true
-        }
         val loaded = withContext(Dispatchers.IO) {
             LocalFileManager.getDeviceFiles(context)
+        }
+        if (realFiles.isNotEmpty()) {
+            delay(400)
         }
         realFiles = loaded
         isLoadingDeviceFiles = false
@@ -972,7 +977,7 @@ fun MyFilesScreen(
                         refreshTrigger++
                         if (selectedSource == StorageSourceTab.INTELLISPACE) loadVault()
                     },
-                    isRefreshing = isVaultLoading,
+                    isRefreshing = isVaultLoading || isLoadingDeviceFiles,
                     buttonSize = 36.dp
                 )
             }
@@ -1335,14 +1340,14 @@ fun MyFilesScreen(
                     }
 
                     // Loading State, Empty State, or List of IntelliSpace Documents
-                    if (isVaultLoading && distinctVaultDocs.isEmpty()) {
+                    if (isVaultLoading) {
                         item {
                             FilesLoadingCard(
                                 title = "IntelliSpace Documents",
                                 loadingText = "Loading IntelliSpace files..."
                             )
                         }
-                    } else if (distinctVaultDocs.isEmpty() && !isVaultLoading) {
+                    } else if (distinctVaultDocs.isEmpty()) {
                         item {
                             Column(
                                 modifier = Modifier

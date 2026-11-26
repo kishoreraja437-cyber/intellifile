@@ -7,6 +7,7 @@ import com.simats.intellifile.ui.common.AnimatedRefreshButton
 import com.simats.intellifile.ui.common.FilesLoadingCard
 import com.simats.intellifile.ui.common.IntelliSpaceIndexingDialog
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
@@ -144,11 +145,12 @@ fun SavedScreen(
     var showVaultConfirmDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(refreshTrigger, priorityUpdateVersion) {
-        if (realFiles.isEmpty()) {
-            isLoading = true
-        }
+        isLoading = true
         val loaded = withContext(Dispatchers.IO) {
             LocalFileManager.getDeviceFiles(context)
+        }
+        if (realFiles.isNotEmpty()) {
+            delay(400)
         }
         realFiles = loaded
         isLoading = false
