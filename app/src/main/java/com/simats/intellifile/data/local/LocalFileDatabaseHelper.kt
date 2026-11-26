@@ -298,4 +298,86 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
         )
         LocalFileManager.invalidateCache()
     }
+
+    /**
+     * Removes IntelliSpace sync status for a deleted document.
+     */
+    fun removeVaultStatus(vaultDocId: Int, title: String = "") {
+        try {
+            val db = writableDatabase
+            val cv = ContentValues().apply {
+                put(COL_IS_VAULT_SYNCED, 0)
+                putNull(COL_VAULT_DOC_ID)
+            }
+            if (title.isNotBlank()) {
+                db.update(
+                    TABLE_METADATA,
+                    cv,
+                    "$COL_VAULT_DOC_ID = ? OR LOWER($COL_FILE_NAME) = ?",
+                    arrayOf(vaultDocId.toString(), title.trim().lowercase())
+                )
+            } else {
+                db.update(
+                    TABLE_METADATA,
+                    cv,
+                    "$COL_VAULT_DOC_ID = ?",
+                    arrayOf(vaultDocId.toString())
+                )
+            }
+            LocalFileManager.invalidateCache()
+        } catch (e: Exception) {
+            android.util.Log.e("LocalFileDB", "Error removing vault status", e)
+        }
+    }
+
+    /**
+     * Synchronizes local metadata with the server's IntelliSpace document list.
+     * Any row where is_vault_synced = 1 that is no longer present on the server has its synced flag reset to 0.
+     */
+    fun syncVaultStatus(validVaultDocIds: Set<Int>, validTitles: Set<String>) {
+        try {
+            val db = writableDatabase
+            val cursor = db.query(
+                TABLE_METADATA,
+                arrayOf(COL_URI_OR_PATH, COL_FILE_NAME, COL_VAULT_DOC_ID),
+                "$COL_IS_VAULT_SYNCED = 1",
+                null, null, null, null
+            )
+            val toReset = mutableListOf<String>()
+            cursor.use { c ->
+                val colKey = c.getColumnIndexOrThrow(COL_URI_OR_PATH)
+                val colName = c.getColumnIndexOrThrow(COL_FILE_NAME)
+                val colDocId = c.getColumnIndexOrThrow(COL_VAULT_DOC_ID)
+                while (c.moveToNext()) {
+                    val key = c.getString(colKey)
+                    val name = c.getString(colName)?.trim()?.lowercase() ?: ""
+                    val docId = if (c.isNull(colDocId)) null else c.getInt(colDocId)
+
+                    val isValid = (docId != null && validVaultDocIds.contains(docId)) ||
+                            (name.isNotBlank() && validTitles.contains(name))
+                    if (!isValid) {
+                        toReset.add(key)
+                    }
+                }
+            }
+            if (toReset.isNotEmpty()) {
+                db.beginTransaction()
+                try {
+                    val cv = ContentValues().apply {
+                        put(COL_IS_VAULT_SYNCED, 0)
+                        putNull(COL_VAULT_DOC_ID)
+                    }
+                    for (k in toReset) {
+                        db.update(TABLE_METADATA, cv, "$COL_URI_OR_PATH = ?", arrayOf(k))
+                    }
+                    db.setTransactionSuccessful()
+                } finally {
+                    db.endTransaction()
+                }
+                LocalFileManager.invalidateCache()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("LocalFileDB", "Error syncing vault status", e)
+        }
+    }
 }

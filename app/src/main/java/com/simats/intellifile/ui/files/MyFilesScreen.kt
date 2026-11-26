@@ -127,7 +127,9 @@ fun MyFilesScreen(
     var isLoadingDeviceFiles by remember { mutableStateOf(true) }
 
     // IntelliSpace State
-    var vaultDocuments by remember { mutableStateOf<List<DocumentDto>>(emptyList()) }
+    var vaultDocuments by remember {
+        mutableStateOf<List<DocumentDto>>(DocumentRepository.getCachedVaultDocs(context))
+    }
     var isVaultLoading by remember { mutableStateOf(false) }
     var isUploadingToVault by remember { mutableStateOf(false) }
     var selectedSummaryDoc by remember { mutableStateOf<DocumentDto?>(null) }
@@ -144,9 +146,16 @@ fun MyFilesScreen(
             val result = docRepo.getDocuments()
             isVaultLoading = false
             result.onSuccess { docs ->
-                vaultDocuments = docs
+                val distinct = docs.filter { it.id > 0 && it.title.isNotBlank() }
+                    .distinctBy { it.id }
+                    .distinctBy { it.title.trim().lowercase() }
+                vaultDocuments = distinct
+                DocumentRepository.updateCachedVaultDocs(context, distinct)
             }.onFailure {
-                // If offline or network issue, keep any existing
+                // If offline or network issue, keep any existing cached
+                if (vaultDocuments.isEmpty()) {
+                    vaultDocuments = DocumentRepository.getCachedVaultDocs(context)
+                }
             }
         }
     }
@@ -216,8 +225,9 @@ fun MyFilesScreen(
         }
     }
 
-    // Query real local document files asynchronously
+    // Query real local document files and IntelliSpace documents asynchronously
     LaunchedEffect(refreshTrigger, priorityUpdateVersion) {
+        loadVault()
         if (realFiles.isEmpty()) {
             isLoadingDeviceFiles = true
         }
@@ -228,12 +238,10 @@ fun MyFilesScreen(
         isLoadingDeviceFiles = false
     }
 
-    // Ensure vault docs are loaded when switching to IntelliSpace tab
+    // Ensure vault docs are refreshed when switching between tabs
     LaunchedEffect(selectedSource) {
         if (selectedSource == StorageSourceTab.INTELLISPACE) {
-            if (vaultDocuments.isEmpty()) {
-                loadVault()
-            }
+            loadVault()
         }
     }
 
@@ -302,15 +310,15 @@ fun MyFilesScreen(
     val lowCount = remember(realFiles) { realFiles.count { it.priority == PriorityLevel.LOW } }
     val unprioritizedCount = remember(realFiles) { realFiles.count { it.priority == null } }
 
-    // Deduplicate vault documents by title (case-insensitive) to accurately count stored files without duplicates
+    // Deduplicate vault documents by ID and title to accurately count stored files without duplicates
     val distinctVaultDocs = remember(vaultDocuments) {
-        vaultDocuments.distinctBy { it.title.trim().lowercase() }
+        vaultDocuments
+            .filter { it.id > 0 && it.title.isNotBlank() }
+            .distinctBy { it.id }
+            .distinctBy { it.title.trim().lowercase() }
     }
-    val vaultFilesCount = if (distinctVaultDocs.isNotEmpty()) {
-        distinctVaultDocs.size
-    } else {
-        realFiles.count { it.isVaultSynced }
-    }
+    // Single source of truth: actual IntelliSpace stored files count
+    val vaultFilesCount = distinctVaultDocs.size
     val totalPrioritized = importantCount + normalCount + lowCount
 
     val importantSweep = if (totalPrioritized > 0) (importantCount.toFloat() / totalPrioritized) * 360f else 0f

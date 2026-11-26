@@ -24,6 +24,47 @@ import java.io.FileOutputStream
 
 
 class DocumentRepository(private val context: Context) {
+    companion object {
+        private const val PREFS_NAME = "intellispace_cache"
+        private const val KEY_VAULT_DOCS = "cached_vault_docs"
+        private val gson = com.google.gson.Gson()
+
+        @Volatile
+        private var memoryCachedVaultDocs: List<DocumentDto>? = null
+
+        fun getCachedVaultDocs(context: Context): List<DocumentDto> {
+            memoryCachedVaultDocs?.let { return it }
+            return try {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val json = prefs.getString(KEY_VAULT_DOCS, null)
+                if (!json.isNullOrBlank()) {
+                    val type = object : com.google.gson.reflect.TypeToken<List<DocumentDto>>() {}.type
+                    val docs: List<DocumentDto> = gson.fromJson(json, type) ?: emptyList()
+                    val distinct = docs.filter { it.id > 0 && it.title.isNotBlank() }
+                        .distinctBy { it.id }
+                        .distinctBy { it.title.trim().lowercase() }
+                    memoryCachedVaultDocs = distinct
+                    distinct
+                } else {
+                    emptyList()
+                }
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+
+        fun updateCachedVaultDocs(context: Context, docs: List<DocumentDto>) {
+            val distinct = docs.filter { it.id > 0 && it.title.isNotBlank() }
+                .distinctBy { it.id }
+                .distinctBy { it.title.trim().lowercase() }
+            memoryCachedVaultDocs = distinct
+            try {
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                prefs.edit().putString(KEY_VAULT_DOCS, gson.toJson(distinct)).apply()
+            } catch (_: Exception) {}
+        }
+    }
+
     private val api: IntelliFileApiService
         get() = RetrofitClient.getApiService(context)
 
@@ -172,6 +213,13 @@ class DocumentRepository(private val context: Context) {
                     dbHelper.setVaultStatus(effectiveLocation, safeFileName, true, doc.id)
                 }
                 dbHelper.setVaultStatus(safeFileName, safeFileName, true, doc.id)
+
+                // Update shared cached IntelliSpace documents list immediately
+                val current = getCachedVaultDocs(context).toMutableList()
+                current.removeAll { it.id == doc.id || it.title.trim().equals(doc.title.trim(), ignoreCase = true) }
+                current.add(0, doc)
+                updateCachedVaultDocs(context, current)
+
                 Result.success(doc)
             } else {
                 val msg = response.body()?.message ?: response.errorBody()?.string() ?: "Upload to IntelliSpace failed."
@@ -195,7 +243,22 @@ class DocumentRepository(private val context: Context) {
         return try {
             val response = api.getDocuments(category, format, priority, search)
             if (response.isSuccessful && response.body()?.success == true) {
-                Result.success(response.body()?.documents ?: emptyList())
+                val rawDocs = response.body()?.documents ?: emptyList()
+                val distinctDocs = rawDocs
+                    .filter { it.id > 0 && it.title.isNotBlank() }
+                    .distinctBy { it.id }
+                    .distinctBy { it.title.trim().lowercase() }
+
+                if (category.isNullOrBlank() && format.isNullOrBlank() && priority.isNullOrBlank() && search.isNullOrBlank()) {
+                    updateCachedVaultDocs(context, distinctDocs)
+                    // Synchronize local database vault status with the verified server document list
+                    val dbHelper = LocalFileDatabaseHelper.getInstance(context)
+                    val serverDocIds = distinctDocs.map { it.id }.toSet()
+                    val serverDocTitles = distinctDocs.map { it.title.trim().lowercase() }.toSet()
+                    dbHelper.syncVaultStatus(serverDocIds, serverDocTitles)
+                }
+
+                Result.success(distinctDocs)
             } else {
                 Result.failure(Exception(response.body()?.message ?: "Failed to load documents"))
             }
@@ -274,6 +337,13 @@ class DocumentRepository(private val context: Context) {
         return try {
             val response = api.deleteDocument(DeleteDocumentRequest(documentId))
             if (response.isSuccessful && response.body()?.success == true) {
+                val current = getCachedVaultDocs(context).toMutableList()
+                val removed = current.firstOrNull { it.id == documentId }
+                current.removeAll { it.id == documentId }
+                updateCachedVaultDocs(context, current)
+
+                val dbHelper = LocalFileDatabaseHelper.getInstance(context)
+                dbHelper.removeVaultStatus(documentId, removed?.title ?: "")
                 Result.success(true)
             } else {
                 Result.failure(Exception(response.body()?.message ?: "Failed to delete document"))
