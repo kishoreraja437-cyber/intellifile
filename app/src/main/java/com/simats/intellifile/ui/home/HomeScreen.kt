@@ -62,6 +62,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import com.simats.intellifile.ui.common.AnimatedMicrophoneButton
+import com.simats.intellifile.ui.common.AnimatedRefreshButton
 import com.simats.intellifile.ui.common.DraggableScrollbar
 
 import androidx.compose.foundation.shape.CircleShape
@@ -723,17 +725,11 @@ fun HomeScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF111827)
                             )
-                            IconButton(
+                            AnimatedRefreshButton(
                                 onClick = { refreshTrigger++ },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = "Refresh Files",
-                                    tint = Color(0xFF6B7280),
-                                    modifier = Modifier.size(16.dp).graphicsLayer(rotationZ = refreshRotation.value)
-                                )
-                            }
+                                isRefreshing = isLoading,
+                                buttonSize = 28.dp
+                            )
                         }
 
                         Text(
@@ -992,118 +988,12 @@ fun SearchBar(
 
 
 
-        // Animated Mic / Speaker Button with Pulsing Wave Aura
-
-        Box(
-
-            contentAlignment = Alignment.Center,
-
-            modifier = Modifier
-
-                .size(44.dp)
-
-                .clickable {
-
-                    coroutineScope.launch {
-
-                        isMicPressed = true
-
-                        delay(180L)
-
-                        isMicPressed = false
-
-                        onMicClick()
-
-                    }
-
-                }
-
-        ) {
-
-            // Ambient breathing wave
-            Canvas(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer(scaleX = idlePulseScale, scaleY = idlePulseScale, alpha = idlePulseAlpha)
-            ) {
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFF26E07F).copy(alpha = 0.6f),
-                            Color(0xFF55A9AF).copy(alpha = 0.3f),
-                            Color.Transparent
-                        )
-                    )
-                )
-            }
-
-            if (isMicPressed) {
-
-                Canvas(
-
-                    modifier = Modifier.fillMaxSize()
-
-                ) {
-
-                    drawCircle(
-
-                        brush = Brush.radialGradient(
-
-                            colors = listOf(
-
-                                Color(0xFF26E07F).copy(alpha = 0.8f),
-
-                                Color(0xFF55A9AF).copy(alpha = 0.5f),
-
-                                Color.Transparent
-
-                            )
-
-                        )
-
-                    )
-
-                }
-
-            }
-
-
-
-            Box(
-
-                modifier = Modifier
-
-                    .size(40.dp)
-
-                    .graphicsLayer(scaleX = micScale, scaleY = micScale)
-
-                    .clip(CircleShape)
-
-                    .background(MaterialTheme.colorScheme.primary),
-
-                contentAlignment = Alignment.Center
-
-            ) {
-
-                Icon(
-
-                    imageVector = Icons.Default.Mic,
-
-                    contentDescription = "Voice Search",
-
-                    tint = Color.White,
-
-                    modifier = Modifier.size(20.dp)
-
-                )
-
-            }
-
-        }
-
-
+        // Animated Mic Button matching Global Design Reference
+        AnimatedMicrophoneButton(
+            onClick = onMicClick,
+            buttonSize = 38.dp
+        )
     }
-
 }
 
 

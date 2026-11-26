@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import com.simats.intellifile.ui.common.AnimatedMicrophoneButton
 import com.simats.intellifile.ui.common.DraggableScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -243,16 +244,11 @@ fun ProfileScreen(
                     )
                 }
 
-                IconButton(
+                AnimatedMicrophoneButton(
                     onClick = onMicClick,
+                    buttonSize = 36.dp,
                     modifier = Modifier.align(Alignment.CenterEnd)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Mic,
-                        contentDescription = "Voice Assistant",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
+                )
             }
 
             if (uiState.isLoading) {

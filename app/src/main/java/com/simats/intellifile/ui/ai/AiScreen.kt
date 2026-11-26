@@ -1,5 +1,7 @@
 package com.simats.intellifile.ui.ai
 
+import com.simats.intellifile.ui.common.AnimatedMicrophoneButton
+
 import androidx.compose.animation.core.*
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -579,13 +581,10 @@ fun AiHeader(
 
         // Right side:
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onMicClick) {
-                Icon(
-                    imageVector = Icons.Default.Mic,
-                    contentDescription = "Voice Assistant",
-                    tint = Color(0xFF009688)
-                )
-            }
+            AnimatedMicrophoneButton(
+                onClick = onMicClick,
+                buttonSize = 36.dp
+            )
 
             if (hasActiveConversation) {
                 IconButton(onClick = onViewSearchHistoryClick) {
@@ -1217,18 +1216,11 @@ fun AiBottomInputBar(
         Spacer(modifier = Modifier.width(6.dp))
 
         // Mic Button in bottom bar
-        IconButton(
+        AnimatedMicrophoneButton(
             onClick = onMicClick,
             enabled = !isThinking,
-            modifier = Modifier.size(38.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Mic,
-                contentDescription = "Voice Assistant",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
-        }
+            buttonSize = 34.dp
+        )
 
         Spacer(modifier = Modifier.width(4.dp))
 

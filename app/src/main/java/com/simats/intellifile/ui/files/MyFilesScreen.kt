@@ -1,6 +1,8 @@
 package com.simats.intellifile.ui.files
 
 import android.net.Uri
+import com.simats.intellifile.ui.common.AnimatedMicrophoneButton
+import com.simats.intellifile.ui.common.AnimatedRefreshButton
 import com.simats.intellifile.ui.common.IntelliSpaceIndexingDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -956,17 +958,14 @@ fun MyFilesScreen(
                     )
                 }
 
-                IconButton(onClick = {
-                    refreshTrigger++
-                    if (selectedSource == StorageSourceTab.INTELLISPACE) loadVault()
-                }) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Refresh",
-                        tint = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.graphicsLayer(rotationZ = refreshRotation.value)
-                    )
-                }
+                AnimatedRefreshButton(
+                    onClick = {
+                        refreshTrigger++
+                        if (selectedSource == StorageSourceTab.INTELLISPACE) loadVault()
+                    },
+                    isRefreshing = isVaultLoading,
+                    buttonSize = 36.dp
+                )
             }
 
             Box(
@@ -993,13 +992,10 @@ fun MyFilesScreen(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
                         )
-                        IconButton(onClick = onMicClick) {
-                            Icon(
-                                imageVector = Icons.Default.Mic,
-                                contentDescription = "Voice Assistant",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                        AnimatedMicrophoneButton(
+                            onClick = onMicClick,
+                            buttonSize = 36.dp
+                        )
                     }
                 }
 

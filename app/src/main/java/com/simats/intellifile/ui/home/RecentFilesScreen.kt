@@ -1,6 +1,9 @@
 package com.simats.intellifile.ui.home
 
 import android.widget.Toast
+import com.simats.intellifile.ui.common.AnimatedChecklistButton
+import com.simats.intellifile.ui.common.AnimatedMicrophoneButton
+import com.simats.intellifile.ui.common.AnimatedRefreshButton
 import com.simats.intellifile.ui.common.IntelliSpaceIndexingDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -367,30 +370,26 @@ fun RecentFilesScreen(
                         )
                     }
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onMicClick) {
-                            Icon(
-                                imageVector = Icons.Default.Mic,
-                                contentDescription = "Voice Assistant",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        AnimatedMicrophoneButton(
+                            onClick = onMicClick,
+                            buttonSize = 36.dp
+                        )
 
-                        IconButton(onClick = { isMultiSelectMode = true }) {
-                            Icon(
-                                imageVector = Icons.Default.Checklist,
-                                contentDescription = "Select Files to Move",
-                                tint = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
+                        AnimatedChecklistButton(
+                            onClick = { isMultiSelectMode = true },
+                            isSelected = isMultiSelectMode,
+                            buttonSize = 36.dp
+                        )
 
-                        IconButton(onClick = { refreshTrigger++ }) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Refresh Files",
-                                tint = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
+                        AnimatedRefreshButton(
+                            onClick = { refreshTrigger++ },
+                            isRefreshing = isLoading,
+                            buttonSize = 36.dp
+                        )
                     }
                 }
             }
