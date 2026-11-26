@@ -860,7 +860,7 @@ fun FileDetailScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Open File Button (Presents In-App Viewer or External Chooser)
             Button(
