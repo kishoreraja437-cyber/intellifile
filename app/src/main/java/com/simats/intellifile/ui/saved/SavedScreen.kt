@@ -519,8 +519,21 @@ fun SavedScreen(
                                 modifier = Modifier.size(44.dp)
                             )
                             Spacer(modifier = Modifier.height(10.dp))
+                            val emptyTitle = when {
+                                searchQuery.isNotBlank() -> "No files match \"$searchQuery\""
+                                selectedFilter == PriorityFilter.IMPORTANT -> "No Important files yet"
+                                selectedFilter == PriorityFilter.NORMAL -> "No Normal priority files yet"
+                                selectedFilter == PriorityFilter.LOW -> "No Low priority files yet"
+                                selectedFilter == PriorityFilter.BOOKMARKED -> "No bookmarked files yet"
+                                else -> "No saved documents yet"
+                            }
+                            val emptySubtitle = when {
+                                searchQuery.isNotBlank() -> "Try searching with a different term."
+                                selectedFilter != PriorityFilter.ALL -> "Files assigned this priority will appear here."
+                                else -> "Assign a priority to a document to view it here."
+                            }
                             Text(
-                                text = if (searchQuery.isNotBlank()) "No files match \"$searchQuery\"" else "No saved documents yet",
+                                text = emptyTitle,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF1F2937),
@@ -528,7 +541,7 @@ fun SavedScreen(
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Assign a priority to a document to view it here.",
+                                text = emptySubtitle,
                                 fontSize = 13.sp,
                                 color = Color(0xFF6B7280),
                                 textAlign = TextAlign.Center

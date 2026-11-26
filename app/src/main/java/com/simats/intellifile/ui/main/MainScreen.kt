@@ -230,6 +230,7 @@ fun MainScreen(
     var visitedTabs by remember { mutableStateOf(setOf(BottomNavItem.HOME)) }
 
     var savedPriorityFilter by remember { mutableStateOf(PriorityFilter.ALL) }
+    var savedFilterVersion by remember { mutableIntStateOf(0) }
 
 
 
@@ -304,10 +305,6 @@ fun MainScreen(
         isContactSuccessOpen = false
         isFeedbackOpen = false
         isFeedbackSuccessOpen = false
-
-        if (newTab == BottomNavItem.SAVED) {
-            savedPriorityFilter = PriorityFilter.ALL
-        }
     }
 
     fun handleGoBack() {
@@ -366,6 +363,10 @@ fun MainScreen(
                 BottomNavigationBar(
                     selectedTab = selectedTab,
                     onTabSelected = { newTab ->
+                        if (newTab == BottomNavItem.SAVED) {
+                            savedPriorityFilter = PriorityFilter.ALL
+                            savedFilterVersion++
+                        }
                         navigateToTab(newTab)
                     }
                 )
@@ -951,6 +952,7 @@ fun MainScreen(
                                                                 PriorityLevel.NORMAL -> PriorityFilter.NORMAL
                                                                 PriorityLevel.LOW -> PriorityFilter.LOW
                                                             }
+                                                            savedFilterVersion++
                                                             navigateToTab(BottomNavItem.SAVED)
                                                         },
                                                         onMicClick = { isVoiceAssistantOpen = true }
@@ -1007,6 +1009,7 @@ fun MainScreen(
                                                                 PriorityLevel.NORMAL -> PriorityFilter.NORMAL
                                                                 PriorityLevel.LOW -> PriorityFilter.LOW
                                                             }
+                                                            savedFilterVersion++
                                                             navigateToTab(BottomNavItem.SAVED)
                                                         },
                                                         onNavigateToAiChat = { _ ->
@@ -1018,46 +1021,48 @@ fun MainScreen(
                                                         }
                                                     )
 
-                                                    BottomNavItem.SAVED -> SavedScreen(
-                                                        priorityUpdateVersion = priorityUpdateVersion,
-                                                        initialFilter = savedPriorityFilter,
-                                                        onBackClick = { handleGoBack() },
-                                                        onMicClick = { isVoiceAssistantOpen = true },
-                                                        onOpenFile = { file ->
-                                                            val ext = file.title.substringAfterLast('.', "").uppercase()
-                                                            val detectedType = if (ext.isNotBlank()) "$ext Document" else "Document"
-                                                            selectedDetailFile = FileDetailData(
-                                                                fileName = file.title,
-                                                                fileSize = file.size,
-                                                                fileType = detectedType,
-                                                                createdDate = file.dateText,
-                                                                modifiedDate = file.dateText,
-                                                                category = "Saved Document",
-                                                                location = if (file.path.isNotBlank()) file.path else "Internal Storage",
-                                                                priority = file.priority,
-                                                                iconResId = file.iconResId,
-                                                                uriString = file.uriString,
-                                                                path = file.path,
-                                                                isVaultSynced = file.isVaultSynced
-                                                            )
-                                                            isDocumentViewerOpen = true
-                                                        },
-                                                        onShareFileClick = { file ->
-                                                            val ext = file.title.substringAfterLast('.', "").uppercase()
-                                                            val detectedType = if (ext.isNotBlank()) "$ext Document" else "Document"
-                                                            selectedDetailFile = FileDetailData(
-                                                                fileName = file.title,
-                                                                fileSize = file.size,
-                                                                fileType = detectedType,
-                                                                priority = file.priority,
-                                                                iconResId = file.iconResId,
-                                                                uriString = file.uriString,
-                                                                path = file.path,
-                                                                isVaultSynced = file.isVaultSynced
-                                                            )
-                                                            isShareOpen = true
-                                                        }
-                                                    )
+                                                    BottomNavItem.SAVED -> key(savedFilterVersion) {
+                                                        SavedScreen(
+                                                            priorityUpdateVersion = priorityUpdateVersion,
+                                                            initialFilter = savedPriorityFilter,
+                                                            onBackClick = { handleGoBack() },
+                                                            onMicClick = { isVoiceAssistantOpen = true },
+                                                            onOpenFile = { file ->
+                                                                val ext = file.title.substringAfterLast('.', "").uppercase()
+                                                                val detectedType = if (ext.isNotBlank()) "$ext Document" else "Document"
+                                                                selectedDetailFile = FileDetailData(
+                                                                    fileName = file.title,
+                                                                    fileSize = file.size,
+                                                                    fileType = detectedType,
+                                                                    createdDate = file.dateText,
+                                                                    modifiedDate = file.dateText,
+                                                                    category = "Saved Document",
+                                                                    location = if (file.path.isNotBlank()) file.path else "Internal Storage",
+                                                                    priority = file.priority,
+                                                                    iconResId = file.iconResId,
+                                                                    uriString = file.uriString,
+                                                                    path = file.path,
+                                                                    isVaultSynced = file.isVaultSynced
+                                                                )
+                                                                isDocumentViewerOpen = true
+                                                            },
+                                                            onShareFileClick = { file ->
+                                                                val ext = file.title.substringAfterLast('.', "").uppercase()
+                                                                val detectedType = if (ext.isNotBlank()) "$ext Document" else "Document"
+                                                                selectedDetailFile = FileDetailData(
+                                                                    fileName = file.title,
+                                                                    fileSize = file.size,
+                                                                    fileType = detectedType,
+                                                                    priority = file.priority,
+                                                                    iconResId = file.iconResId,
+                                                                    uriString = file.uriString,
+                                                                    path = file.path,
+                                                                    isVaultSynced = file.isVaultSynced
+                                                                )
+                                                                isShareOpen = true
+                                                            }
+                                                        )
+                                                    }
 
                                                     BottomNavItem.PROFILE -> ProfileScreen(
                                                         userName = sessionManager.getFullName(),
