@@ -1,5 +1,6 @@
 package com.simats.intellifile.ui.home
 
+import com.simats.intellifile.ui.common.FilesLoadingCard
 import android.Manifest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -1326,136 +1327,13 @@ fun RecentFilesLoadingCard(
     onSeeAllClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val shimmerTransition = rememberInfiniteTransition(label = "recentFilesShimmer")
-    val shimmerTranslate by shimmerTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1000f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "shimmerTranslation"
-    )
-
-    val shimmerBrush = Brush.linearGradient(
-        colors = listOf(
-            Color(0xFFE2E8F0),
-            Color(0xFFF1F5F9),
-            Color(0xFFE2E8F0)
-        ),
-        start = Offset.Zero,
-        end = Offset(x = shimmerTranslate, y = shimmerTranslate)
-    )
-
-    Card(
+    FilesLoadingCard(
+        title = "Recent Files",
+        actionText = "See all",
+        onActionClick = onSeeAllClick,
+        loadingText = "Loading recent files...",
         modifier = modifier
-            .fillMaxWidth()
-            .shadow(
-                elevation = 2.dp,
-                shape = RoundedCornerShape(22.dp),
-                ambientColor = Color.Black.copy(alpha = 0.04f),
-                spotColor = Color.Black.copy(alpha = 0.06f)
-            ),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(1.5.dp, Color(0xFF55A9AF))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 18.dp)
-        ) {
-            // Header Row: Recent Files & See all
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Recent Files",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111827)
-                )
-
-                Text(
-                    text = "See all",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF009688),
-                    modifier = Modifier.clickable { onSeeAllClick() }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(18.dp))
-
-            // 3 Skeleton File Items
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                repeat(3) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Square icon thumbnail placeholder
-                        Box(
-                            modifier = Modifier
-                                .size(42.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(shimmerBrush)
-                        )
-
-                        Spacer(modifier = Modifier.width(14.dp))
-
-                        // Title and subtitle bar placeholders
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.68f)
-                                    .height(12.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(shimmerBrush)
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.36f)
-                                    .height(10.dp)
-                                    .clip(RoundedCornerShape(5.dp))
-                                    .background(shimmerBrush)
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Circular Spinner & "Loading recent files..."
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(26.dp),
-                    strokeWidth = 2.5.dp,
-                    color = Color(0xFF009688)
-                )
-
-                Text(
-                    text = "Loading recent files...",
-                    fontSize = 13.5.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color(0xFF1E293B)
-                )
-            }
-        }
-    }
+    )
 }
 
 @Preview(showBackground = true)

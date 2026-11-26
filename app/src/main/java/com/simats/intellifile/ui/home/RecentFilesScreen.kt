@@ -4,6 +4,7 @@ import android.widget.Toast
 import com.simats.intellifile.ui.common.AnimatedChecklistButton
 import com.simats.intellifile.ui.common.AnimatedMicrophoneButton
 import com.simats.intellifile.ui.common.AnimatedRefreshButton
+import com.simats.intellifile.ui.common.FilesLoadingCard
 import com.simats.intellifile.ui.common.IntelliSpaceIndexingDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -461,8 +462,15 @@ fun RecentFilesScreen(
                     }
                 }
 
-                // Empty state if no documents match
-                if (!isLoading && filteredFiles.isEmpty()) {
+                // Loading state, Empty state, or Real Recent Files List
+                if (isLoading) {
+                    item {
+                        FilesLoadingCard(
+                            title = if (selectedFormatFilter == FileFormatFilter.ALL) "Recent Files" else "${selectedFormatFilter.label} Files",
+                            loadingText = "Loading recent files..."
+                        )
+                    }
+                } else if (filteredFiles.isEmpty()) {
                     item {
                         Column(
                             modifier = Modifier

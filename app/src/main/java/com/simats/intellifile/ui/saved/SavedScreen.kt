@@ -4,6 +4,7 @@ import android.widget.Toast
 import com.simats.intellifile.ui.common.AnimatedChecklistButton
 import com.simats.intellifile.ui.common.AnimatedMicrophoneButton
 import com.simats.intellifile.ui.common.AnimatedRefreshButton
+import com.simats.intellifile.ui.common.FilesLoadingCard
 import com.simats.intellifile.ui.common.IntelliSpaceIndexingDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -501,8 +502,22 @@ fun SavedScreen(
                     }
                 }
 
-                // Empty state if no saved files match
-                if (!isLoading && filteredFiles.isEmpty()) {
+                // Loading state, Empty state, or Saved File Cards List
+                if (isLoading) {
+                    item {
+                        val filterTitle = when (selectedFilter) {
+                            PriorityFilter.ALL -> "Saved Documents"
+                            PriorityFilter.BOOKMARKED -> "Bookmarked Documents"
+                            PriorityFilter.IMPORTANT -> "Important Documents"
+                            PriorityFilter.NORMAL -> "Normal Priority Documents"
+                            PriorityFilter.LOW -> "Low Priority Documents"
+                        }
+                        FilesLoadingCard(
+                            title = filterTitle,
+                            loadingText = "Loading saved files..."
+                        )
+                    }
+                } else if (filteredFiles.isEmpty()) {
                     item {
                         Column(
                             modifier = Modifier

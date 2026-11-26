@@ -3,6 +3,7 @@ package com.simats.intellifile.ui.files
 import android.net.Uri
 import com.simats.intellifile.ui.common.AnimatedMicrophoneButton
 import com.simats.intellifile.ui.common.AnimatedRefreshButton
+import com.simats.intellifile.ui.common.FilesLoadingCard
 import com.simats.intellifile.ui.common.IntelliSpaceIndexingDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -1095,108 +1096,117 @@ fun MyFilesScreen(
                 }
 
                 if (selectedSource == StorageSourceTab.DEVICE_FILES) {
-                    // Summary Cards Row with Real User-Marked Counts
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            PrioritySummaryCard(
-                                priority = PriorityLevel.IMPORTANT,
-                                count = importantCount,
-                                onClick = { onQuickAccessClick(PriorityLevel.IMPORTANT) },
-                                modifier = Modifier.weight(1f)
-                            )
-                            PrioritySummaryCard(
-                                priority = PriorityLevel.NORMAL,
-                                count = normalCount,
-                                onClick = { onQuickAccessClick(PriorityLevel.NORMAL) },
-                                modifier = Modifier.weight(1f)
-                            )
-                            PrioritySummaryCard(
-                                priority = PriorityLevel.LOW,
-                                count = lowCount,
-                                onClick = { onQuickAccessClick(PriorityLevel.LOW) },
-                                modifier = Modifier.weight(1f)
+                    if (isLoadingDeviceFiles) {
+                        item {
+                            FilesLoadingCard(
+                                title = "Device Files",
+                                loadingText = "Loading files..."
                             )
                         }
-                    }
+                    } else {
+                        // Summary Cards Row with Real User-Marked Counts
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                PrioritySummaryCard(
+                                    priority = PriorityLevel.IMPORTANT,
+                                    count = importantCount,
+                                    onClick = { onQuickAccessClick(PriorityLevel.IMPORTANT) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                PrioritySummaryCard(
+                                    priority = PriorityLevel.NORMAL,
+                                    count = normalCount,
+                                    onClick = { onQuickAccessClick(PriorityLevel.NORMAL) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                PrioritySummaryCard(
+                                    priority = PriorityLevel.LOW,
+                                    count = lowCount,
+                                    onClick = { onQuickAccessClick(PriorityLevel.LOW) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
 
-                    // Total Files Card with Real Document Count
-                    item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(18.dp))
-                                .background(Color.White)
-                                .padding(horizontal = 20.dp, vertical = 16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
+                        // Total Files Card with Real Document Count
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(Color.White)
+                                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Total Documents",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF111827)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "$totalPrioritized prioritized · $unprioritizedCount unassigned",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF6B7280)
+                                    )
+                                }
+
                                 Text(
-                                    text = "Total Documents",
-                                    fontSize = 16.sp,
+                                    text = totalFiles.toString(),
+                                    fontSize = 24.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF111827)
                                 )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "$totalPrioritized prioritized · $unprioritizedCount unassigned",
-                                    fontSize = 12.sp,
-                                    color = Color(0xFF6B7280)
-                                )
                             }
+                        }
 
-                            Text(
-                                text = totalFiles.toString(),
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF111827)
+                        // Priority Distribution Donut Chart Section (Glass Light Animated Card)
+                        item {
+                            PriorityDistributionCard(
+                                importantCount = importantCount,
+                                normalCount = normalCount,
+                                lowCount = lowCount,
+                                onPriorityClick = { priority -> onQuickAccessClick(priority) }
                             )
                         }
-                    }
 
-                    // Priority Distribution Donut Chart Section (Glass Light Animated Card)
-                    item {
-                        PriorityDistributionCard(
-                            importantCount = importantCount,
-                            normalCount = normalCount,
-                            lowCount = lowCount,
-                            onPriorityClick = { priority -> onQuickAccessClick(priority) }
-                        )
-                    }
+                        // Quick Access Section
+                        item {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Text(
+                                    text = "Quick Access",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF111827)
+                                )
 
-                    // Quick Access Section
-                    item {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(14.dp)
-                        ) {
-                            Text(
-                                text = "Quick Access",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF111827)
-                            )
+                                QuickAccessCard(
+                                    priority = PriorityLevel.IMPORTANT,
+                                    count = importantCount,
+                                    onClick = { onQuickAccessClick(PriorityLevel.IMPORTANT) }
+                                )
 
-                            QuickAccessCard(
-                                priority = PriorityLevel.IMPORTANT,
-                                count = importantCount,
-                                onClick = { onQuickAccessClick(PriorityLevel.IMPORTANT) }
-                            )
+                                QuickAccessCard(
+                                    priority = PriorityLevel.NORMAL,
+                                    count = normalCount,
+                                    onClick = { onQuickAccessClick(PriorityLevel.NORMAL) }
+                                )
 
-                            QuickAccessCard(
-                                priority = PriorityLevel.NORMAL,
-                                count = normalCount,
-                                onClick = { onQuickAccessClick(PriorityLevel.NORMAL) }
-                            )
-
-                            QuickAccessCard(
-                                priority = PriorityLevel.LOW,
-                                count = lowCount,
-                                onClick = { onQuickAccessClick(PriorityLevel.LOW) }
-                            )
+                                QuickAccessCard(
+                                    priority = PriorityLevel.LOW,
+                                    count = lowCount,
+                                    onClick = { onQuickAccessClick(PriorityLevel.LOW) }
+                                )
+                            }
                         }
                     }
                 } else {
@@ -1324,8 +1334,15 @@ fun MyFilesScreen(
                         }
                     }
 
-                    // Empty State or List of IntelliSpace Documents
-                    if (distinctVaultDocs.isEmpty() && !isVaultLoading) {
+                    // Loading State, Empty State, or List of IntelliSpace Documents
+                    if (isVaultLoading && distinctVaultDocs.isEmpty()) {
+                        item {
+                            FilesLoadingCard(
+                                title = "IntelliSpace Documents",
+                                loadingText = "Loading IntelliSpace files..."
+                            )
+                        }
+                    } else if (distinctVaultDocs.isEmpty() && !isVaultLoading) {
                         item {
                             Column(
                                 modifier = Modifier
