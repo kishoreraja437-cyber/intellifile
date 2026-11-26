@@ -1,6 +1,7 @@
 package com.simats.intellifile.ui.files
 
 import android.net.Uri
+import com.simats.intellifile.ui.common.IntelliSpaceIndexingDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import android.widget.Toast
@@ -236,16 +237,21 @@ fun MyFilesScreen(
 
     // SAF Document Picker to upload directly to IntelliSpace (supports multi-selection of 2+ files)
     var uploadProgressMessage by remember { mutableStateOf("") }
+    var vaultUploadCurrentIndex by remember { mutableIntStateOf(0) }
+    var vaultUploadTotalCount by remember { mutableIntStateOf(0) }
     val uploadDocLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
             isUploadingToVault = true
+            vaultUploadCurrentIndex = 0
+            vaultUploadTotalCount = uris.size
             uploadProgressMessage = "Moving ${uris.size} document${if (uris.size > 1) "s" else ""} to IntelliSpace..."
             coroutineScope.launch {
                 var successCount = 0
                 var lastError: String? = null
                 uris.forEachIndexed { index, uri ->
+                    vaultUploadCurrentIndex = index + 1
                     var fileName = "Document_${index + 1}"
                     try {
                         context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
@@ -915,6 +921,14 @@ fun MyFilesScreen(
                     Text("Cancel")
                 }
             }
+        )
+    }
+
+    // IntelliSpace Indexing / Uploading Progress Dialog
+    if (isUploadingToVault) {
+        IntelliSpaceIndexingDialog(
+            currentIndex = vaultUploadCurrentIndex,
+            totalCount = vaultUploadTotalCount
         )
     }
 

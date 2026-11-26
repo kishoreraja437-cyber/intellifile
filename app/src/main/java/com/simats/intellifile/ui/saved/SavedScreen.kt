@@ -1,6 +1,7 @@
 package com.simats.intellifile.ui.saved
 
 import android.widget.Toast
+import com.simats.intellifile.ui.common.IntelliSpaceIndexingDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.animation.core.spring
@@ -133,6 +134,8 @@ fun SavedScreen(
     var isMultiSelectMode by remember { mutableStateOf(false) }
     val selectedFiles = remember { mutableStateListOf<SavedFileItem>() }
     var isMovingToVault by remember { mutableStateOf(false) }
+    var vaultMoveCurrentIndex by remember { mutableIntStateOf(0) }
+    var vaultMoveTotalCount by remember { mutableIntStateOf(0) }
     var moveProgressMessage by remember { mutableStateOf("") }
     var showVaultConfirmDialog by remember { mutableStateOf(false) }
 
@@ -191,12 +194,15 @@ fun SavedScreen(
         if (selectedFiles.isEmpty()) return
         isMovingToVault = true
         val filesToMove = selectedFiles.toList()
+        vaultMoveCurrentIndex = 0
+        vaultMoveTotalCount = filesToMove.size
 
         coroutineScope.launch {
             var successCount = 0
             var lastError: String? = null
 
             filesToMove.forEachIndexed { index, file ->
+                vaultMoveCurrentIndex = index + 1
                 moveProgressMessage = "Moving file ${index + 1} of ${filesToMove.size}: ${file.title}..."
                 val result = docRepo.uploadToVault(
                     filePath = file.path,
@@ -309,37 +315,9 @@ fun SavedScreen(
 
     // Modal Progress Dialog while moving batch files to IntelliSpace
     if (isMovingToVault) {
-        AlertDialog(
-            onDismissRequest = { /* Non-dismissible while processing */ },
-            title = {
-                Text(
-                    text = "Moving to IntelliSpace...",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    LinearProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp)),
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Text(
-                        text = moveProgressMessage,
-                        fontSize = 13.sp,
-                        color = Color(0xFF4B5563),
-                        textAlign = TextAlign.Center
-                    )
-                }
-            },
-            confirmButton = {}
+        IntelliSpaceIndexingDialog(
+            currentIndex = vaultMoveCurrentIndex,
+            totalCount = vaultMoveTotalCount
         )
     }
 

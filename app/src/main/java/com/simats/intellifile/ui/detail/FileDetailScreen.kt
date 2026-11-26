@@ -1,6 +1,7 @@
 package com.simats.intellifile.ui.detail
 
 import android.net.Uri
+import com.simats.intellifile.ui.common.IntelliSpaceIndexingDialog
 import android.widget.Toast
 import androidx.compose.material3.CircularProgressIndicator
 import com.simats.intellifile.data.repository.DocumentRepository
@@ -407,6 +408,15 @@ fun FileDetailScreen(
                     Text("Cancel", color = Color(0xFF6B7280))
                 }
             }
+        )
+    }
+
+    // IntelliSpace Indexing / Uploading Progress Dialog
+    if (isUploadingToVault) {
+        IntelliSpaceIndexingDialog(
+            currentIndex = 1,
+            totalCount = 1,
+            fileName = fileData.fileName
         )
     }
 
