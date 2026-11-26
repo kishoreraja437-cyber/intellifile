@@ -7,8 +7,15 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.simats.intellifile.data.session.SessionManager
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.security.MessageDigest
 import java.security.SecureRandom
 import javax.crypto.SecretKeyFactory
@@ -17,7 +24,7 @@ import javax.crypto.spec.PBEKeySpec
 /**
  * Secure App Lock Manager for IntelliFile.
  * Manages PIN creation, confirmation, cryptographic verification,
- * and Android BiometricPrompt fingerprint authentication.
+ * Android BiometricPrompt fingerprint authentication, and foreground/background lifecycle state.
  *
  * Security:
  * - Backed by Android Keystore and EncryptedSharedPreferences (AES256-GCM).
@@ -28,6 +35,18 @@ import javax.crypto.spec.PBEKeySpec
 class AppLockManager private constructor(private val context: Context) {
 
     private val prefs: SharedPreferences = createEncryptedPreferences(context)
+    private val sessionManager by lazy { SessionManager(context) }
+
+    private val _isLocked = MutableStateFlow(false)
+    val isLocked: StateFlow<Boolean> = _isLocked.asStateFlow()
+
+    private val _biometricTrigger = MutableStateFlow(0L)
+    val biometricTrigger: StateFlow<Long> = _biometricTrigger.asStateFlow()
+
+    @Volatile
+    var isBiometricPromptShowing: Boolean = false
+
+    private var isProcessLifecycleAttached = false
 
     companion object {
         private const val PREFS_FILE = "intellifile_secure_app_lock"
@@ -45,8 +64,8 @@ class AppLockManager private constructor(private val context: Context) {
 
         /**
          * In-memory session unlock state.
-         * Set to true when user unlocks via PIN or Fingerprint on app open.
-         * Reset to false when the app process restarts.
+         * Set to true when user unlocks via PIN or Fingerprint.
+         * Reset to false when the app moves to background or process restarts.
          */
         @Volatile
         var isAppUnlocked: Boolean = false
@@ -78,6 +97,66 @@ class AppLockManager private constructor(private val context: Context) {
     }
 
     /**
+     * Attaches process-wide lifecycle observer using ProcessLifecycleOwner.
+     */
+    fun attachToProcessLifecycle() {
+        if (isProcessLifecycleAttached) return
+        isProcessLifecycleAttached = true
+        try {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+                override fun onStart(owner: LifecycleOwner) {
+                    onAppForegrounded()
+                }
+
+                override fun onStop(owner: LifecycleOwner) {
+                    onAppBackgrounded()
+                }
+            })
+        } catch (e: Exception) {
+            android.util.Log.e("AppLockManager", "Failed to attach ProcessLifecycleOwner observer", e)
+        }
+    }
+
+    /**
+     * Called when the app moves to background (user pressed Home, switched apps, etc.).
+     */
+    fun onAppBackgrounded() {
+        if (isAppLockEnabled() && sessionManager.isLoggedIn()) {
+            isAppUnlocked = false
+            _isLocked.value = true
+        }
+    }
+
+    /**
+     * Called when the app returns to foreground.
+     */
+    fun onAppForegrounded() {
+        if (isAppLockEnabled() && sessionManager.isLoggedIn() && !isAppUnlocked) {
+            _isLocked.value = true
+            _biometricTrigger.value = System.currentTimeMillis()
+        }
+    }
+
+    /**
+     * Immediately marks the app as locked (e.g. on splash completion when App Lock is active).
+     */
+    fun lockApp() {
+        if (isAppLockEnabled() && sessionManager.isLoggedIn()) {
+            isAppUnlocked = false
+            _isLocked.value = true
+            _biometricTrigger.value = System.currentTimeMillis()
+        }
+    }
+
+    /**
+     * Unlocks the app after successful PIN or fingerprint authentication.
+     */
+    fun unlock() {
+        isAppUnlocked = true
+        _isLocked.value = false
+    }
+
+    /**
      * Checks if App Lock is currently enabled by the user.
      */
     fun isAppLockEnabled(): Boolean {
@@ -89,6 +168,9 @@ class AppLockManager private constructor(private val context: Context) {
      */
     fun setAppLockEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_APP_LOCK_ENABLED, enabled).apply()
+        if (!enabled) {
+            unlock()
+        }
     }
 
     /**
@@ -161,6 +243,7 @@ class AppLockManager private constructor(private val context: Context) {
                 .apply()
 
             isAppUnlocked = true
+            _isLocked.value = false
             true
         } catch (e: Exception) {
             android.util.Log.e("AppLockManager", "Error saving PIN", e)
@@ -201,7 +284,7 @@ class AppLockManager private constructor(private val context: Context) {
             .putBoolean(KEY_APP_LOCK_ENABLED, false)
             .putBoolean(KEY_FINGERPRINT_ENABLED, false)
             .apply()
-        isAppUnlocked = false
+        unlock()
     }
 
     /**
@@ -221,6 +304,11 @@ class AppLockManager private constructor(private val context: Context) {
             return
         }
 
+        if (isBiometricPromptShowing) {
+            android.util.Log.d("AppLockManager", "Biometric prompt already displaying")
+            return
+        }
+
         val executor = ContextCompat.getMainExecutor(activity)
         val prompt = BiometricPrompt(
             activity,
@@ -228,12 +316,14 @@ class AppLockManager private constructor(private val context: Context) {
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
-                    isAppUnlocked = true
+                    isBiometricPromptShowing = false
+                    unlock()
                     onSuccess()
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     super.onAuthenticationError(errorCode, errString)
+                    isBiometricPromptShowing = false
                     if (errorCode == BiometricPrompt.ERROR_USER_CANCELED ||
                         errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON ||
                         errorCode == BiometricPrompt.ERROR_CANCELED
@@ -261,7 +351,14 @@ class AppLockManager private constructor(private val context: Context) {
             )
             .build()
 
-        prompt.authenticate(promptInfo)
+        try {
+            isBiometricPromptShowing = true
+            prompt.authenticate(promptInfo)
+        } catch (e: Exception) {
+            isBiometricPromptShowing = false
+            android.util.Log.e("AppLockManager", "Error launching BiometricPrompt", e)
+            onError(e.message ?: "Authentication error")
+        }
     }
 
     private fun computePbkdf2Hash(pin: String, salt: ByteArray): String {

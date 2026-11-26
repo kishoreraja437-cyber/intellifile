@@ -21,6 +21,7 @@ import androidx.fragment.app.FragmentActivity
 import com.simats.intellifile.data.security.AppLockManager
 import com.simats.intellifile.ui.security.AppLockScreen
 import androidx.activity.compose.setContent
+import androidx.compose.ui.zIndex
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.WindowCompat
@@ -73,11 +74,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 enum class AppScreen {
-    SPLASH, APP_LOCK, ONBOARD, LOGIN, SIGNUP, FORGOT_PASSWORD, PERMISSION, MAIN
+    SPLASH, ONBOARD, LOGIN, SIGNUP, FORGOT_PASSWORD, PERMISSION, MAIN
 }
 
 class AppNavigationViewModel(application: Application) : AndroidViewModel(application) {
     private val sessionManager = SessionManager(application)
+    private val appLockManager = AppLockManager.getInstance(application)
 
     private val _currentScreen = MutableStateFlow(AppScreen.SPLASH)
     val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
@@ -92,25 +94,17 @@ class AppNavigationViewModel(application: Application) : AndroidViewModel(applic
     val themeMode: StateFlow<AppThemeMode> = _themeMode.asStateFlow()
 
     fun onSplashFinished() {
-        val appLockManager = AppLockManager.getInstance(getApplication())
         if (sessionManager.isLoggedIn()) {
             if (appLockManager.isAppLockEnabled() && !AppLockManager.isAppUnlocked) {
-                _currentScreen.value = AppScreen.APP_LOCK
-            } else if (!LocalFileManager.hasStoragePermission(getApplication())) {
+                appLockManager.lockApp()
+            }
+            if (!LocalFileManager.hasStoragePermission(getApplication())) {
                 _currentScreen.value = AppScreen.PERMISSION
             } else {
                 _currentScreen.value = AppScreen.MAIN
             }
         } else {
             _currentScreen.value = AppScreen.ONBOARD
-        }
-    }
-
-    fun onAppLockUnlocked() {
-        if (!LocalFileManager.hasStoragePermission(getApplication())) {
-            _currentScreen.value = AppScreen.PERMISSION
-        } else {
-            _currentScreen.value = AppScreen.MAIN
         }
     }
 
@@ -167,6 +161,7 @@ class AppNavigationViewModel(application: Application) : AndroidViewModel(applic
     }
 
     fun onLogout() {
+        appLockManager.unlock()
         sessionManager.clearSession()
         RetrofitClient.resetClient()
         _currentScreen.value = AppScreen.LOGIN
@@ -190,6 +185,7 @@ class MainActivity : FragmentActivity() {
 
     private val externalDocumentState = MutableStateFlow<ExternalDocument?>(null)
     private var isOpenedFromExternalIntent = false
+    private lateinit var appLockManager: AppLockManager
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -329,6 +325,8 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        appLockManager = AppLockManager.getInstance(this)
+        appLockManager.attachToProcessLifecycle()
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         handleIncomingIntent(intent, isInitial = true)
         enableEdgeToEdge()
@@ -374,6 +372,8 @@ class MainActivity : FragmentActivity() {
             val appNavViewModel: AppNavigationViewModel = viewModel()
             val currentScreen by appNavViewModel.currentScreen.collectAsState()
             val themeMode by appNavViewModel.themeMode.collectAsState()
+            val isAppLocked by appLockManager.isLocked.collectAsState()
+            val biometricTrigger by appLockManager.biometricTrigger.collectAsState()
 
             val isDarkTheme = when (themeMode) {
                 AppThemeMode.LIGHT -> false
@@ -412,11 +412,12 @@ class MainActivity : FragmentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .statusBarsPadding()
-                    ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .statusBarsPadding()
+                        ) {
                         val externalDoc by externalDocumentState.collectAsState()
 
                         LaunchedEffect(externalDoc) {
@@ -539,9 +540,6 @@ class MainActivity : FragmentActivity() {
                             AppScreen.SPLASH -> SplashScreen(
                                 onSplashFinished = { appNavViewModel.onSplashFinished() }
                             )
-                            AppScreen.APP_LOCK -> AppLockScreen(
-                                onUnlockSuccess = { appNavViewModel.onAppLockUnlocked() }
-                            )
                             AppScreen.ONBOARD -> OnboardScreen(
                                 onGetStartedClick = { appNavViewModel.onGetStartedClicked() }
                             )
@@ -576,8 +574,34 @@ class MainActivity : FragmentActivity() {
                     }
                         }
                     }
+
+                        // App Lock Overlay: immediately covers screen when returning from background or cold start
+                        if (isAppLocked && currentScreen != AppScreen.SPLASH && currentScreen != AppScreen.LOGIN && currentScreen != AppScreen.SIGNUP && currentScreen != AppScreen.FORGOT_PASSWORD && currentScreen != AppScreen.ONBOARD) {
+                            AppLockScreen(
+                                onUnlockSuccess = {
+                                    appLockManager.unlock()
+                                },
+                                promptTrigger = biometricTrigger,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .zIndex(9999f)
+                            )
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        appLockManager.onAppForegrounded()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) {
+            appLockManager.onAppBackgrounded()
         }
     }
 

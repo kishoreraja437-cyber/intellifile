@@ -1,6 +1,7 @@
 package com.simats.intellifile.ui.security
 
-import android.widget.Toast
+import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -10,7 +11,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,13 +26,14 @@ import androidx.fragment.app.FragmentActivity
 import com.simats.intellifile.data.security.AppLockManager
 
 /**
- * Startup App Lock Screen for IntelliFile.
+ * Startup and Foreground Return App Lock Screen for IntelliFile.
  * Prompts the user to enter their PIN or authenticate via fingerprint
- * whenever the app is opened with App Lock enabled.
+ * whenever the app is opened or returned to from background with App Lock enabled.
  */
 @Composable
 fun AppLockScreen(
     onUnlockSuccess: () -> Unit,
+    promptTrigger: Long = 0L,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -43,6 +44,11 @@ fun AppLockScreen(
     var enteredPin by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // Intercept back button on lock screen: minimize the app rather than bypassing the lock
+    BackHandler {
+        (context as? Activity)?.moveTaskToBack(true)
+    }
 
     fun triggerBiometricPrompt() {
         if (!isFingerprintEnabled) return
@@ -64,8 +70,8 @@ fun AppLockScreen(
         )
     }
 
-    // Auto-prompt fingerprint once on launch if enabled
-    LaunchedEffect(Unit) {
+    // Auto-prompt fingerprint once on launch or when foreground return trigger updates
+    LaunchedEffect(promptTrigger) {
         if (isFingerprintEnabled) {
             triggerBiometricPrompt()
         }
@@ -81,7 +87,8 @@ fun AppLockScreen(
             // Once user enters the full length, verify immediately
             if (nextPin.length == pinLength) {
                 if (appLockManager.verifyPin(nextPin)) {
-                    AppLockManager.isAppUnlocked = true
+                    appLockManager.unlock()
+                    enteredPin = ""
                     onUnlockSuccess()
                 } else {
                     isError = true
