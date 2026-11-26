@@ -254,6 +254,14 @@ interface IntelliFileApiService {
 
 
 
+    @GET("documents/get_insight.php")
+    suspend fun getDocumentInsight(
+        @Query("document_id") documentId: Int,
+        @Query("retry") retry: Int = 0
+    ): Response<AiSummarizeResponse>
+
+
+
     // --- AI, Search & Chat ---
 
 

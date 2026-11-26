@@ -686,4 +686,17 @@ class DocumentRepository(private val context: Context) {
 
         return if (copied && tempFile.exists() && tempFile.length() > 0) tempFile else null
     }
+
+    suspend fun getDocumentInsight(documentId: Int, retry: Boolean = false): Result<AiSummarizeResponse> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.getDocumentInsight(documentId, if (retry) 1 else 0)
+            if (response.isSuccessful && response.body()?.success == true) {
+                Result.success(response.body()!!)
+            } else {
+                Result.failure(Exception(response.body()?.error ?: response.body()?.message ?: "Failed to fetch document insight"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

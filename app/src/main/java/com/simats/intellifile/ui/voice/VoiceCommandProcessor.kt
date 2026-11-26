@@ -321,6 +321,76 @@ object VoiceCommandProcessor {
             )
         }
 
+        // Overlays: App Lock
+        val navAppLockExact = listOf(
+            "app lock", "lock settings", "pin lock", "fingerprint lock", "open app lock", "security settings"
+        )
+        if (navAppLockExact.any { clean == it || clean.startsWith("$it ") }) {
+            return Pair(
+                VoiceCommandType.NAVIGATION_COMMAND,
+                VoiceIntentResult.Navigation(
+                    overlayKey = "app_lock",
+                    spokenConfirmation = "Opening App Lock Settings."
+                )
+            )
+        }
+
+        // Overlays: File Permissions
+        val navPermsExact = listOf(
+            "file permissions", "permissions", "storage permissions", "manage permissions", "storage access"
+        )
+        if (navPermsExact.any { clean == it || clean.startsWith("$it ") }) {
+            return Pair(
+                VoiceCommandType.NAVIGATION_COMMAND,
+                VoiceIntentResult.Navigation(
+                    overlayKey = "file_permissions",
+                    spokenConfirmation = "Opening File Permissions."
+                )
+            )
+        }
+
+        // Overlays: Feedback
+        val navFeedbackExact = listOf(
+            "feedback", "send feedback", "give feedback", "app feedback"
+        )
+        if (navFeedbackExact.any { clean == it || clean.startsWith("$it ") }) {
+            return Pair(
+                VoiceCommandType.NAVIGATION_COMMAND,
+                VoiceIntentResult.Navigation(
+                    overlayKey = "feedback",
+                    spokenConfirmation = "Opening Feedback."
+                )
+            )
+        }
+
+        // Overlays: About
+        val navAboutExact = listOf(
+            "about", "about app", "about intellifile", "app version", "version"
+        )
+        if (navAboutExact.any { clean == it || clean.startsWith("$it ") }) {
+            return Pair(
+                VoiceCommandType.NAVIGATION_COMMAND,
+                VoiceIntentResult.Navigation(
+                    overlayKey = "about",
+                    spokenConfirmation = "Opening About IntelliFile."
+                )
+            )
+        }
+
+        // Overlays: Contact Support
+        val navContactExact = listOf(
+            "contact", "contact us", "contact support", "support team"
+        )
+        if (navContactExact.any { clean == it || clean.startsWith("$it ") }) {
+            return Pair(
+                VoiceCommandType.NAVIGATION_COMMAND,
+                VoiceIntentResult.Navigation(
+                    overlayKey = "contact",
+                    spokenConfirmation = "Opening Contact Support."
+                )
+            )
+        }
+
         // Unrecognized navigation command attempt
         if (clean.startsWith("go to ") || clean.startsWith("navigate to ") || clean.endsWith(" screen") || clean.startsWith("open screen")) {
             return Pair(

@@ -566,8 +566,18 @@ fun MainScreen(
                                 },
                                 onShareClick = { isShareOpen = true },
                                 onMoreClick = { isShareOpen = true },
-                                onSetPriorityClick = {},
-                                onConfirmSave = {}
+                                onSetPriorityClick = {
+                                    isDocumentViewerOpen = false
+                                },
+                                onConfirmSave = {
+                                    selectedDetailFile?.let { f ->
+                                        val key = if (f.path.isNotBlank()) f.path else f.uriString
+                                        if (key.isNotBlank()) {
+                                            LocalFileDatabaseHelper.getInstance(context).toggleBookmark(key, f.fileName)
+                                            android.widget.Toast.makeText(context, "Saved to Bookmarks", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
                             )
                         }
                     }
@@ -1125,6 +1135,10 @@ fun MainScreen(
                         "about" -> isAboutOpen = true
                         "help" -> isHelpSupportOpen = true
                         "ai_history" -> isAiHistoryOpen = true
+                        "app_lock" -> isAppLockSettingsOpen = true
+                        "file_permissions" -> isFilePermissionsOpen = true
+                        "feedback" -> isFeedbackOpen = true
+                        "contact" -> isContactSupportOpen = true
                     }
                 },
                 onGoBack = {
