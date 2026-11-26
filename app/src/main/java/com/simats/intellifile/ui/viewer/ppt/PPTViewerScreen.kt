@@ -99,6 +99,12 @@ fun PPTViewerScreen(
         mutableStateOf(if (key.isNotBlank()) LocalFileDatabaseHelper.getInstance(context).isBookmarked(key) else false)
     }
 
+    LaunchedEffect(key, fileName) {
+        if (key.isNotBlank()) {
+            LocalFileDatabaseHelper.getInstance(context).recordFileOpened(key, fileName)
+        }
+    }
+
     val totalSlides = uiState.totalSlides.coerceAtLeast(1)
     val pagerState = rememberPagerState(
         initialPage = uiState.currentSlideIndex.coerceIn(0, totalSlides - 1),

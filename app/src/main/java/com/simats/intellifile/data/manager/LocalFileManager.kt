@@ -94,7 +94,8 @@ object LocalFileManager {
                 MediaStore.Files.FileColumns.SIZE,
                 MediaStore.Files.FileColumns.DATE_MODIFIED,
                 MediaStore.Files.FileColumns.MIME_TYPE,
-                MediaStore.Files.FileColumns.DATA
+                MediaStore.Files.FileColumns.DATA,
+                MediaStore.MediaColumns.DATE_ADDED
             )
 
             // Filter strictly for supported document types
@@ -122,6 +123,7 @@ object LocalFileManager {
                 val dateCol = c.getColumnIndex(MediaStore.Files.FileColumns.DATE_MODIFIED)
                 val mimeCol = c.getColumnIndex(MediaStore.Files.FileColumns.MIME_TYPE)
                 val dataCol = c.getColumnIndex(MediaStore.Files.FileColumns.DATA)
+                val dateAddedCol = c.getColumnIndex(MediaStore.MediaColumns.DATE_ADDED)
 
                 while (c.moveToNext()) {
                     val id = if (idCol != -1) c.getLong(idCol) else 0L
@@ -130,6 +132,7 @@ object LocalFileManager {
                     val dateSec = if (dateCol != -1) c.getLong(dateCol) else 0L
                     val mime = if (mimeCol != -1) c.getString(mimeCol) else null
                     val dataPath = if (dataCol != -1) c.getString(dataCol) else null
+                    val dateAddedSec = if (dateAddedCol != -1) c.getLong(dateAddedCol) else 0L
 
                     if (name.isNullOrBlank()) continue
 
@@ -163,7 +166,8 @@ object LocalFileManager {
                             isBookmarked = isBookmarked,
                             isVaultSynced = isVaultSynced,
                             vaultDocId = vaultDocId,
-                            iconResId = iconRes
+                            iconResId = iconRes,
+                            dateAddedMs = dateAddedSec * 1000L
                         )
                     )
                 }

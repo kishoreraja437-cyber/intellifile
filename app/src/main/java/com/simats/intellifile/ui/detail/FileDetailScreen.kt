@@ -27,6 +27,15 @@ import androidx.compose.material.icons.outlined.Adjust
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.SdStorage
+import androidx.compose.material.icons.outlined.AutoStories
+import androidx.compose.material.icons.outlined.Slideshow
+import androidx.compose.material.icons.outlined.TableChart
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import com.simats.intellifile.data.manager.FileMetadataExtractor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.material3.AlertDialog
@@ -80,7 +89,11 @@ data class FileDetailData(
     val iconResId: Int = R.drawable.pdf,
     val uriString: String = "",
     val path: String = "",
-    val isVaultSynced: Boolean = false
+    val isVaultSynced: Boolean = false,
+    val dateAdded: String? = null,
+    val lastOpened: String? = null,
+    val contentCountLabel: String? = null,
+    val contentCountValue: String? = null
 )
 
 @Composable
@@ -115,6 +128,43 @@ fun FileDetailScreen(
         mutableStateOf(fileData.isVaultSynced || (meta?.isVaultSynced == true))
     }
     var isCheckingVaultStatus by remember { mutableStateOf(false) }
+
+    // Dynamic Metadata Extraction States (File Format, File Size, Page/Slide Count, Date Added, Last Opened)
+    var fileFormat by remember(fileData.fileName, fileData.fileType) {
+        mutableStateOf(FileMetadataExtractor.resolveFormat(fileData.fileName, fileData.fileType))
+    }
+    var fileSize by remember(fileData.fileSize) {
+        mutableStateOf(fileData.fileSize.takeIf { it.isNotBlank() && it != "0 KB" } ?: "Loading...")
+    }
+    var contentCountLabel by remember(fileFormat) {
+        mutableStateOf(fileData.contentCountLabel ?: FileMetadataExtractor.getCountLabel(fileFormat))
+    }
+    var contentCountValue by remember(fileData.contentCountValue) {
+        mutableStateOf(fileData.contentCountValue ?: "Calculating...")
+    }
+    var dateAddedText by remember(fileData.dateAdded) {
+        mutableStateOf(fileData.dateAdded ?: "Checking...")
+    }
+    var lastOpenedText by remember(fileData.lastOpened) {
+        mutableStateOf(fileData.lastOpened ?: "Checking...")
+    }
+
+    LaunchedEffect(key, fileData.fileName, fileData.path, fileData.uriString) {
+        val details = FileMetadataExtractor.extractDetails(
+            context = context,
+            fileName = fileData.fileName,
+            filePath = fileData.path,
+            fileUriString = fileData.uriString,
+            fallbackFileSize = fileData.fileSize,
+            fallbackFormat = fileData.fileType
+        )
+        fileFormat = details.format
+        fileSize = details.formattedSize
+        contentCountLabel = details.countLabel
+        contentCountValue = details.countValue
+        dateAddedText = details.dateAddedText
+        lastOpenedText = details.lastOpenedText
+    }
 
     // Live Server Synchronization (Requirement 1, 6, 7, 8, 9, 10):
     // 1. Checks whether current file exists in IntelliSpace on the backend.
@@ -221,6 +271,9 @@ fun FileDetailScreen(
                             .border(1.dp, Color(0xFFBFDBFE), RoundedCornerShape(14.dp))
                             .clickable {
                                 showOpenOptionsDialog = false
+                                val now = System.currentTimeMillis()
+                                dbHelper.recordFileOpened(key, fileData.fileName, now)
+                                lastOpenedText = FileMetadataExtractor.formatLastOpened(now)
                                 onOpenFileClick()
                             }
                             .padding(14.dp),
@@ -268,6 +321,9 @@ fun FileDetailScreen(
                             .border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(14.dp))
                             .clickable {
                                 showOpenOptionsDialog = false
+                                val now = System.currentTimeMillis()
+                                dbHelper.recordFileOpened(key, fileData.fileName, now)
+                                lastOpenedText = FileMetadataExtractor.formatLastOpened(now)
                                 val localItem = LocalFileItem(
                                     title = fileData.fileName,
                                     path = fileData.path,
@@ -625,29 +681,48 @@ fun FileDetailScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Metadata Attributes List
+            // Dynamically Retrieved Metadata Attributes List (5 Rows)
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // 1. File Format
+                MetadataRow(
+                    icon = Icons.Outlined.Description,
+                    label = "File Format",
+                    value = fileFormat
+                )
+
+                // 2. File Size
+                MetadataRow(
+                    icon = Icons.Outlined.SdStorage,
+                    label = "File Size",
+                    value = fileSize
+                )
+
+                // 3. Page / Slide Count
+                val countIcon = when (fileFormat.uppercase()) {
+                    "PPT", "PPTX", "PPS", "PPSX", "POT", "POTX" -> Icons.Outlined.Slideshow
+                    "XLS", "XLSX", "CSV", "TSV", "ODS" -> Icons.Outlined.TableChart
+                    else -> Icons.Outlined.AutoStories
+                }
+                MetadataRow(
+                    icon = countIcon,
+                    label = contentCountLabel,
+                    value = contentCountValue
+                )
+
+                // 4. Date Added to Device
                 MetadataRow(
                     icon = Icons.Outlined.CalendarToday,
-                    label = "Created",
-                    value = fileData.createdDate
+                    label = "Date Added to Device",
+                    value = dateAddedText
                 )
+
+                // 5. Last Opened
                 MetadataRow(
-                    icon = Icons.Outlined.Folder,
-                    label = "Modified",
-                    value = fileData.modifiedDate
-                )
-                MetadataRow(
-                    icon = Icons.Outlined.Folder,
-                    label = "Category",
-                    value = fileData.category
-                )
-                MetadataRow(
-                    icon = Icons.Outlined.Adjust,
-                    label = "Location",
-                    value = fileData.location
+                    icon = Icons.Outlined.Schedule,
+                    label = "Last Opened",
+                    value = lastOpenedText
                 )
             }
 
@@ -852,7 +927,8 @@ fun MetadataRow(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1.1f, fill = false)
         ) {
             Icon(
                 imageVector = icon,
@@ -866,16 +942,22 @@ fun MetadataRow(
             Text(
                 text = label,
                 fontSize = 15.sp,
-                color = Color(0xFF6B7280)
+                color = Color(0xFF6B7280),
+                maxLines = 1
             )
         }
+
+        Spacer(modifier = Modifier.width(12.dp))
 
         Text(
             text = value,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             color = Color(0xFF4B5563),
-            maxLines = 1
+            textAlign = TextAlign.End,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false)
         )
     }
 }

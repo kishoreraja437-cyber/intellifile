@@ -21,7 +21,11 @@ data class LocalFileMetadata(
     val isVaultSynced: Boolean = false,
     val vaultDocId: Int? = null,
     val notes: String = "",
-    val lastAccessed: Long = System.currentTimeMillis()
+    val lastAccessed: Long = System.currentTimeMillis(),
+    val dateAdded: Long = 0L,
+    val lastOpened: Long = 0L,
+    val contentCountLabel: String? = null,
+    val contentCountValue: String? = null
 )
 
 class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
@@ -32,7 +36,7 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
 ) {
     companion object {
         private const val DATABASE_NAME = "intellifile_local.db"
-        private const val DATABASE_VERSION = 2
+        private const val DATABASE_VERSION = 3
 
         private const val TABLE_METADATA = "local_file_metadata"
         private const val COL_URI_OR_PATH = "uri_or_path"
@@ -44,6 +48,10 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
         private const val COL_VAULT_DOC_ID = "vault_doc_id"
         private const val COL_NOTES = "notes"
         private const val COL_LAST_ACCESSED = "last_accessed"
+        private const val COL_DATE_ADDED = "date_added"
+        private const val COL_LAST_OPENED = "last_opened"
+        private const val COL_CONTENT_COUNT_LABEL = "content_count_label"
+        private const val COL_CONTENT_COUNT_VALUE = "content_count_value"
 
         @Volatile
         private var instance: LocalFileDatabaseHelper? = null
@@ -66,15 +74,47 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
                 $COL_IS_VAULT_SYNCED INTEGER NOT NULL DEFAULT 0,
                 $COL_VAULT_DOC_ID INTEGER,
                 $COL_NOTES TEXT DEFAULT '',
-                $COL_LAST_ACCESSED INTEGER NOT NULL DEFAULT 0
+                $COL_LAST_ACCESSED INTEGER NOT NULL DEFAULT 0,
+                $COL_DATE_ADDED INTEGER NOT NULL DEFAULT 0,
+                $COL_LAST_OPENED INTEGER NOT NULL DEFAULT 0,
+                $COL_CONTENT_COUNT_LABEL TEXT DEFAULT NULL,
+                $COL_CONTENT_COUNT_VALUE TEXT DEFAULT NULL
             )
         """.trimIndent()
         db.execSQL(createQuery)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_METADATA")
-        onCreate(db)
+        if (oldVersion < 3) {
+            try {
+                db.execSQL("ALTER TABLE $TABLE_METADATA ADD COLUMN $COL_DATE_ADDED INTEGER NOT NULL DEFAULT 0")
+            } catch (_: Exception) {}
+            try {
+                db.execSQL("ALTER TABLE $TABLE_METADATA ADD COLUMN $COL_LAST_OPENED INTEGER NOT NULL DEFAULT 0")
+            } catch (_: Exception) {}
+            try {
+                db.execSQL("ALTER TABLE $TABLE_METADATA ADD COLUMN $COL_CONTENT_COUNT_LABEL TEXT DEFAULT NULL")
+            } catch (_: Exception) {}
+            try {
+                db.execSQL("ALTER TABLE $TABLE_METADATA ADD COLUMN $COL_CONTENT_COUNT_VALUE TEXT DEFAULT NULL")
+            } catch (_: Exception) {}
+        }
+    }
+
+    override fun onOpen(db: SQLiteDatabase) {
+        super.onOpen(db)
+        try {
+            db.execSQL("ALTER TABLE $TABLE_METADATA ADD COLUMN $COL_DATE_ADDED INTEGER NOT NULL DEFAULT 0")
+        } catch (_: Exception) {}
+        try {
+            db.execSQL("ALTER TABLE $TABLE_METADATA ADD COLUMN $COL_LAST_OPENED INTEGER NOT NULL DEFAULT 0")
+        } catch (_: Exception) {}
+        try {
+            db.execSQL("ALTER TABLE $TABLE_METADATA ADD COLUMN $COL_CONTENT_COUNT_LABEL TEXT DEFAULT NULL")
+        } catch (_: Exception) {}
+        try {
+            db.execSQL("ALTER TABLE $TABLE_METADATA ADD COLUMN $COL_CONTENT_COUNT_VALUE TEXT DEFAULT NULL")
+        } catch (_: Exception) {}
     }
 
     /**
@@ -103,6 +143,10 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
             val colVaultDocId = c.getColumnIndexOrThrow(COL_VAULT_DOC_ID)
             val colNotes = c.getColumnIndexOrThrow(COL_NOTES)
             val colAccessed = c.getColumnIndexOrThrow(COL_LAST_ACCESSED)
+            val colDateAdded = c.getColumnIndex(COL_DATE_ADDED)
+            val colLastOpened = c.getColumnIndex(COL_LAST_OPENED)
+            val colCountLabel = c.getColumnIndex(COL_CONTENT_COUNT_LABEL)
+            val colCountValue = c.getColumnIndex(COL_CONTENT_COUNT_VALUE)
 
             while (c.moveToNext()) {
                 val key = c.getString(colKey)
@@ -124,7 +168,11 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
                     isVaultSynced = c.getInt(colVault) == 1,
                     vaultDocId = if (c.isNull(colVaultDocId)) null else c.getInt(colVaultDocId),
                     notes = c.getString(colNotes) ?: "",
-                    lastAccessed = c.getLong(colAccessed)
+                    lastAccessed = c.getLong(colAccessed),
+                    dateAdded = if (colDateAdded != -1 && !c.isNull(colDateAdded)) c.getLong(colDateAdded) else 0L,
+                    lastOpened = if (colLastOpened != -1 && !c.isNull(colLastOpened)) c.getLong(colLastOpened) else 0L,
+                    contentCountLabel = if (colCountLabel != -1 && !c.isNull(colCountLabel)) c.getString(colCountLabel) else null,
+                    contentCountValue = if (colCountValue != -1 && !c.isNull(colCountValue)) c.getString(colCountValue) else null
                 )
             }
         }
@@ -160,6 +208,11 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
                 }
 
                 val colVaultDocId = c.getColumnIndexOrThrow(COL_VAULT_DOC_ID)
+                val colDateAdded = c.getColumnIndex(COL_DATE_ADDED)
+                val colLastOpened = c.getColumnIndex(COL_LAST_OPENED)
+                val colCountLabel = c.getColumnIndex(COL_CONTENT_COUNT_LABEL)
+                val colCountValue = c.getColumnIndex(COL_CONTENT_COUNT_VALUE)
+
                 return LocalFileMetadata(
                     uriOrPath = c.getString(c.getColumnIndexOrThrow(COL_URI_OR_PATH)),
                     fileName = c.getString(c.getColumnIndexOrThrow(COL_FILE_NAME)),
@@ -169,7 +222,11 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
                     isVaultSynced = c.getInt(c.getColumnIndexOrThrow(COL_IS_VAULT_SYNCED)) == 1,
                     vaultDocId = if (c.isNull(colVaultDocId)) null else c.getInt(colVaultDocId),
                     notes = c.getString(c.getColumnIndexOrThrow(COL_NOTES)) ?: "",
-                    lastAccessed = c.getLong(c.getColumnIndexOrThrow(COL_LAST_ACCESSED))
+                    lastAccessed = c.getLong(c.getColumnIndexOrThrow(COL_LAST_ACCESSED)),
+                    dateAdded = if (colDateAdded != -1 && !c.isNull(colDateAdded)) c.getLong(colDateAdded) else 0L,
+                    lastOpened = if (colLastOpened != -1 && !c.isNull(colLastOpened)) c.getLong(colLastOpened) else 0L,
+                    contentCountLabel = if (colCountLabel != -1 && !c.isNull(colCountLabel)) c.getString(colCountLabel) else null,
+                    contentCountValue = if (colCountValue != -1 && !c.isNull(colCountValue)) c.getString(colCountValue) else null
                 )
             }
         }
@@ -379,5 +436,230 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
         } catch (e: Exception) {
             android.util.Log.e("LocalFileDB", "Error syncing vault status", e)
         }
+    }
+
+    /**
+     * Records a file opening event inside IntelliFile.
+     */
+    fun recordFileOpened(uriOrPath: String, fileName: String, timestamp: Long = System.currentTimeMillis()) {
+        try {
+            val db = writableDatabase
+            val values = ContentValues().apply {
+                put(COL_LAST_OPENED, timestamp)
+                put(COL_LAST_ACCESSED, timestamp)
+            }
+            val updated = db.update(TABLE_METADATA, values, "$COL_URI_OR_PATH = ?", arrayOf(uriOrPath))
+            if (updated <= 0) {
+                val insertValues = ContentValues().apply {
+                    put(COL_URI_OR_PATH, uriOrPath)
+                    put(COL_FILE_NAME, fileName)
+                    put(COL_LAST_OPENED, timestamp)
+                    put(COL_LAST_ACCESSED, timestamp)
+                }
+                db.insertWithOnConflict(TABLE_METADATA, null, insertValues, SQLiteDatabase.CONFLICT_IGNORE)
+            }
+            if (fileName.isNotBlank() && fileName != uriOrPath) {
+                db.update(TABLE_METADATA, values, "$COL_FILE_NAME = ? AND $COL_LAST_OPENED < ?", arrayOf(fileName, timestamp.toString()))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * Retrieves the last opened timestamp from IntelliFile.
+     * Returns null if never opened through IntelliFile.
+     */
+    fun getLastOpened(uriOrPath: String, fileName: String): Long? {
+        try {
+            val db = readableDatabase
+            var cursor = db.query(
+                TABLE_METADATA,
+                arrayOf(COL_LAST_OPENED),
+                "$COL_URI_OR_PATH = ?",
+                arrayOf(uriOrPath),
+                null, null, null
+            )
+            cursor.use { c ->
+                if (c.moveToFirst()) {
+                    val idx = c.getColumnIndex(COL_LAST_OPENED)
+                    if (idx != -1) {
+                        val ts = c.getLong(idx)
+                        if (ts > 0L) return ts
+                    }
+                }
+            }
+            if (fileName.isNotBlank() && fileName != uriOrPath) {
+                cursor = db.query(
+                    TABLE_METADATA,
+                    arrayOf(COL_LAST_OPENED),
+                    "$COL_FILE_NAME = ?",
+                    arrayOf(fileName),
+                    null, null, null
+                )
+                cursor.use { c ->
+                    if (c.moveToFirst()) {
+                        val idx = c.getColumnIndex(COL_LAST_OPENED)
+                        if (idx != -1) {
+                            val ts = c.getLong(idx)
+                            if (ts > 0L) return ts
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return null
+    }
+
+    /**
+     * Stores the MediaStore Date Added timestamp for persistent offline lookup.
+     */
+    fun setDateAdded(uriOrPath: String, fileName: String, dateAddedMs: Long) {
+        if (dateAddedMs <= 0L) return
+        try {
+            val db = writableDatabase
+            val values = ContentValues().apply {
+                put(COL_DATE_ADDED, dateAddedMs)
+            }
+            val updated = db.update(TABLE_METADATA, values, "$COL_URI_OR_PATH = ?", arrayOf(uriOrPath))
+            if (updated <= 0) {
+                val insertValues = ContentValues().apply {
+                    put(COL_URI_OR_PATH, uriOrPath)
+                    put(COL_FILE_NAME, fileName)
+                    put(COL_DATE_ADDED, dateAddedMs)
+                }
+                db.insertWithOnConflict(TABLE_METADATA, null, insertValues, SQLiteDatabase.CONFLICT_IGNORE)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * Retrieves the cached Date Added timestamp.
+     */
+    fun getDateAdded(uriOrPath: String, fileName: String): Long? {
+        try {
+            val db = readableDatabase
+            var cursor = db.query(
+                TABLE_METADATA,
+                arrayOf(COL_DATE_ADDED),
+                "$COL_URI_OR_PATH = ?",
+                arrayOf(uriOrPath),
+                null, null, null
+            )
+            cursor.use { c ->
+                if (c.moveToFirst()) {
+                    val idx = c.getColumnIndex(COL_DATE_ADDED)
+                    if (idx != -1) {
+                        val ts = c.getLong(idx)
+                        if (ts > 0L) return ts
+                    }
+                }
+            }
+            if (fileName.isNotBlank() && fileName != uriOrPath) {
+                cursor = db.query(
+                    TABLE_METADATA,
+                    arrayOf(COL_DATE_ADDED),
+                    "$COL_FILE_NAME = ?",
+                    arrayOf(fileName),
+                    null, null, null
+                )
+                cursor.use { c ->
+                    if (c.moveToFirst()) {
+                        val idx = c.getColumnIndex(COL_DATE_ADDED)
+                        if (idx != -1) {
+                            val ts = c.getLong(idx)
+                            if (ts > 0L) return ts
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return null
+    }
+
+    /**
+     * Caches calculated content counts (pages, slides, sheets, rows, lines)
+     * so subsequent opens load instantly without re-parsing files.
+     */
+    fun setCachedContentCount(uriOrPath: String, fileName: String, label: String, value: String) {
+        try {
+            val db = writableDatabase
+            val values = ContentValues().apply {
+                put(COL_CONTENT_COUNT_LABEL, label)
+                put(COL_CONTENT_COUNT_VALUE, value)
+            }
+            val updated = db.update(TABLE_METADATA, values, "$COL_URI_OR_PATH = ?", arrayOf(uriOrPath))
+            if (updated <= 0) {
+                val insertValues = ContentValues().apply {
+                    put(COL_URI_OR_PATH, uriOrPath)
+                    put(COL_FILE_NAME, fileName)
+                    put(COL_CONTENT_COUNT_LABEL, label)
+                    put(COL_CONTENT_COUNT_VALUE, value)
+                }
+                db.insertWithOnConflict(TABLE_METADATA, null, insertValues, SQLiteDatabase.CONFLICT_IGNORE)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * Retrieves cached content count.
+     */
+    fun getCachedContentCount(uriOrPath: String, fileName: String): Pair<String, String>? {
+        try {
+            val db = readableDatabase
+            var cursor = db.query(
+                TABLE_METADATA,
+                arrayOf(COL_CONTENT_COUNT_LABEL, COL_CONTENT_COUNT_VALUE),
+                "$COL_URI_OR_PATH = ?",
+                arrayOf(uriOrPath),
+                null, null, null
+            )
+            cursor.use { c ->
+                if (c.moveToFirst()) {
+                    val lIdx = c.getColumnIndex(COL_CONTENT_COUNT_LABEL)
+                    val vIdx = c.getColumnIndex(COL_CONTENT_COUNT_VALUE)
+                    if (lIdx != -1 && vIdx != -1 && !c.isNull(lIdx) && !c.isNull(vIdx)) {
+                        val label = c.getString(lIdx)
+                        val value = c.getString(vIdx)
+                        if (!label.isNullOrBlank() && !value.isNullOrBlank()) {
+                            return Pair(label, value)
+                        }
+                    }
+                }
+            }
+            if (fileName.isNotBlank() && fileName != uriOrPath) {
+                cursor = db.query(
+                    TABLE_METADATA,
+                    arrayOf(COL_CONTENT_COUNT_LABEL, COL_CONTENT_COUNT_VALUE),
+                    "$COL_FILE_NAME = ?",
+                    arrayOf(fileName),
+                    null, null, null
+                )
+                cursor.use { c ->
+                    if (c.moveToFirst()) {
+                        val lIdx = c.getColumnIndex(COL_CONTENT_COUNT_LABEL)
+                        val vIdx = c.getColumnIndex(COL_CONTENT_COUNT_VALUE)
+                        if (lIdx != -1 && vIdx != -1 && !c.isNull(lIdx) && !c.isNull(vIdx)) {
+                            val label = c.getString(lIdx)
+                            val value = c.getString(vIdx)
+                            if (!label.isNullOrBlank() && !value.isNullOrBlank()) {
+                                return Pair(label, value)
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return null
     }
 }

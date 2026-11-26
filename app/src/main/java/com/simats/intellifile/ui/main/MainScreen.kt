@@ -532,6 +532,12 @@ fun MainScreen(
                     "document_viewer" -> {
                         val format = selectedDetailFile?.fileType?.substringBefore(" ")?.uppercase() ?: "PDF"
                         val name = selectedDetailFile?.fileName ?: "Document.pdf"
+                        val key = if (!selectedDetailFile?.path.isNullOrBlank()) selectedDetailFile!!.path else (selectedDetailFile?.uriString ?: "")
+                        LaunchedEffect(key, name) {
+                            if (key.isNotBlank()) {
+                                LocalFileDatabaseHelper.getInstance(context).recordFileOpened(key, name)
+                            }
+                        }
                         val isPresentation = format in listOf("PPT", "PPTX", "PPS", "PPSX", "POT", "POTX") ||
                                 name.endsWith(".pptx", ignoreCase = true) ||
                                 name.endsWith(".ppt", ignoreCase = true)
@@ -876,7 +882,11 @@ fun MainScreen(
 
                             onBackClick = { selectedDetailFile = null },
 
-                            onOpenFileClick = { isDocumentViewerOpen = true },
+                            onOpenFileClick = {
+                                val key = if (selectedDetailFile!!.path.isNotBlank()) selectedDetailFile!!.path else selectedDetailFile!!.uriString
+                                LocalFileDatabaseHelper.getInstance(context).recordFileOpened(key, selectedDetailFile!!.fileName)
+                                isDocumentViewerOpen = true
+                            },
 
                             onShareClick = { isShareOpen = true },
 

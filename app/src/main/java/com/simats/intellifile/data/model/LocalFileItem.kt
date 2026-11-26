@@ -28,7 +28,8 @@ data class LocalFileItem(
     val isBookmarked: Boolean = false,
     val isVaultSynced: Boolean = false,
     val vaultDocId: Int? = null,
-    val iconResId: Int = R.drawable.pdf
+    val iconResId: Int = R.drawable.pdf,
+    val dateAddedMs: Long = 0L
 ) {
     fun toRecentFile(): RecentFile {
         return RecentFile(
@@ -80,7 +81,8 @@ data class LocalFileItem(
             iconResId = iconResId,
             uriString = uri.toString(),
             path = path,
-            isVaultSynced = isVaultSynced
+            isVaultSynced = isVaultSynced,
+            dateAdded = if (dateAddedMs > 0L) com.simats.intellifile.data.manager.FileMetadataExtractor.formatDateAdded(dateAddedMs) else null
         )
     }
 }

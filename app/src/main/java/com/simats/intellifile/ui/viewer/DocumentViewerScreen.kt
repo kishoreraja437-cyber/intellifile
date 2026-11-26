@@ -150,6 +150,12 @@ fun DocumentViewerScreen(
     val isPreview = LocalInspectionMode.current
     val key = if (filePath.isNotBlank()) filePath else fileUriString
 
+    LaunchedEffect(key, fileName) {
+        if (key.isNotBlank()) {
+            LocalFileDatabaseHelper.getInstance(context).recordFileOpened(key, fileName)
+        }
+    }
+
     // Search bar state
     var isSearchActive by remember(filePath, fileUriString) { mutableStateOf(false) }
     var searchQuery by remember(filePath, fileUriString) { mutableStateOf("") }
