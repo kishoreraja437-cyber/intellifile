@@ -1,9 +1,17 @@
 package com.simats.intellifile.ui.auth
 
+import android.app.Activity
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.outlined.Key
+import com.simats.intellifile.data.manager.AppCredentialManager
+import com.simats.intellifile.ui.common.supportAutofill
+import kotlinx.coroutines.launch
 
 import android.widget.Toast
 import androidx.compose.foundation.Image
@@ -57,11 +65,39 @@ fun LoginScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val uiState by authViewModel.uiState.collectAsState()
 
     var emailInput by remember { mutableStateOf("") }
     var passwordInput by remember { mutableStateOf("") }
     var isPasswordVisible by remember { mutableStateOf(false) }
+    var hasAutoRequestedCredentials by rememberSaveable { mutableStateOf(false) }
+
+    fun requestSavedCredentials() {
+        val activity = context as? Activity ?: return
+        coroutineScope.launch {
+            val credential = AppCredentialManager.getSavedPasswordCredentials(activity)
+            if (credential != null) {
+                emailInput = credential.username
+                passwordInput = credential.password
+                authViewModel.login(
+                    email = credential.username,
+                    pass = credential.password,
+                    onSuccess = {
+                        Toast.makeText(context, "Welcome back!", Toast.LENGTH_SHORT).show()
+                        onLoginSuccess()
+                    }
+                )
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (!hasAutoRequestedCredentials) {
+            hasAutoRequestedCredentials = true
+            requestSavedCredentials()
+        }
+    }
 
     Box(
         modifier = modifier
@@ -222,8 +258,13 @@ fun LoginScreen(
                                 if (uiState.errorMessage != null) authViewModel.clearError()
                             },
                             singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                            modifier = Modifier.fillMaxWidth()
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Email,
+                                imeAction = ImeAction.Next
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .supportAutofill(ContentType.EmailAddress)
                         )
                     }
                 }
@@ -281,8 +322,13 @@ fun LoginScreen(
                             },
                             singleLine = true,
                             visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                            modifier = Modifier.fillMaxWidth()
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Password,
+                                imeAction = ImeAction.Done
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .supportAutofill(ContentType.Password)
                         )
                     }
 
@@ -323,12 +369,27 @@ fun LoginScreen(
             // Sign In Button
             Button(
                 onClick = {
+                    val trimmedEmail = emailInput.trim()
+                    val rawPassword = passwordInput
                     authViewModel.login(
-                        email = emailInput.trim(),
-                        pass = passwordInput,
+                        email = trimmedEmail,
+                        pass = rawPassword,
                         onSuccess = {
-                            Toast.makeText(context, "Welcome back!", Toast.LENGTH_SHORT).show()
-                            onLoginSuccess()
+                            val act = context as? Activity
+                            if (act != null) {
+                                coroutineScope.launch {
+                                    AppCredentialManager.savePasswordCredentials(
+                                        activity = act,
+                                        username = trimmedEmail,
+                                        pass = rawPassword
+                                    )
+                                    Toast.makeText(context, "Welcome back!", Toast.LENGTH_SHORT).show()
+                                    onLoginSuccess()
+                                }
+                            } else {
+                                Toast.makeText(context, "Welcome back!", Toast.LENGTH_SHORT).show()
+                                onLoginSuccess()
+                            }
                         }
                     )
                 },
@@ -365,6 +426,33 @@ fun LoginScreen(
                         )
                     }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Quick Saved Credentials Option (Google Password Manager)
+            OutlinedButton(
+                onClick = { requestSavedCredentials() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(24.dp),
+                border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFF55A9AF)),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF183A3C))
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Key,
+                    contentDescription = "Saved Credentials",
+                    tint = Color(0xFF55A9AF),
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Sign in with Saved Account",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF183A3C)
+                )
             }
 
             Spacer(modifier = Modifier.height(28.dp))

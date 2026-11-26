@@ -1,9 +1,15 @@
 package com.simats.intellifile.ui.auth
 
+import android.app.Activity
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.text.input.ImeAction
+import com.simats.intellifile.data.manager.AppCredentialManager
+import com.simats.intellifile.ui.common.supportAutofill
+import kotlinx.coroutines.launch
 
 import android.widget.Toast
 import androidx.compose.foundation.Image
@@ -57,6 +63,7 @@ fun SignUpScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val uiState by authViewModel.uiState.collectAsState()
 
     var nameInput by remember { mutableStateOf("") }
@@ -223,7 +230,13 @@ fun SignUpScreen(
                                 if (uiState.errorMessage != null) authViewModel.clearError()
                             },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Text,
+                                imeAction = ImeAction.Next
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .supportAutofill(ContentType.PersonFullName)
                         )
                     }
                 }
@@ -280,8 +293,13 @@ fun SignUpScreen(
                                 if (uiState.errorMessage != null) authViewModel.clearError()
                             },
                             singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                            modifier = Modifier.fillMaxWidth()
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Email,
+                                imeAction = ImeAction.Next
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .supportAutofill(ContentType.EmailAddress)
                         )
                     }
                 }
@@ -339,8 +357,13 @@ fun SignUpScreen(
                             },
                             singleLine = true,
                             visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                            modifier = Modifier.fillMaxWidth()
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Password,
+                                imeAction = ImeAction.Done
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .supportAutofill(ContentType.NewPassword)
                         )
                     }
 
@@ -363,13 +386,29 @@ fun SignUpScreen(
             // Create Account Button
             Button(
                 onClick = {
+                    val trimmedName = nameInput.trim()
+                    val trimmedEmail = emailInput.trim()
+                    val rawPassword = passwordInput
                     authViewModel.signup(
-                        fullName = nameInput.trim(),
-                        email = emailInput.trim(),
-                        pass = passwordInput,
+                        fullName = trimmedName,
+                        email = trimmedEmail,
+                        pass = rawPassword,
                         onSuccess = {
-                            Toast.makeText(context, "Account created successfully!", Toast.LENGTH_SHORT).show()
-                            onSignUpSuccess()
+                            val act = context as? Activity
+                            if (act != null) {
+                                coroutineScope.launch {
+                                    AppCredentialManager.savePasswordCredentials(
+                                        activity = act,
+                                        username = trimmedEmail,
+                                        pass = rawPassword
+                                    )
+                                    Toast.makeText(context, "Account created successfully!", Toast.LENGTH_SHORT).show()
+                                    onSignUpSuccess()
+                                }
+                            } else {
+                                Toast.makeText(context, "Account created successfully!", Toast.LENGTH_SHORT).show()
+                                onSignUpSuccess()
+                            }
                         }
                     )
                 },

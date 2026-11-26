@@ -67,6 +67,10 @@ dependencies {
     // Genuine PowerPoint Visual Slide Rendering Engine
     implementation("com.aspose:aspose-slides:24.4:android.via.java")
 
+    // Android Credential Manager / Google Password Manager
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+
     // Room Database for AI Chat History & Session Persistence
     val roomVersion = "2.6.1"
     implementation("androidx.room:room-runtime:$roomVersion")

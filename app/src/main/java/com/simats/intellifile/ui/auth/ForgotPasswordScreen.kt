@@ -1,9 +1,12 @@
 package com.simats.intellifile.ui.auth
 
+import android.app.Activity
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.graphicsLayer
+import com.simats.intellifile.data.manager.AppCredentialManager
+import kotlinx.coroutines.launch
 
 import android.widget.Toast
 import androidx.compose.foundation.Image
@@ -57,6 +60,7 @@ fun ForgotPasswordScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val uiState by authViewModel.uiState.collectAsState()
 
     var emailInput by remember { mutableStateOf("") }
@@ -415,13 +419,28 @@ fun ForgotPasswordScreen(
             // Reset Password Button
             Button(
                 onClick = {
+                    val trimmedEmail = emailInput.trim()
+                    val newPass = newPasswordInput
                     authViewModel.forgotPassword(
-                        email = emailInput,
-                        newPass = newPasswordInput,
+                        email = trimmedEmail,
+                        newPass = newPass,
                         confirmPass = confirmPasswordInput,
                         onSuccess = { msg ->
-                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                            onResetSuccess()
+                            val act = context as? Activity
+                            if (act != null) {
+                                coroutineScope.launch {
+                                    AppCredentialManager.savePasswordCredentials(
+                                        activity = act,
+                                        username = trimmedEmail,
+                                        pass = newPass
+                                    )
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    onResetSuccess()
+                                }
+                            } else {
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                onResetSuccess()
+                            }
                         }
                     )
                 },
