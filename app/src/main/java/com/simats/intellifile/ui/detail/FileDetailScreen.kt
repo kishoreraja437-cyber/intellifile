@@ -325,31 +325,41 @@ fun FileDetailScreen(
     // Privacy confirmation dialog for server upload
     if (showVaultConfirmDialog) {
         AlertDialog(
-            onDismissRequest = { showVaultConfirmDialog = false },
+            onDismissRequest = { if (!isUploadingToVault) showVaultConfirmDialog = false },
+            shape = RoundedCornerShape(26.dp),
+            containerColor = Color(0xFFF1EEF4),
             title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start
+                ) {
                     Icon(
                         imageVector = Icons.Default.Shield,
                         contentDescription = null,
-                        tint = Color(0xFF10B981)
+                        tint = Color(0xFF04B577),
+                        modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Add to IntelliSpace?", fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "Add to IntelliSpace?",
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1E293B)
+                    )
                 }
             },
             text = {
                 Text(
-                    "IntelliFile keeps your files strictly local on your phone by default.\n\n" +
-                            "Uploading \"${fileData.fileName}\" to the IntelliSpace enables deep text extraction, " +
-                            "semantic question answering, and AI summarization. Do you want to proceed with uploading this specific file?",
+                    text = "Upload this file to IntelliSpace for AI analysis, content search, and quick summaries?",
                     fontSize = 14.sp,
                     lineHeight = 20.sp,
-                    color = Color(0xFF374151)
+                    color = Color(0xFF475569)
                 )
             },
             confirmButton = {
                 Button(
                     onClick = {
+                        if (isUploadingToVault) return@Button
                         showVaultConfirmDialog = false
                         isUploadingToVault = true
                         scope.launch {
@@ -398,14 +408,33 @@ fun FileDetailScreen(
                             }
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF0E8A8F),
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(20.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 9.dp),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 1.dp)
                 ) {
-                    Text("Upload to IntelliSpace")
+                    Text(
+                        text = "Upload to IntelliSpace",
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showVaultConfirmDialog = false }) {
-                    Text("Cancel", color = Color(0xFF6B7280))
+                TextButton(
+                    onClick = { showVaultConfirmDialog = false },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = "Cancel",
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF55606E)
+                    )
                 }
             }
         )
