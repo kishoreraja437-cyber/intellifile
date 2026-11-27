@@ -837,4 +837,35 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
         }
         return null
     }
+
+    /**
+     * Purges metadata records (priority, bookmark, last opened, vault status, etc.)
+     * for a deleted file from SQLite.
+     */
+    fun deleteFileMetadata(uriOrPath: String, fileName: String = ""): Boolean {
+        if (uriOrPath.isBlank() && fileName.isBlank()) return false
+        return try {
+            val db = writableDatabase
+            val where = when {
+                uriOrPath.isNotBlank() && fileName.isNotBlank() ->
+                    "$COL_URI_OR_PATH = ? OR $COL_FILE_NAME = ?"
+                uriOrPath.isNotBlank() ->
+                    "$COL_URI_OR_PATH = ?"
+                else ->
+                    "$COL_FILE_NAME = ?"
+            }
+            val args = when {
+                uriOrPath.isNotBlank() && fileName.isNotBlank() ->
+                    arrayOf(uriOrPath, fileName)
+                uriOrPath.isNotBlank() ->
+                    arrayOf(uriOrPath)
+                else ->
+                    arrayOf(fileName)
+            }
+            db.delete(TABLE_METADATA, where, args) > 0
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
 }

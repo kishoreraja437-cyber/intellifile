@@ -44,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.FileProvider
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.simats.intellifile.R
 import com.simats.intellifile.data.local.LocalFileDatabaseHelper
 import com.simats.intellifile.data.manager.LocalFileManager
@@ -102,6 +104,7 @@ fun ExtractedFolderViewerScreen(
     var isUploadingToVault by remember { mutableStateOf(false) }
     var viewingImageItem by remember { mutableStateOf<ExtractedFolderItem?>(null) }
     var unsupportedFileItem by remember { mutableStateOf<ExtractedFolderItem?>(null) }
+    var itemToDelete by remember { mutableStateOf<ExtractedFolderItem?>(null) }
 
     // Handle system back navigation inside folders
     BackHandler {
@@ -580,6 +583,9 @@ fun ExtractedFolderViewerScreen(
                                 },
                                 onAddToVaultClick = {
                                     vaultConfirmItem = item
+                                },
+                                onDeleteClick = {
+                                    itemToDelete = item
                                 }
                             )
                         }
@@ -774,6 +780,86 @@ fun ExtractedFolderViewerScreen(
             }
         )
     }
+
+    // 8. Delete Confirmation Dialog
+    if (itemToDelete != null) {
+        val target = itemToDelete!!
+        AlertDialog(
+            onDismissRequest = { itemToDelete = null },
+            shape = RoundedCornerShape(22.dp),
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = Color(0xFFEF4444),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = if (target.isDirectory) "Delete Folder?" else "Delete File?",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = Color(0xFF1E293B)
+                    )
+                }
+            },
+            text = {
+                Text(
+                    text = if (target.isDirectory)
+                        "Are you sure you want to permanently delete folder \"${target.name}\" and all of its contents? This action cannot be undone."
+                    else
+                        "Are you sure you want to permanently delete \"${target.name}\"? This action cannot be undone.",
+                    fontSize = 14.sp,
+                    color = Color(0xFF64748B),
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val file = target.file
+                        itemToDelete = null
+                        scope.launch(Dispatchers.IO) {
+                            val deleted = if (target.isDirectory) {
+                                file.deleteRecursively()
+                            } else {
+                                LocalFileManager.deleteLocalFile(
+                                    context = context,
+                                    path = file.absolutePath,
+                                    uriString = Uri.fromFile(file).toString()
+                                )
+                            }
+                            dbHelper.deleteFileMetadata(file.absolutePath, target.name)
+                            if (target.isVaultSynced) {
+                                val meta = dbHelper.getMetadata(file.absolutePath) ?: dbHelper.getMetadata(target.name)
+                                if (meta?.vaultDocId != null) {
+                                    dbHelper.removeVaultStatus(meta.vaultDocId, target.name)
+                                }
+                            }
+                            withContext(Dispatchers.Main) {
+                                if (deleted) {
+                                    Toast.makeText(context, "\"${target.name}\" deleted successfully", Toast.LENGTH_SHORT).show()
+                                    refreshVersion++
+                                } else {
+                                    Toast.makeText(context, "Could not delete \"${target.name}\"", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Delete", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { itemToDelete = null }) {
+                    Text("Cancel", color = Color(0xFF64748B))
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -783,7 +869,8 @@ private fun ExtractedItemCard(
     onInfoClick: () -> Unit,
     onShareClick: () -> Unit,
     onSetPriorityClick: () -> Unit,
-    onAddToVaultClick: () -> Unit
+    onAddToVaultClick: () -> Unit,
+    onDeleteClick: () -> Unit = {}
 ) {
     var isMenuOpen by remember { mutableStateOf(false) }
 
@@ -906,31 +993,45 @@ private fun ExtractedItemCard(
             }
 
             // Trailing Action
-            if (item.isDirectory) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "Open Folder",
-                    tint = Color(0xFF94A3B8),
-                    modifier = Modifier.size(20.dp)
-                )
-            } else {
-                Box {
-                    IconButton(
-                        onClick = { isMenuOpen = true },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "Options",
-                            tint = Color(0xFF94A3B8),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+            Box {
+                IconButton(
+                    onClick = { isMenuOpen = true },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Options",
+                        tint = Color(0xFF94A3B8),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
 
-                    DropdownMenu(
-                        expanded = isMenuOpen,
-                        onDismissRequest = { isMenuOpen = false }
-                    ) {
+                DropdownMenu(
+                    expanded = isMenuOpen,
+                    onDismissRequest = { isMenuOpen = false }
+                ) {
+                    if (item.isDirectory) {
+                        DropdownMenuItem(
+                            text = { Text("Open Folder") },
+                            onClick = {
+                                isMenuOpen = false
+                                onClick()
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete Folder", color = Color(0xFFEF4444), fontWeight = FontWeight.Medium) },
+                            onClick = {
+                                isMenuOpen = false
+                                onDeleteClick()
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                            }
+                        )
+                    } else {
                         DropdownMenuItem(
                             text = { Text("Open File") },
                             onClick = {
@@ -983,6 +1084,16 @@ private fun ExtractedItemCard(
                                 }
                             )
                         }
+                        DropdownMenuItem(
+                            text = { Text("Delete", color = Color(0xFFEF4444), fontWeight = FontWeight.Medium) },
+                            onClick = {
+                                isMenuOpen = false
+                                onDeleteClick()
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                            }
+                        )
                     }
                 }
             }

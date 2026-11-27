@@ -1,5 +1,12 @@
 package com.simats.intellifile.ui.home
 
+import android.widget.Toast
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.TextButton
 import com.simats.intellifile.ui.common.FilesLoadingCard
 import android.Manifest
 import kotlinx.coroutines.Dispatchers
@@ -94,8 +101,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Share
 
 import androidx.compose.material3.Button
-
-import androidx.compose.material3.ButtonDefaults
 
 import androidx.compose.material3.Icon
 
@@ -282,6 +287,7 @@ fun HomeScreen(
     var realFiles by remember { mutableStateOf<List<LocalFileItem>>(emptyList()) }
 
     var isLoading by remember { mutableStateOf(true) }
+    var fileToDelete by remember { mutableStateOf<RecentFile?>(null) }
 
 
 
@@ -830,7 +836,8 @@ fun HomeScreen(
                         RecentFileCard(
                             file = file,
                             onClick = { onFileClick(file) },
-                            onShareClick = { onShareFileClick(file) }
+                            onShareClick = { onShareFileClick(file) },
+                            onDeleteClick = { fileToDelete = file }
                         )
                     }
                 }
@@ -847,6 +854,54 @@ fun HomeScreen(
         )
     }
 
+    // Confirmation Dialog for deleting a recent file
+    fileToDelete?.let { file ->
+        AlertDialog(
+            onDismissRequest = { fileToDelete = null },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = Color(0xFFEF4444),
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text("Delete File?", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to permanently delete \"${file.title}\" from your device? This action cannot be undone.",
+                    fontSize = 14.sp,
+                    color = Color(0xFF4B5563)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val target = file
+                        fileToDelete = null
+                        val deleted = LocalFileManager.deleteLocalFile(context, target.path, target.uriString)
+                        if (deleted) {
+                            Toast.makeText(context, "\"${target.title}\" deleted", Toast.LENGTH_SHORT).show()
+                            refreshTrigger++
+                        } else {
+                            Toast.makeText(context, "Could not delete \"${target.title}\"", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Delete", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { fileToDelete = null }) {
+                    Text("Cancel", color = Color(0xFF64748B))
+                }
+            }
+        )
+    }
 }
 
 
@@ -1121,15 +1176,11 @@ fun PrioritySummaryCard(
 @Composable
 
 fun RecentFileCard(
-
     file: RecentFile,
-
     onClick: () -> Unit,
-
     onShareClick: () -> Unit = {},
-
+    onDeleteClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
-
 ) {
 
     Row(
@@ -1233,25 +1284,30 @@ fun RecentFileCard(
 
 
         IconButton(
-
             onClick = onShareClick,
-
             modifier = Modifier.size(28.dp)
-
         ) {
-
             Icon(
-
                 imageVector = Icons.Outlined.Share,
-
                 contentDescription = "Share File",
-
                 tint = Color(0xFF6B7280),
-
                 modifier = Modifier.size(16.dp)
-
             )
+        }
 
+        if (onDeleteClick != null) {
+            Spacer(modifier = Modifier.width(4.dp))
+            IconButton(
+                onClick = onDeleteClick,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.DeleteOutline,
+                    contentDescription = "Delete File",
+                    tint = Color(0xFFEF4444),
+                    modifier = Modifier.size(17.dp)
+                )
+            }
         }
 
     }

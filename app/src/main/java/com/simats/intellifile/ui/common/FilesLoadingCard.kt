@@ -70,7 +70,7 @@ fun FilesLoadingCard(
             ),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(1.2.dp, Color(0xFF55A9AF))
+        border = BorderStroke(1.2.dp, Color(0xFFBCE3E5))
     ) {
         Column(
             modifier = Modifier
@@ -168,7 +168,7 @@ fun FilesLoadingCard(
                 CircularProgressIndicator(
                     modifier = Modifier.size(26.dp),
                     strokeWidth = 2.8.dp,
-                    color = Color(0xFF55A9AF)
+                    color = Color(0xFF1FB7AB)
                 )
 
                 Text(

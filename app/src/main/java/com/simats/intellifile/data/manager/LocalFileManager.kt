@@ -452,6 +452,82 @@ object LocalFileManager {
     }
 
     /**
+     * Permanently deletes a file from the device (filesystem, MediaStore, and SQLite cache).
+     * Handles both direct file paths, MediaStore content URIs, and scoped storage locations.
+     */
+    fun deleteLocalFile(context: Context, path: String?, uriString: String?): Boolean {
+        var deleted = false
+
+        // 1. Delete from direct filesystem path
+        if (!path.isNullOrBlank()) {
+            try {
+                val file = File(path)
+                if (file.exists()) {
+                    deleted = if (file.isDirectory) file.deleteRecursively() else file.delete()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        // 2. Delete via ContentResolver / MediaStore URI
+        if (!uriString.isNullOrBlank()) {
+            try {
+                val uri = Uri.parse(uriString)
+                when (uri.scheme) {
+                    "content" -> {
+                        val count = context.contentResolver.delete(uri, null, null)
+                        if (count > 0) deleted = true
+                    }
+                    "file" -> {
+                        val f = File(uri.path ?: "")
+                        if (f.exists()) {
+                            val ok = if (f.isDirectory) f.deleteRecursively() else f.delete()
+                            if (ok) deleted = true
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        // 3. Fallback purge from MediaStore Files provider using DATA column
+        if (!path.isNullOrBlank()) {
+            try {
+                val filesUri = MediaStore.Files.getContentUri("external")
+                val rows = context.contentResolver.delete(
+                    filesUri,
+                    "${MediaStore.Files.FileColumns.DATA} = ?",
+                    arrayOf(path)
+                )
+                if (rows > 0) deleted = true
+            } catch (e: Exception) {
+                // Scoped storage restriction or already removed
+            }
+        }
+
+        // 4. Purge SQLite metadata records
+        try {
+            val dbHelper = LocalFileDatabaseHelper.getInstance(context)
+            if (!path.isNullOrBlank()) {
+                val fileName = File(path).name
+                dbHelper.deleteFileMetadata(path, fileName)
+            }
+            if (!uriString.isNullOrBlank()) {
+                dbHelper.deleteFileMetadata(uriString)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // 5. Invalidate scan cache so all screens refresh immediately
+        invalidateCache()
+
+        return deleted
+    }
+
+    /**
      * Shares a file directly to a specific target app (WhatsApp, Gmail, Telegram, Bluetooth)
      * or falls back to system chooser if not installed.
      */

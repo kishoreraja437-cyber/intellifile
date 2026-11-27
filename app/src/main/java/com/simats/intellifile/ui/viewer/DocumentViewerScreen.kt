@@ -47,6 +47,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Close
@@ -241,6 +242,7 @@ fun DocumentViewerScreen(
         )
     }
     var isSaved by remember { mutableStateOf(false) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
 
     // Jump dialog state
     var showJumpDialog by remember { mutableStateOf(false) }
@@ -691,6 +693,54 @@ fun DocumentViewerScreen(
         }
     }
 
+    // Confirmation Dialog for deleting file
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = Color(0xFFEF4444),
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text("Delete File?", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to permanently delete \"$fileName\" from your device? This action cannot be undone.",
+                    fontSize = 14.sp,
+                    color = Color(0xFF4B5563)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirmDialog = false
+                        val deleted = LocalFileManager.deleteLocalFile(context, filePath, fileUriString)
+                        if (deleted) {
+                            Toast.makeText(context, "\"$fileName\" deleted", Toast.LENGTH_SHORT).show()
+                            onBackClick()
+                        } else {
+                            Toast.makeText(context, "Could not delete file", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Delete", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text("Cancel", color = Color(0xFF64748B))
+                }
+            }
+        )
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -954,6 +1004,15 @@ fun DocumentViewerScreen(
                                         modifier = Modifier.size(20.dp)
                                     )
                                 }
+
+                                IconButton(onClick = { showDeleteConfirmDialog = true }, modifier = Modifier.size(36.dp)) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete File",
+                                        tint = Color(0xFFEF4444),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     } else {
@@ -1068,6 +1127,15 @@ fun DocumentViewerScreen(
                                             imageVector = Icons.Default.Share,
                                             contentDescription = "Share",
                                             tint = Color(0xFF111827),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+
+                                    IconButton(onClick = { showDeleteConfirmDialog = true }, modifier = Modifier.size(36.dp)) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Delete File",
+                                            tint = Color(0xFFEF4444),
                                             modifier = Modifier.size(20.dp)
                                         )
                                     }

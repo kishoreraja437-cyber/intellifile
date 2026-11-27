@@ -35,6 +35,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.BookmarkRemove
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -143,6 +144,8 @@ fun SavedScreen(
     var vaultMoveTotalCount by remember { mutableIntStateOf(0) }
     var moveProgressMessage by remember { mutableStateOf("") }
     var showVaultConfirmDialog by remember { mutableStateOf(false) }
+    var fileToDelete by remember { mutableStateOf<SavedFileItem?>(null) }
+    var showBatchDeleteConfirmDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(refreshTrigger, priorityUpdateVersion) {
         isLoading = true
@@ -322,6 +325,107 @@ fun SavedScreen(
         IntelliSpaceIndexingDialog(
             currentIndex = vaultMoveCurrentIndex,
             totalCount = vaultMoveTotalCount
+        )
+    }
+
+    // Confirmation Dialog for deleting a single file
+    fileToDelete?.let { file ->
+        AlertDialog(
+            onDismissRequest = { fileToDelete = null },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = Color(0xFFEF4444),
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text("Delete File?", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to permanently delete \"${file.title}\" from your device? This action cannot be undone.",
+                    fontSize = 14.sp,
+                    color = Color(0xFF4B5563)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val target = file
+                        fileToDelete = null
+                        val deleted = LocalFileManager.deleteLocalFile(context, target.path, target.uriString)
+                        if (deleted) {
+                            Toast.makeText(context, "\"${target.title}\" deleted", Toast.LENGTH_SHORT).show()
+                            refreshTrigger++
+                        } else {
+                            Toast.makeText(context, "Could not delete \"${target.title}\"", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Delete", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { fileToDelete = null }) {
+                    Text("Cancel", color = Color(0xFF64748B))
+                }
+            }
+        )
+    }
+
+    // Confirmation Dialog for batch deleting selected files
+    if (showBatchDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showBatchDeleteConfirmDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = Color(0xFFEF4444),
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text("Delete ${selectedFiles.size} Files?", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to permanently delete these ${selectedFiles.size} files from your device? This action cannot be undone.",
+                    fontSize = 14.sp,
+                    color = Color(0xFF4B5563)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showBatchDeleteConfirmDialog = false
+                        val targets = selectedFiles.toList()
+                        var deletedCount = 0
+                        targets.forEach { target ->
+                            if (LocalFileManager.deleteLocalFile(context, target.path, target.uriString)) {
+                                deletedCount++
+                            }
+                        }
+                        selectedFiles.clear()
+                        isMultiSelectMode = false
+                        Toast.makeText(context, "$deletedCount files deleted", Toast.LENGTH_SHORT).show()
+                        refreshTrigger++
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Delete All", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBatchDeleteConfirmDialog = false }) {
+                    Text("Cancel", color = Color(0xFF64748B))
+                }
+            }
         )
     }
 
@@ -597,7 +701,8 @@ fun SavedScreen(
                                 Toast.LENGTH_SHORT
                             ).show()
                             refreshTrigger++
-                        }
+                        },
+                        onDeleteClick = { fileToDelete = file }
                     )
                 }
             }
@@ -647,28 +752,48 @@ fun SavedScreen(
                         )
                     }
 
-                    Button(
-                        onClick = { showVaultConfirmDialog = true },
-                        enabled = !isMovingToVault,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        shape = RoundedCornerShape(12.dp),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CloudUpload,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (selectedFiles.size > 2) "Move ${selectedFiles.size} to IntelliSpace"
-                            else if (selectedFiles.size == 2) "Move 2 to IntelliSpace"
-                            else "Move to IntelliSpace",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = Color.White
-                        )
+                        IconButton(
+                            onClick = { showBatchDeleteConfirmDialog = true },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFFFEE2E2))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete Selected",
+                                tint = Color(0xFFEF4444),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Button(
+                            onClick = { showVaultConfirmDialog = true },
+                            enabled = !isMovingToVault,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CloudUpload,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (selectedFiles.size > 2) "Move ${selectedFiles.size} to IntelliSpace"
+                                else if (selectedFiles.size == 2) "Move 2 to IntelliSpace"
+                                else "Move to IntelliSpace",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color.White
+                            )
+                        }
                     }
                 }
             }
@@ -762,6 +887,7 @@ fun SavedFileCard(
     onOpenClick: () -> Unit,
     onShareClick: () -> Unit,
     onToggleBookmark: () -> Unit = {},
+    onDeleteClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var isMenuOpen by remember { mutableStateOf(false) }
@@ -918,7 +1044,7 @@ fun SavedFileCard(
                     onDismissRequest = { isMenuOpen = false },
                     onShareClick = onShareClick,
                     onToggleBookmark = onToggleBookmark,
-                    onDeleteClick = { /* Handle delete file */ }
+                    onDeleteClick = onDeleteClick
                 )
             }
         }

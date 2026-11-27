@@ -5,6 +5,7 @@ import com.simats.intellifile.ui.common.AnimatedMicrophoneButton
 import com.simats.intellifile.ui.common.AnimatedRefreshButton
 import com.simats.intellifile.ui.common.FilesLoadingCard
 import com.simats.intellifile.ui.common.IntelliSpaceIndexingDialog
+import com.simats.intellifile.data.model.ExtractedFolderRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -178,6 +179,7 @@ fun MyFilesScreen(
     var aiInsightsResult by remember { mutableStateOf<AiSummarizeResponse?>(null) }
     var aiInsightsError by remember { mutableStateOf<String?>(null) }
     var docToDelete by remember { mutableStateOf<DocumentDto?>(null) }
+    var folderToDelete by remember { mutableStateOf<ExtractedFolderRecord?>(null) }
     var resolvingDocId by remember { mutableIntStateOf(-1) }
 
     // Function to load IntelliSpace documents
@@ -957,6 +959,7 @@ fun MyFilesScreen(
                         coroutineScope.launch {
                             val res = docRepo.deleteDocument(toDelete.id)
                             res.onSuccess {
+                                dbHelper.removeVaultStatus(toDelete.id, toDelete.title)
                                 Toast.makeText(context, "\"${toDelete.title}\" removed from IntelliSpace", Toast.LENGTH_SHORT).show()
                                 loadVault()
                             }.onFailure { err ->
@@ -972,6 +975,62 @@ fun MyFilesScreen(
             dismissButton = {
                 TextButton(onClick = { docToDelete = null }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Extracted Folder Delete Confirmation Dialog
+    folderToDelete?.let { record ->
+        AlertDialog(
+            onDismissRequest = { folderToDelete = null },
+            shape = RoundedCornerShape(22.dp),
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = Color(0xFFEF4444),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text("Delete Extracted Folder?", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color(0xFF1E293B))
+                }
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to permanently delete \"${record.folderName}\" and all of its ${record.totalFiles} extracted files? This action cannot be undone.",
+                    fontSize = 14.sp,
+                    color = Color(0xFF4B5563),
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val toDelete = record
+                        folderToDelete = null
+                        coroutineScope.launch(Dispatchers.IO) {
+                            val dir = File(toDelete.folderPath)
+                            if (dir.exists()) {
+                                dir.deleteRecursively()
+                            }
+                            dbHelper.deleteExtractedFolderRecord(toDelete.folderPath)
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "\"${toDelete.folderName}\" deleted successfully", Toast.LENGTH_SHORT).show()
+                                refreshTrigger++
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Delete", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { folderToDelete = null }) {
+                    Text("Cancel", color = Color(0xFF6B7280))
                 }
             }
         )
@@ -1351,6 +1410,18 @@ fun MyFilesScreen(
                                                         text = "${record.totalFiles} files · ${LocalFileManager.formatFileSize(record.totalSizeBytes)}",
                                                         fontSize = 12.sp,
                                                         color = Color(0xFF6B7280)
+                                                    )
+                                                }
+
+                                                IconButton(
+                                                    onClick = { folderToDelete = record },
+                                                    modifier = Modifier.size(32.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Delete,
+                                                        contentDescription = "Delete Folder",
+                                                        tint = Color(0xFFEF4444),
+                                                        modifier = Modifier.size(20.dp)
                                                     )
                                                 }
 
