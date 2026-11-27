@@ -244,9 +244,8 @@ fun AiScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        AiFluidOrbAvatar(
-                            size = 110.dp,
-                            iconSize = 54.dp
+                        AiChatSparkleLogo(
+                            size = 110.dp
                         )
 
                         Spacer(modifier = Modifier.height(20.dp))
@@ -423,6 +422,123 @@ fun AiScreen(
     }
 }
 
+/**
+ * AI Chat Screen Sparkle Star Logo
+ * Features one large four-point sparkle star accompanied by three smaller sparkle stars,
+ * in dusky aqua and deep teal gradient colors with a transparent background.
+ */
+@Composable
+fun AiChatSparkleLogo(
+    modifier: Modifier = Modifier,
+    size: Dp = 100.dp
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "aiSparklePulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 0.97f,
+        targetValue = 1.03f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "sparklePulseScale"
+    )
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .graphicsLayer(scaleX = pulseScale, scaleY = pulseScale),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = this.size.width
+            val h = this.size.height
+
+            // 1. One Large Four-Point Sparkle Star (Main prominent center star)
+            val mainCenter = Offset(w * 0.44f, h * 0.52f)
+            val mainRadius = w * 0.36f
+            val mainBrush = Brush.linearGradient(
+                colors = listOf(
+                    Color(0xFF2DD4BF), // Dusky Aqua Bright
+                    Color(0xFF00897B), // Dusky Aqua Mid
+                    Color(0xFF0F3E46)  // Deep Teal
+                ),
+                start = Offset(mainCenter.x - mainRadius, mainCenter.y - mainRadius),
+                end = Offset(mainCenter.x + mainRadius, mainCenter.y + mainRadius)
+            )
+            drawSparkleStarShape(mainCenter, mainRadius, mainBrush)
+
+            // Inner core depth for the large sparkle star
+            drawSparkleStarShape(
+                center = mainCenter,
+                radius = mainRadius * 0.42f,
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFFE0F2F1).copy(alpha = 0.55f),
+                        Color.Transparent
+                    ),
+                    center = mainCenter,
+                    radius = mainRadius * 0.42f
+                )
+            )
+
+            // 2. Medium Sparkle Star (Upper-Right)
+            val star2Center = Offset(w * 0.80f, h * 0.26f)
+            val star2Radius = w * 0.17f
+            val star2Brush = Brush.linearGradient(
+                colors = listOf(
+                    Color(0xFF2DD4BF),
+                    Color(0xFF00897B)
+                ),
+                start = Offset(star2Center.x - star2Radius, star2Center.y - star2Radius),
+                end = Offset(star2Center.x + star2Radius, star2Center.y + star2Radius)
+            )
+            drawSparkleStarShape(star2Center, star2Radius, star2Brush)
+
+            // 3. Small Sparkle Star (Lower-Right)
+            val star3Center = Offset(w * 0.76f, h * 0.78f)
+            val star3Radius = w * 0.12f
+            val star3Brush = Brush.linearGradient(
+                colors = listOf(
+                    Color(0xFF00897B),
+                    Color(0xFF0F3E46)
+                ),
+                start = Offset(star3Center.x - star3Radius, star3Center.y - star3Radius),
+                end = Offset(star3Center.x + star3Radius, star3Center.y + star3Radius)
+            )
+            drawSparkleStarShape(star3Center, star3Radius, star3Brush)
+
+            // 4. Tiny Sparkle Star (Upper-Left)
+            val star4Center = Offset(w * 0.18f, h * 0.28f)
+            val star4Radius = w * 0.10f
+            val star4Brush = Brush.linearGradient(
+                colors = listOf(
+                    Color(0xFF5EEAD4),
+                    Color(0xFF00897B)
+                ),
+                start = Offset(star4Center.x - star4Radius, star4Center.y - star4Radius),
+                end = Offset(star4Center.x + star4Radius, star4Center.y + star4Radius)
+            )
+            drawSparkleStarShape(star4Center, star4Radius, star4Brush)
+        }
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSparkleStarShape(
+    center: Offset,
+    radius: Float,
+    brush: Brush
+) {
+    val path = Path().apply {
+        moveTo(center.x, center.y - radius)
+        quadraticTo(center.x, center.y, center.x + radius, center.y)
+        quadraticTo(center.x, center.y, center.x, center.y + radius)
+        quadraticTo(center.x, center.y, center.x - radius, center.y)
+        quadraticTo(center.x, center.y, center.x, center.y - radius)
+        close()
+    }
+    drawPath(path = path, brush = brush)
+}
+
 @Composable
 fun AiFluidOrbAvatar(
     modifier: Modifier = Modifier,
@@ -559,7 +675,7 @@ fun AiHeader(
 
             if (hasActiveConversation) {
                 Spacer(modifier = Modifier.width(4.dp))
-                AiFluidOrbAvatar(size = 38.dp, iconSize = 18.dp)
+                AiChatSparkleLogo(size = 36.dp)
                 Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f, fill = false)) {
                     Text(
