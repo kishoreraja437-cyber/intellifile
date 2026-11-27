@@ -404,9 +404,7 @@ fun HomeScreen(
         val loaded = withContext(Dispatchers.IO) {
             LocalFileManager.getDeviceFiles(context)
         }
-        if (realFiles.isNotEmpty()) {
-            delay(350)
-        }
+        delay(650)
         realFiles = loaded
         isLoading = false
     }

@@ -7,6 +7,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import com.simats.intellifile.data.repository.DocumentRepository
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,7 +21,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Share
+import java.io.File
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.outlined.Adjust
@@ -41,6 +45,7 @@ import kotlinx.coroutines.withContext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -104,7 +109,9 @@ fun FileDetailScreen(
     onShareClick: () -> Unit = {},
     onMoreOptionsClick: () -> Unit = {},
     onSetPriorityClick: () -> Unit = {},
-    onPriorityChanged: (PriorityLevel?) -> Unit = {}
+    onPriorityChanged: (PriorityLevel?) -> Unit = {},
+    onExtractZipClick: (FileDetailData) -> Unit = {},
+    onOpenExtractedFolderClick: (File) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -132,6 +139,13 @@ fun FileDetailScreen(
     // Dynamic Metadata Extraction States (File Format, File Size, Page/Slide Count, Date Added, Last Opened)
     var fileFormat by remember(fileData.fileName, fileData.fileType) {
         mutableStateOf(FileMetadataExtractor.resolveFormat(fileData.fileName, fileData.fileType))
+    }
+    val isZip = fileFormat.equals("ZIP", ignoreCase = true) || fileData.fileName.endsWith(".zip", ignoreCase = true)
+    val extractedRecord = remember(key, fileData.fileName) {
+        dbHelper.getExtractedFolderForZip(effectivePath.ifBlank { fileData.fileName })
+    }
+    val extractedFolderFile = remember(extractedRecord) {
+        extractedRecord?.let { File(it.folderPath) }
     }
     var fileSize by remember(fileData.fileSize) {
         mutableStateOf(fileData.fileSize.takeIf { it.isNotBlank() && it != "0 KB" } ?: "Loading...")
@@ -262,19 +276,23 @@ fun FileDetailScreen(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    // Option 1: View in IntelliFile (In-App)
+                    // Option 1: Extract ZIP in IntelliFile / View in IntelliFile
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
-                            .background(Color(0xFFEFF6FF))
-                            .border(1.dp, Color(0xFFBFDBFE), RoundedCornerShape(14.dp))
+                            .background(if (isZip) Color(0xFFE0F2F1) else Color(0xFFEFF6FF))
+                            .border(1.dp, if (isZip) Color(0xFF80CBC4) else Color(0xFFBFDBFE), RoundedCornerShape(14.dp))
                             .clickable {
                                 showOpenOptionsDialog = false
                                 val now = System.currentTimeMillis()
                                 dbHelper.recordFileOpened(key, fileData.fileName, now)
                                 lastOpenedText = FileMetadataExtractor.formatLastOpened(now)
-                                onOpenFileClick()
+                                if (isZip) {
+                                    onExtractZipClick(fileData)
+                                } else {
+                                    onOpenFileClick()
+                                }
                             }
                             .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -283,11 +301,11 @@ fun FileDetailScreen(
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF2563EB)),
+                                .background(if (isZip) Color(0xFF00897B) else Color(0xFF2563EB)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Visibility,
+                                imageVector = if (isZip) Icons.Default.FolderZip else Icons.Default.Visibility,
                                 contentDescription = null,
                                 tint = Color.White,
                                 modifier = Modifier.size(20.dp)
@@ -298,17 +316,65 @@ fun FileDetailScreen(
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "View in IntelliFile",
+                                text = if (isZip) "Extract ZIP Archive" else "View in IntelliFile",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF1E40AF)
+                                color = if (isZip) Color(0xFF004D40) else Color(0xFF1E40AF)
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Read & view inside this app",
+                                text = if (isZip) "Extract and browse archive contents" else "Read & view inside this app",
                                 fontSize = 12.sp,
-                                color = Color(0xFF3B82F6)
+                                color = if (isZip) Color(0xFF00796B) else Color(0xFF3B82F6)
                             )
+                        }
+                    }
+
+                    if (isZip && extractedFolderFile?.exists() == true) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color(0xFFF0FDF4))
+                                .border(1.dp, Color(0xFFBBF7D0), RoundedCornerShape(14.dp))
+                            .clickable {
+                                showOpenOptionsDialog = false
+                                onOpenExtractedFolderClick(extractedFolderFile)
+                            }
+                            .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF059669)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FolderOpen,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Open Extracted Folder",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF065F46)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Browse extracted files and subfolders",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF059669)
+                                )
+                            }
                         }
                     }
 
@@ -549,18 +615,35 @@ fun FileDetailScreen(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(110.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(Color(0xFFFFEAEE)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        painter = painterResource(id = fileData.iconResId),
-                        contentDescription = "File Icon",
-                        modifier = Modifier.size(64.dp)
-                    )
+                if (isZip) {
+                    Box(
+                        modifier = Modifier
+                            .size(110.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(Color(0xFFE0F2F1)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FolderZip,
+                            contentDescription = "ZIP Archive",
+                            tint = Color(0xFF00897B),
+                            modifier = Modifier.size(56.dp)
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(110.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(Color(0xFFFFEAEE)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(id = fileData.iconResId),
+                            contentDescription = "File Icon",
+                            modifier = Modifier.size(64.dp)
+                        )
+                    }
                 }
             }
 
@@ -862,21 +945,103 @@ fun FileDetailScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Open File Button (Presents In-App Viewer or External Chooser)
-            Button(
-                onClick = { showOpenOptionsDialog = true },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-            ) {
-                Text(
-                    text = "Open File",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
+            // Action Buttons: If ZIP archive, offer Extract / Open Extracted Folder
+            if (isZip) {
+                if (extractedFolderFile?.exists() == true) {
+                    Button(
+                        onClick = { onOpenExtractedFolderClick(extractedFolderFile) },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.FolderOpen,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Open Extracted Folder",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedButton(
+                        onClick = { onExtractZipClick(fileData) },
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.FolderZip,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Extract ZIP Again",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = { onExtractZipClick(fileData) },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.FolderZip,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Extract ZIP Archive",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+            } else {
+                // Open File Button (Presents In-App Viewer or External Chooser)
+                Button(
+                    onClick = { showOpenOptionsDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                ) {
+                    Text(
+                        text = "Open File",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))

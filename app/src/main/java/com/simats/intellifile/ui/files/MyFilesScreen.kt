@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -38,6 +39,9 @@ import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.FolderZip
+import java.io.File
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
@@ -114,7 +118,9 @@ fun MyFilesScreen(
     onQuickAccessClick: (PriorityLevel) -> Unit = {},
     onNavigateToAiChat: (String) -> Unit = {},
     onMicClick: () -> Unit = {},
-    onOpenFile: (FileDetailData) -> Unit = {}
+    onOpenFile: (FileDetailData) -> Unit = {},
+    onOpenExtractedFolder: (File) -> Unit = {},
+    onExtractZip: (FileDetailData) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -122,11 +128,44 @@ fun MyFilesScreen(
     val aiRepo = remember { AiRepository(context) }
     val dbHelper = remember { LocalFileDatabaseHelper.getInstance(context) }
 
+    val zipPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            var fileName = "Archive.zip"
+            var fileSize = 0L
+            try {
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                    if (cursor.moveToFirst()) {
+                        if (nameIndex != -1) fileName = cursor.getString(nameIndex) ?: fileName
+                        if (sizeIndex != -1) fileSize = cursor.getLong(sizeIndex)
+                    }
+                }
+            } catch (_: Exception) {}
+
+            val zipDetail = FileDetailData(
+                fileName = fileName,
+                fileSize = LocalFileManager.formatFileSize(fileSize),
+                fileType = "ZIP Archive",
+                uriString = uri.toString(),
+                path = "",
+                iconResId = R.drawable.pdf
+            )
+            onExtractZip(zipDetail)
+        }
+    }
+
     var selectedSource by remember { mutableStateOf(StorageSourceTab.DEVICE_FILES) }
     val listState = rememberLazyListState()
     var refreshTrigger by remember { mutableIntStateOf(0) }
     var realFiles by remember { mutableStateOf<List<LocalFileItem>>(emptyList()) }
     var isLoadingDeviceFiles by remember { mutableStateOf(true) }
+
+    val extractedFolders = remember(refreshTrigger, priorityUpdateVersion) {
+        dbHelper.getAllExtractedFolders()
+    }
 
     // IntelliSpace State
     var vaultDocuments by remember {
@@ -237,9 +276,7 @@ fun MyFilesScreen(
         val loaded = withContext(Dispatchers.IO) {
             LocalFileManager.getDeviceFiles(context)
         }
-        if (realFiles.isNotEmpty()) {
-            delay(400)
-        }
+        delay(600)
         realFiles = loaded
         isLoadingDeviceFiles = false
     }
@@ -1211,6 +1248,168 @@ fun MyFilesScreen(
                                     count = lowCount,
                                     onClick = { onQuickAccessClick(PriorityLevel.LOW) }
                                 )
+                            }
+                        }
+
+                        // Extracted ZIP Archives & Folder Browser Section
+                        item {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Extracted Folders",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF111827)
+                                    )
+
+                                    TextButton(
+                                        onClick = {
+                                            zipPickerLauncher.launch(
+                                                arrayOf(
+                                                    "application/zip",
+                                                    "application/x-zip-compressed",
+                                                    "application/x-zip"
+                                                )
+                                            )
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.FolderZip,
+                                            contentDescription = null,
+                                            tint = Color(0xFF00897B),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Extract ZIP",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF00897B)
+                                        )
+                                    }
+                                }
+
+                                if (extractedFolders.isNotEmpty()) {
+                                    extractedFolders.forEach { record ->
+                                        val folderFile = File(record.folderPath)
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(16.dp))
+                                                .clickable {
+                                                    if (folderFile.exists()) {
+                                                        onOpenExtractedFolder(folderFile)
+                                                    } else {
+                                                        Toast.makeText(context, "Folder not found: ${record.folderName}", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                },
+                                            shape = RoundedCornerShape(16.dp),
+                                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                                            border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(14.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(44.dp)
+                                                        .clip(RoundedCornerShape(12.dp))
+                                                        .background(Color(0xFFE0F2F1)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.FolderOpen,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFF00897B),
+                                                        modifier = Modifier.size(24.dp)
+                                                    )
+                                                }
+
+                                                Spacer(modifier = Modifier.width(14.dp))
+
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = record.folderName,
+                                                        fontSize = 15.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = Color(0xFF111827),
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    Spacer(modifier = Modifier.height(2.dp))
+                                                    Text(
+                                                        text = "${record.totalFiles} files · ${LocalFileManager.formatFileSize(record.totalSizeBytes)}",
+                                                        fontSize = 12.sp,
+                                                        color = Color(0xFF6B7280)
+                                                    )
+                                                }
+
+                                                Icon(
+                                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                                    contentDescription = "Open",
+                                                    tint = Color(0xFF9CA3AF),
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .clickable {
+                                                zipPickerLauncher.launch(
+                                                    arrayOf(
+                                                        "application/zip",
+                                                        "application/x-zip-compressed",
+                                                        "application/x-zip"
+                                                    )
+                                                )
+                                            },
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                                        border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(14.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.FolderZip,
+                                                contentDescription = null,
+                                                tint = Color(0xFF00897B),
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "Extract any ZIP archive",
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = Color(0xFF1E293B)
+                                                )
+                                                Text(
+                                                    text = "Tap to choose a ZIP file from your device",
+                                                    fontSize = 12.sp,
+                                                    color = Color(0xFF64748B)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

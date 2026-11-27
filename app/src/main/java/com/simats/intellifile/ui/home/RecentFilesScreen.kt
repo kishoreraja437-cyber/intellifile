@@ -110,9 +110,7 @@ fun RecentFilesScreen(
         val loaded = withContext(Dispatchers.IO) {
             LocalFileManager.getDeviceFiles(context)
         }
-        if (realFiles.isNotEmpty()) {
-            delay(400)
-        }
+        delay(600)
         realFiles = loaded
         isLoading = false
     }

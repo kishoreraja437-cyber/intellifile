@@ -6,6 +6,8 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import com.simats.intellifile.data.manager.LocalFileManager
 import com.simats.intellifile.ui.home.PriorityLevel
+import com.simats.intellifile.data.model.ExtractedFolderRecord
+import java.io.File
 
 /**
  * Metadata record for user customizations stored locally on device.
@@ -36,7 +38,7 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
 ) {
     companion object {
         private const val DATABASE_NAME = "intellifile_local.db"
-        private const val DATABASE_VERSION = 3
+        private const val DATABASE_VERSION = 4
 
         private const val TABLE_METADATA = "local_file_metadata"
         private const val COL_URI_OR_PATH = "uri_or_path"
@@ -52,6 +54,17 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
         private const val COL_LAST_OPENED = "last_opened"
         private const val COL_CONTENT_COUNT_LABEL = "content_count_label"
         private const val COL_CONTENT_COUNT_VALUE = "content_count_value"
+
+        // Extracted Folders Table
+        private const val TABLE_EXTRACTED_FOLDERS = "extracted_folders"
+        private const val COL_FOLDER_PATH = "folder_path"
+        private const val COL_FOLDER_NAME = "folder_name"
+        private const val COL_SOURCE_ZIP_PATH = "source_zip_path"
+        private const val COL_SOURCE_ZIP_NAME = "source_zip_name"
+        private const val COL_TOTAL_FILES = "total_files"
+        private const val COL_TOTAL_SUBFOLDERS = "total_subfolders"
+        private const val COL_TOTAL_SIZE_BYTES = "total_size_bytes"
+        private const val COL_EXTRACTED_DATE_MS = "extracted_date_ms"
 
         @Volatile
         private var instance: LocalFileDatabaseHelper? = null
@@ -82,6 +95,25 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
             )
         """.trimIndent()
         db.execSQL(createQuery)
+        createExtractedFoldersTable(db)
+    }
+
+    private fun createExtractedFoldersTable(db: SQLiteDatabase) {
+        val query = """
+            CREATE TABLE IF NOT EXISTS $TABLE_EXTRACTED_FOLDERS (
+                $COL_FOLDER_PATH TEXT PRIMARY KEY,
+                $COL_FOLDER_NAME TEXT NOT NULL,
+                $COL_SOURCE_ZIP_PATH TEXT,
+                $COL_SOURCE_ZIP_NAME TEXT,
+                $COL_TOTAL_FILES INTEGER NOT NULL DEFAULT 0,
+                $COL_TOTAL_SUBFOLDERS INTEGER NOT NULL DEFAULT 0,
+                $COL_TOTAL_SIZE_BYTES INTEGER NOT NULL DEFAULT 0,
+                $COL_EXTRACTED_DATE_MS INTEGER NOT NULL DEFAULT 0
+            )
+        """.trimIndent()
+        try {
+            db.execSQL(query)
+        } catch (_: Exception) {}
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -99,6 +131,9 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
                 db.execSQL("ALTER TABLE $TABLE_METADATA ADD COLUMN $COL_CONTENT_COUNT_VALUE TEXT DEFAULT NULL")
             } catch (_: Exception) {}
         }
+        if (oldVersion < 4) {
+            createExtractedFoldersTable(db)
+        }
     }
 
     override fun onOpen(db: SQLiteDatabase) {
@@ -115,6 +150,7 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
         try {
             db.execSQL("ALTER TABLE $TABLE_METADATA ADD COLUMN $COL_CONTENT_COUNT_VALUE TEXT DEFAULT NULL")
         } catch (_: Exception) {}
+        createExtractedFoldersTable(db)
     }
 
     /**
@@ -654,6 +690,145 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
                                 return Pair(label, value)
                             }
                         }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return null
+    }
+
+    /**
+     * Records an extracted ZIP folder into the database.
+     */
+    fun recordExtractedFolder(record: ExtractedFolderRecord): Boolean {
+        return try {
+            val db = writableDatabase
+            val values = ContentValues().apply {
+                put(COL_FOLDER_PATH, record.folderPath)
+                put(COL_FOLDER_NAME, record.folderName)
+                put(COL_SOURCE_ZIP_PATH, record.sourceZipPath)
+                put(COL_SOURCE_ZIP_NAME, record.sourceZipName)
+                put(COL_TOTAL_FILES, record.totalFiles)
+                put(COL_TOTAL_SUBFOLDERS, record.totalSubfolders)
+                put(COL_TOTAL_SIZE_BYTES, record.totalSizeBytes)
+                put(COL_EXTRACTED_DATE_MS, record.extractedDateMs)
+            }
+            db.insertWithOnConflict(TABLE_EXTRACTED_FOLDERS, null, values, SQLiteDatabase.CONFLICT_REPLACE) != -1L
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    /**
+     * Retrieves all recorded extracted folders, verifying they still exist on disk.
+     */
+    fun getAllExtractedFolders(): List<ExtractedFolderRecord> {
+        val list = mutableListOf<ExtractedFolderRecord>()
+        try {
+            val db = readableDatabase
+            val cursor = db.query(
+                TABLE_EXTRACTED_FOLDERS,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "$COL_EXTRACTED_DATE_MS DESC"
+            )
+            cursor.use { c ->
+                val pathIdx = c.getColumnIndex(COL_FOLDER_PATH)
+                val nameIdx = c.getColumnIndex(COL_FOLDER_NAME)
+                val zipPathIdx = c.getColumnIndex(COL_SOURCE_ZIP_PATH)
+                val zipNameIdx = c.getColumnIndex(COL_SOURCE_ZIP_NAME)
+                val filesIdx = c.getColumnIndex(COL_TOTAL_FILES)
+                val subfoldersIdx = c.getColumnIndex(COL_TOTAL_SUBFOLDERS)
+                val sizeIdx = c.getColumnIndex(COL_TOTAL_SIZE_BYTES)
+                val dateIdx = c.getColumnIndex(COL_EXTRACTED_DATE_MS)
+
+                while (c.moveToNext()) {
+                    val path = c.getString(pathIdx) ?: continue
+                    val folderFile = File(path)
+                    // If the folder was deleted on disk by user or another app, clean it up
+                    if (!folderFile.exists()) {
+                        deleteExtractedFolderRecord(path)
+                        continue
+                    }
+                    list.add(
+                        ExtractedFolderRecord(
+                            folderPath = path,
+                            folderName = c.getString(nameIdx) ?: folderFile.name,
+                            sourceZipPath = if (zipPathIdx != -1) c.getString(zipPathIdx) ?: "" else "",
+                            sourceZipName = if (zipNameIdx != -1) c.getString(zipNameIdx) ?: "" else "",
+                            totalFiles = if (filesIdx != -1) c.getInt(filesIdx) else 0,
+                            totalSubfolders = if (subfoldersIdx != -1) c.getInt(subfoldersIdx) else 0,
+                            totalSizeBytes = if (sizeIdx != -1) c.getLong(sizeIdx) else folderFile.length(),
+                            extractedDateMs = if (dateIdx != -1) c.getLong(dateIdx) else folderFile.lastModified()
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return list
+    }
+
+    /**
+     * Deletes an extracted folder record.
+     */
+    fun deleteExtractedFolderRecord(folderPath: String): Boolean {
+        return try {
+            val db = writableDatabase
+            db.delete(TABLE_EXTRACTED_FOLDERS, "$COL_FOLDER_PATH = ?", arrayOf(folderPath)) > 0
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    /**
+     * Checks if a ZIP file has already been extracted.
+     */
+    fun getExtractedFolderForZip(zipPathOrName: String): ExtractedFolderRecord? {
+        if (zipPathOrName.isBlank()) return null
+        try {
+            val db = readableDatabase
+            val cursor = db.query(
+                TABLE_EXTRACTED_FOLDERS,
+                null,
+                "$COL_SOURCE_ZIP_PATH = ? OR $COL_SOURCE_ZIP_NAME = ?",
+                arrayOf(zipPathOrName, zipPathOrName),
+                null,
+                null,
+                "$COL_EXTRACTED_DATE_MS DESC",
+                "1"
+            )
+            cursor.use { c ->
+                if (c.moveToFirst()) {
+                    val pathIdx = c.getColumnIndex(COL_FOLDER_PATH)
+                    val nameIdx = c.getColumnIndex(COL_FOLDER_NAME)
+                    val zipPathIdx = c.getColumnIndex(COL_SOURCE_ZIP_PATH)
+                    val zipNameIdx = c.getColumnIndex(COL_SOURCE_ZIP_NAME)
+                    val filesIdx = c.getColumnIndex(COL_TOTAL_FILES)
+                    val subfoldersIdx = c.getColumnIndex(COL_TOTAL_SUBFOLDERS)
+                    val sizeIdx = c.getColumnIndex(COL_TOTAL_SIZE_BYTES)
+                    val dateIdx = c.getColumnIndex(COL_EXTRACTED_DATE_MS)
+
+                    val path = c.getString(pathIdx) ?: return null
+                    if (File(path).exists()) {
+                        return ExtractedFolderRecord(
+                            folderPath = path,
+                            folderName = c.getString(nameIdx) ?: File(path).name,
+                            sourceZipPath = if (zipPathIdx != -1) c.getString(zipPathIdx) ?: "" else "",
+                            sourceZipName = if (zipNameIdx != -1) c.getString(zipNameIdx) ?: "" else "",
+                            totalFiles = if (filesIdx != -1) c.getInt(filesIdx) else 0,
+                            totalSubfolders = if (subfoldersIdx != -1) c.getInt(subfoldersIdx) else 0,
+                            totalSizeBytes = if (sizeIdx != -1) c.getLong(sizeIdx) else 0L,
+                            extractedDateMs = if (dateIdx != -1) c.getLong(dateIdx) else 0L
+                        )
                     }
                 }
             }

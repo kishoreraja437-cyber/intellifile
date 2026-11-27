@@ -140,8 +140,10 @@ import com.simats.intellifile.ui.voice.VoiceAssistantModal
 
 
 import com.simats.intellifile.ui.detail.FileDetailData
-
 import com.simats.intellifile.ui.detail.FileDetailScreen
+import com.simats.intellifile.ui.dialog.ZipExtractionDialog
+import com.simats.intellifile.ui.files.ExtractedFolderViewerScreen
+import java.io.File
 
 import com.simats.intellifile.ui.feedback.FeedbackScreen
 
@@ -248,6 +250,8 @@ fun MainScreen(
 
 
     var selectedDetailFile by remember { mutableStateOf<FileDetailData?>(null) }
+    var activeExtractedFolder by remember { mutableStateOf<File?>(null) }
+    var zipToExtract by remember { mutableStateOf<FileDetailData?>(null) }
 
     var isDocumentViewerOpen by remember { mutableStateOf(false) }
 
@@ -295,6 +299,8 @@ fun MainScreen(
         isVoiceAssistantOpen = false
         isRecentFilesOpen = false
         isAiHistoryOpen = false
+        activeExtractedFolder = null
+        zipToExtract = null
         selectedDetailFile = null
         isDocumentViewerOpen = false
         isFileSavedSuccessOpen = false
@@ -314,6 +320,8 @@ fun MainScreen(
     fun handleGoBack() {
         isVoiceAssistantOpen = false
         when {
+            zipToExtract != null -> zipToExtract = null
+            activeExtractedFolder != null -> activeExtractedFolder = null
             isShareOpen -> isShareOpen = false
             isFileSavedSuccessOpen -> isFileSavedSuccessOpen = false
             isDocumentViewerOpen -> isDocumentViewerOpen = false
@@ -345,6 +353,7 @@ fun MainScreen(
     }
 
     val isOverlayScreenOpen = isVoiceAssistantOpen || isRecentFilesOpen || isAiHistoryOpen || selectedDetailFile != null ||
+            activeExtractedFolder != null ||
             isDocumentViewerOpen || isFileSavedSuccessOpen || isShareOpen || isFilePermissionsOpen ||
             isNotificationsOpen || isAppLockSettingsOpen || isThemeOpen || isAboutOpen ||
             isHelpSupportOpen || isContactSupportOpen || isContactSuccessOpen ||
@@ -875,31 +884,44 @@ fun MainScreen(
 
 
                     else -> when {
+                        activeExtractedFolder != null -> ExtractedFolderViewerScreen(
+                            rootFolder = activeExtractedFolder!!,
+                            onBackClick = { activeExtractedFolder = null },
+                            onOpenFileDetails = { fileItem ->
+                                selectedDetailFile = fileItem
+                            },
+                            onOpenDirectViewer = { localItem ->
+                                selectedDetailFile = FileDetailData(
+                                    fileName = localItem.title,
+                                    fileSize = localItem.sizeFormatted,
+                                    fileType = "${localItem.format} Document",
+                                    path = localItem.path,
+                                    uriString = localItem.uri.toString(),
+                                    iconResId = localItem.iconResId
+                                )
+                                isDocumentViewerOpen = true
+                            },
+                            onShareFile = { localItem ->
+                                LocalFileManager.shareFileWithSystem(context, localItem)
+                            }
+                        )
 
                         selectedDetailFile != null -> FileDetailScreen(
-
                             fileData = selectedDetailFile!!,
-
                             onBackClick = { selectedDetailFile = null },
-
                             onOpenFileClick = {
                                 val key = if (selectedDetailFile!!.path.isNotBlank()) selectedDetailFile!!.path else selectedDetailFile!!.uriString
                                 LocalFileDatabaseHelper.getInstance(context).recordFileOpened(key, selectedDetailFile!!.fileName)
                                 isDocumentViewerOpen = true
                             },
-
                             onShareClick = { isShareOpen = true },
-
                             onMoreOptionsClick = { isShareOpen = true },
-
                             onSetPriorityClick = {},
-
                             onPriorityChanged = { newPriority ->
-
                                 selectedDetailFile = selectedDetailFile?.copy(priority = newPriority)
-
-                            }
-
+                            },
+                            onExtractZipClick = { zipToExtract = it },
+                            onOpenExtractedFolderClick = { activeExtractedFolder = it }
                         )
 
 
@@ -1053,6 +1075,12 @@ fun MainScreen(
                                                         onOpenFile = { fileDetail ->
                                                             selectedDetailFile = fileDetail
                                                             isDocumentViewerOpen = true
+                                                        },
+                                                        onOpenExtractedFolder = { folder ->
+                                                            activeExtractedFolder = folder
+                                                        },
+                                                        onExtractZip = { zipFile ->
+                                                            zipToExtract = zipFile
                                                         }
                                                     )
 
@@ -1129,6 +1157,17 @@ fun MainScreen(
         }
 
     }
+
+        if (zipToExtract != null) {
+            ZipExtractionDialog(
+                zipFileData = zipToExtract!!,
+                onDismiss = { zipToExtract = null },
+                onExtractionComplete = { extractedFolder ->
+                    zipToExtract = null
+                    activeExtractedFolder = extractedFolder
+                }
+            )
+        }
 
         if (isVoiceAssistantOpen) {
             VoiceAssistantModal(

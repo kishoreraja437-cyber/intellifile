@@ -70,12 +70,12 @@ fun FilesLoadingCard(
             ),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(1.5.dp, Color(0xFF55A9AF))
+        border = BorderStroke(1.2.dp, Color(0xFF55A9AF))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 18.dp)
+                .padding(horizontal = 18.dp, vertical = 18.dp)
         ) {
             // Header Row: Title & Optional Action
             if (title.isNotBlank()) {
@@ -91,59 +91,67 @@ fun FilesLoadingCard(
                         color = Color(0xFF111827)
                     )
 
-                    if (!actionText.isNullOrBlank() && onActionClick != null) {
+                    if (!actionText.isNullOrBlank()) {
                         Text(
                             text = actionText,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF009688),
-                            modifier = Modifier.clickable { onActionClick() }
+                            color = Color(0xFF00897B),
+                            modifier = if (onActionClick != null) Modifier.clickable { onActionClick() } else Modifier
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Skeleton File Items
+            // Skeleton File Items with individual item container matching the mockup design
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 repeat(itemCount) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFF8FAFC))
+                            .padding(horizontal = 10.dp, vertical = 10.dp)
                     ) {
-                        // Square icon thumbnail placeholder
-                        Box(
-                            modifier = Modifier
-                                .size(42.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(shimmerBrush)
-                        )
-
-                        Spacer(modifier = Modifier.width(14.dp))
-
-                        // Title and subtitle bar placeholders
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // Square icon thumbnail placeholder
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth(0.68f)
-                                    .height(12.dp)
-                                    .clip(RoundedCornerShape(6.dp))
+                                    .size(38.dp)
+                                    .clip(RoundedCornerShape(8.dp))
                                     .background(shimmerBrush)
                             )
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.36f)
-                                    .height(10.dp)
-                                    .clip(RoundedCornerShape(5.dp))
-                                    .background(shimmerBrush)
-                            )
+
+                            Spacer(modifier = Modifier.width(14.dp))
+
+                            // Title and subtitle bar placeholders
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.68f)
+                                        .height(12.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(shimmerBrush)
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.36f)
+                                        .height(10.dp)
+                                        .clip(RoundedCornerShape(5.dp))
+                                        .background(shimmerBrush)
+                                )
+                            }
                         }
                     }
                 }
@@ -160,7 +168,7 @@ fun FilesLoadingCard(
                 CircularProgressIndicator(
                     modifier = Modifier.size(26.dp),
                     strokeWidth = 2.5.dp,
-                    color = Color(0xFF009688)
+                    color = Color(0xFF00897B)
                 )
 
                 Text(
