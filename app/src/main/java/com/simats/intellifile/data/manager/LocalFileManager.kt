@@ -509,14 +509,6 @@ object LocalFileManager {
      * Resolves a ParcelFileDescriptor for reading a file (e.g. for PdfRenderer).
      */
     fun getFileDescriptor(context: Context, uriString: String, path: String): ParcelFileDescriptor? {
-        if (uriString.isNotBlank()) {
-            try {
-                val uri = Uri.parse(uriString)
-                val pfd = context.contentResolver.openFileDescriptor(uri, "r")
-                if (pfd != null) return pfd
-            } catch (_: Exception) {}
-        }
-
         if (path.isNotBlank()) {
             try {
                 val file = File(path)
@@ -525,7 +517,26 @@ object LocalFileManager {
                     if (pfd != null) return pfd
                 }
             } catch (_: Exception) {}
+        }
 
+        if (uriString.isNotBlank()) {
+            try {
+                val uri = Uri.parse(uriString)
+                if (uri.scheme == "file" && !uri.path.isNullOrBlank()) {
+                    val file = File(uri.path!!)
+                    if (file.exists() && file.canRead()) {
+                        val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+                        if (pfd != null) return pfd
+                    }
+                }
+                if (uri.scheme == "content") {
+                    val pfd = context.contentResolver.openFileDescriptor(uri, "r")
+                    if (pfd != null) return pfd
+                }
+            } catch (_: Exception) {}
+        }
+
+        if (path.isNotBlank()) {
             try {
                 val file = File(path)
                 if (file.exists()) {
@@ -547,20 +558,26 @@ object LocalFileManager {
      * Opens an InputStream for a document by URI or file path.
      */
     fun openInputStream(context: Context, uriString: String, path: String): InputStream? {
-        if (uriString.isNotBlank()) {
-            try {
-                val uri = Uri.parse(uriString)
-                val stream = context.contentResolver.openInputStream(uri)
-                if (stream != null) return stream
-            } catch (_: Exception) {}
-        }
-
         if (path.isNotBlank()) {
             try {
                 val file = File(path)
                 if (file.exists() && file.canRead()) {
                     return file.inputStream()
                 }
+            } catch (_: Exception) {}
+        }
+
+        if (uriString.isNotBlank()) {
+            try {
+                val uri = Uri.parse(uriString)
+                if (uri.scheme == "file" && !uri.path.isNullOrBlank()) {
+                    val file = File(uri.path!!)
+                    if (file.exists() && file.canRead()) {
+                        return file.inputStream()
+                    }
+                }
+                val stream = context.contentResolver.openInputStream(uri)
+                if (stream != null) return stream
             } catch (_: Exception) {}
         }
 

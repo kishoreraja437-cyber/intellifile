@@ -1,5 +1,6 @@
 package com.simats.intellifile.ui.files
 
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -31,7 +32,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -39,6 +42,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.core.content.FileProvider
 import com.simats.intellifile.R
 import com.simats.intellifile.data.local.LocalFileDatabaseHelper
 import com.simats.intellifile.data.manager.LocalFileManager
@@ -91,10 +96,12 @@ fun ExtractedFolderViewerScreen(
     var isSearchActive by remember { mutableStateOf(false) }
     var refreshVersion by remember { mutableIntStateOf(0) }
 
-    // Selected file for priority assignment or IntelliSpace dialog
+    // Selected file for priority assignment, IntelliSpace dialog, preview, or unsupported format
     var prioritySheetItem by remember { mutableStateOf<ExtractedFolderItem?>(null) }
     var vaultConfirmItem by remember { mutableStateOf<ExtractedFolderItem?>(null) }
     var isUploadingToVault by remember { mutableStateOf(false) }
+    var viewingImageItem by remember { mutableStateOf<ExtractedFolderItem?>(null) }
+    var unsupportedFileItem by remember { mutableStateOf<ExtractedFolderItem?>(null) }
 
     // Handle system back navigation inside folders
     BackHandler {
@@ -201,13 +208,27 @@ fun ExtractedFolderViewerScreen(
         }
     }
 
+    // Helper to obtain a secure FileProvider content URI with fallback
+    fun getSafeContentUri(file: File): Uri {
+        return try {
+            FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                file
+            )
+        } catch (e: Exception) {
+            Uri.fromFile(file)
+        }
+    }
+
     // Convert an ExtractedFolderItem to a LocalFileItem
     fun toLocalFileItem(item: ExtractedFolderItem): LocalFileItem {
+        val safeUri = getSafeContentUri(item.file)
         return LocalFileItem(
             id = item.file.hashCode().toLong(),
             title = item.name,
             path = item.file.absolutePath,
-            uri = Uri.fromFile(item.file),
+            uri = safeUri,
             sizeBytes = item.sizeBytes,
             sizeFormatted = LocalFileManager.formatFileSize(item.sizeBytes),
             dateModifiedMs = item.dateModifiedMs,
@@ -223,6 +244,7 @@ fun ExtractedFolderViewerScreen(
 
     // Convert an ExtractedFolderItem to FileDetailData
     fun toFileDetailData(item: ExtractedFolderItem): FileDetailData {
+        val safeUri = getSafeContentUri(item.file)
         return FileDetailData(
             fileName = item.name,
             fileSize = LocalFileManager.formatFileSize(item.sizeBytes),
@@ -233,7 +255,7 @@ fun ExtractedFolderViewerScreen(
             location = item.file.parent ?: "Extracted Folder",
             priority = item.priority,
             iconResId = item.iconResId,
-            uriString = Uri.fromFile(item.file).toString(),
+            uriString = safeUri.toString(),
             path = item.file.absolutePath,
             isVaultSynced = item.isVaultSynced
         )
@@ -513,12 +535,33 @@ fun ExtractedFolderViewerScreen(
                                     if (item.isDirectory) {
                                         navigateInto(item.file)
                                     } else {
-                                        // If document, open directly with document viewer or detail
                                         val localItem = toLocalFileItem(item)
-                                        if (item.format in listOf("PDF", "PPT", "PPTX", "DOC", "DOCX", "TXT", "XLSX", "CSV")) {
-                                            onOpenDirectViewer(localItem)
-                                        } else {
-                                            onOpenFileDetails(toFileDetailData(item))
+                                        val ext = item.file.extension.lowercase()
+                                        val formatUpper = item.format.uppercase()
+
+                                        val documentExtensions = setOf(
+                                            "pdf", "ppt", "pptx", "doc", "docx", "xls", "xlsx", "csv",
+                                            "txt", "md", "markdown", "py", "js", "ts", "jsx", "tsx",
+                                            "html", "htm", "css", "scss", "json", "xml", "yaml", "yml",
+                                            "kt", "java", "c", "cpp", "h", "cs", "go", "rs", "php",
+                                            "sql", "sh", "bat", "ini", "conf", "properties", "log"
+                                        )
+                                        val imageExtensions = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "svg")
+                                        val mediaExtensions = setOf("mp3", "wav", "m4a", "flac", "aac", "ogg", "mp4", "mkv", "mov", "avi", "3gp")
+
+                                        when {
+                                            ext in documentExtensions || formatUpper in listOf("PDF", "PPT", "PPTX", "DOC", "DOCX", "TXT", "XLSX", "CSV", "CODE") -> {
+                                                onOpenDirectViewer(localItem)
+                                            }
+                                            ext in imageExtensions -> {
+                                                viewingImageItem = item
+                                            }
+                                            ext in mediaExtensions -> {
+                                                LocalFileManager.openFileWithSystem(context, localItem)
+                                            }
+                                            else -> {
+                                                unsupportedFileItem = item
+                                            }
                                         }
                                     }
                                 },
@@ -692,6 +735,42 @@ fun ExtractedFolderViewerScreen(
                 TextButton(onClick = { vaultConfirmItem = null }) {
                     Text("Cancel", color = Color(0xFF64748B))
                 }
+            }
+        )
+    }
+
+    // 6. Image Viewer Dialog for previewing extracted images
+    if (viewingImageItem != null) {
+        ExtractedImageViewerDialog(
+            item = viewingImageItem!!,
+            onDismiss = { viewingImageItem = null },
+            onOpenExternal = {
+                val target = viewingImageItem!!
+                viewingImageItem = null
+                LocalFileManager.openFileWithSystem(context, toLocalFileItem(target))
+            },
+            onShare = {
+                val target = viewingImageItem!!
+                viewingImageItem = null
+                onShareFile(toLocalFileItem(target))
+            }
+        )
+    }
+
+    // 7. Unsupported Format Dialog for non-previewable files
+    if (unsupportedFileItem != null) {
+        ExtractedUnsupportedFormatDialog(
+            item = unsupportedFileItem!!,
+            onDismiss = { unsupportedFileItem = null },
+            onOpenExternal = {
+                val target = unsupportedFileItem!!
+                unsupportedFileItem = null
+                LocalFileManager.openFileWithSystem(context, toLocalFileItem(target))
+            },
+            onOpenDetails = {
+                val target = unsupportedFileItem!!
+                unsupportedFileItem = null
+                onOpenFileDetails(toFileDetailData(target))
             }
         )
     }
@@ -909,4 +988,215 @@ private fun ExtractedItemCard(
             }
         }
     }
+}
+
+@Composable
+private fun ExtractedImageViewerDialog(
+    item: ExtractedFolderItem,
+    onDismiss: () -> Unit,
+    onOpenExternal: () -> Unit,
+    onShare: () -> Unit
+) {
+    val bitmap = remember(item.file) {
+        try {
+            BitmapFactory.decodeFile(item.file.absolutePath)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Header with filename and close
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = item.name,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1E293B),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "${item.format} • ${item.sizeFormatted}",
+                            fontSize = 12.sp,
+                            color = Color(0xFF64748B)
+                        )
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color(0xFF64748B))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Image Preview Box
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(280.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFF1F5F9)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (bitmap != null) {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = item.name,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit
+                        )
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.BrokenImage,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = Color(0xFF94A3B8)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Unable to preview image",
+                                fontSize = 13.sp,
+                                color = Color(0xFF64748B)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Action Buttons: Share / Open External
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onShare,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF55A9AF))
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF55A9AF))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Share", color = Color(0xFF55A9AF), fontWeight = FontWeight.SemiBold)
+                    }
+
+                    Button(
+                        onClick = onOpenExternal,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF55A9AF))
+                    ) {
+                        Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Open Full", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExtractedUnsupportedFormatDialog(
+    item: ExtractedFolderItem,
+    onDismiss: () -> Unit,
+    onOpenExternal: () -> Unit,
+    onOpenDetails: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFFEF3C7)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.HelpOutline,
+                    contentDescription = null,
+                    tint = Color(0xFFD97706),
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        },
+        title = {
+            Text(
+                text = "Open With Another App",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1E293B),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "${item.name} (${item.format}) cannot be directly previewed inside the in-app viewer.",
+                    fontSize = 14.sp,
+                    color = Color(0xFF64748B),
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Would you like to open it using an external compatible application or inspect its metadata details?",
+                    fontSize = 13.sp,
+                    color = Color(0xFF94A3B8),
+                    textAlign = TextAlign.Center
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onDismiss()
+                    onOpenExternal()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF55A9AF)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Open Externally", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel", color = Color(0xFF64748B))
+                }
+                TextButton(onClick = {
+                    onDismiss()
+                    onOpenDetails()
+                }) {
+                    Text("Details", color = Color(0xFF55A9AF), fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    )
 }

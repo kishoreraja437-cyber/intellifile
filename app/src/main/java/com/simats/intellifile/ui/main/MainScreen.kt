@@ -884,28 +884,6 @@ fun MainScreen(
 
 
                     else -> when {
-                        activeExtractedFolder != null -> ExtractedFolderViewerScreen(
-                            rootFolder = activeExtractedFolder!!,
-                            onBackClick = { activeExtractedFolder = null },
-                            onOpenFileDetails = { fileItem ->
-                                selectedDetailFile = fileItem
-                            },
-                            onOpenDirectViewer = { localItem ->
-                                selectedDetailFile = FileDetailData(
-                                    fileName = localItem.title,
-                                    fileSize = localItem.sizeFormatted,
-                                    fileType = "${localItem.format} Document",
-                                    path = localItem.path,
-                                    uriString = localItem.uri.toString(),
-                                    iconResId = localItem.iconResId
-                                )
-                                isDocumentViewerOpen = true
-                            },
-                            onShareFile = { localItem ->
-                                LocalFileManager.shareFileWithSystem(context, localItem)
-                            }
-                        )
-
                         selectedDetailFile != null -> FileDetailScreen(
                             fileData = selectedDetailFile!!,
                             onBackClick = { selectedDetailFile = null },
@@ -922,6 +900,29 @@ fun MainScreen(
                             },
                             onExtractZipClick = { zipToExtract = it },
                             onOpenExtractedFolderClick = { activeExtractedFolder = it }
+                        )
+
+                        activeExtractedFolder != null -> ExtractedFolderViewerScreen(
+                            rootFolder = activeExtractedFolder!!,
+                            onBackClick = { activeExtractedFolder = null },
+                            onOpenFileDetails = { fileItem ->
+                                selectedDetailFile = fileItem
+                            },
+                            onOpenDirectViewer = { localItem ->
+                                val ext = localItem.title.substringAfterLast('.', "").uppercase()
+                                selectedDetailFile = FileDetailData(
+                                    fileName = localItem.title,
+                                    fileSize = localItem.sizeFormatted,
+                                    fileType = "${if (ext.isNotBlank()) ext else localItem.format} Document",
+                                    path = localItem.path,
+                                    uriString = localItem.uri.toString(),
+                                    iconResId = localItem.iconResId
+                                )
+                                isDocumentViewerOpen = true
+                            },
+                            onShareFile = { localItem ->
+                                LocalFileManager.shareFileWithSystem(context, localItem)
+                            }
                         )
 
 

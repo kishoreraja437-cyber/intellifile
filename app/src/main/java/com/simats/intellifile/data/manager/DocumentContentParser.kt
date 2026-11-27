@@ -405,7 +405,7 @@ object DocumentContentParser {
                 rawExt == "zip" -> parseZip(bytes, fileName)
 
                 // Priority 12: Plain text & code
-                rawExt in listOf("txt", "yaml", "yml", "kt", "java", "py", "sql", "sh", "bat", "ini", "conf", "properties") -> {
+                rawExt in listOf("txt", "yaml", "yml", "kt", "java", "py", "js", "ts", "jsx", "tsx", "css", "scss", "c", "cpp", "h", "cs", "go", "rs", "php", "sql", "sh", "bat", "ini", "conf", "properties") -> {
                     parsePlainText(bytes, fileName)
                 }
 

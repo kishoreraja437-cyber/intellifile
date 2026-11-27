@@ -86,7 +86,7 @@ fun FilesLoadingCard(
                 ) {
                     Text(
                         text = title,
-                        fontSize = 17.sp,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF111827)
                     )
@@ -96,7 +96,7 @@ fun FilesLoadingCard(
                             text = actionText,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF00897B),
+                            color = Color(0xFF55A9AF),
                             modifier = if (onActionClick != null) Modifier.clickable { onActionClick() } else Modifier
                         )
                     }
@@ -167,14 +167,14 @@ fun FilesLoadingCard(
             ) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(26.dp),
-                    strokeWidth = 2.5.dp,
-                    color = Color(0xFF00897B)
+                    strokeWidth = 2.8.dp,
+                    color = Color(0xFF55A9AF)
                 )
 
                 Text(
                     text = loadingText,
-                    fontSize = 13.5.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF1E293B)
                 )
             }
