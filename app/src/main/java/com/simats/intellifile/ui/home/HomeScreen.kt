@@ -1,6 +1,7 @@
 package com.simats.intellifile.ui.home
 
 import android.widget.Toast
+import com.simats.intellifile.data.local.LocalFileDatabaseHelper
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material3.AlertDialog
@@ -403,10 +404,19 @@ fun HomeScreen(
 
 
 
-    // Query real document files asynchronously from storage
+    // Query real document files asynchronously from storage and restore server-side priorities & documents
     LaunchedEffect(refreshTrigger, priorityUpdateVersion) {
         isLoading = true
         hasStoragePermission = LocalFileManager.hasStoragePermission(context)
+        withContext(Dispatchers.IO) {
+            try {
+                val docRepo = com.simats.intellifile.data.repository.DocumentRepository(context)
+                val serverResult = docRepo.getDocuments()
+                serverResult.onSuccess { docs ->
+                    LocalFileDatabaseHelper.getInstance(context).restoreServerDocuments(docs)
+                }
+            } catch (_: Exception) {}
+        }
         val loaded = withContext(Dispatchers.IO) {
             LocalFileManager.getDeviceFiles(context)
         }

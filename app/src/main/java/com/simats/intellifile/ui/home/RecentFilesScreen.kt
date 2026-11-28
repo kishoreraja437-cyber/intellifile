@@ -110,6 +110,15 @@ fun RecentFilesScreen(
 
     LaunchedEffect(refreshTrigger) {
         isLoading = true
+        withContext(Dispatchers.IO) {
+            try {
+                val docRepo = com.simats.intellifile.data.repository.DocumentRepository(context)
+                val serverResult = docRepo.getDocuments()
+                serverResult.onSuccess { docs ->
+                    LocalFileDatabaseHelper.getInstance(context).restoreServerDocuments(docs)
+                }
+            } catch (_: Exception) {}
+        }
         val loaded = withContext(Dispatchers.IO) {
             LocalFileManager.getDeviceFiles(context)
         }

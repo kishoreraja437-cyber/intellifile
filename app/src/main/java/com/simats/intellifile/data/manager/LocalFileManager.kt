@@ -23,6 +23,7 @@ import com.simats.intellifile.data.model.LocalFileItem
 import com.simats.intellifile.ui.home.PriorityLevel
 import com.simats.intellifile.data.api.NetworkConfig
 import com.simats.intellifile.data.model.DocumentDto
+import com.simats.intellifile.data.repository.DocumentRepository
 import java.io.FileOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -82,9 +83,14 @@ object LocalFileManager {
         }
 
         val dbHelper = LocalFileDatabaseHelper.getInstance(context)
+        val cachedVaultDocs = try { DocumentRepository.getCachedVaultDocs(context) } catch (_: Exception) { emptyList() }
+        if (cachedVaultDocs.isNotEmpty()) {
+            dbHelper.restoreServerDocuments(cachedVaultDocs)
+        }
         val metadataMap = dbHelper.getAllMetadata()
         val fileList = mutableListOf<LocalFileItem>()
         val seenPathsOrUris = mutableSetOf<String>()
+        val seenTitles = mutableSetOf<String>()
 
         try {
             val contentUri = MediaStore.Files.getContentUri("external")
@@ -139,16 +145,38 @@ object LocalFileManager {
                     val itemUri = ContentUris.withAppendedId(contentUri, id)
                     val key = dataPath ?: itemUri.toString()
                     seenPathsOrUris.add(key)
+                    seenTitles.add(name.trim().lowercase())
 
                     val format = resolveFormat(name, mime)
                     val iconRes = resolveIconResId(format)
-                    val meta = metadataMap[key] ?: (if (dataPath != null) metadataMap[dataPath] else null) ?: metadataMap[itemUri.toString()] ?: metadataMap[name]
+                    val meta = metadataMap[key] 
+                        ?: (if (dataPath != null) metadataMap[dataPath] else null) 
+                        ?: metadataMap[itemUri.toString()] 
+                        ?: metadataMap[name]
+                        ?: metadataMap[name.lowercase()]
 
                     // Priority is strictly user-assigned: null if not set
-                    val priority = meta?.priority
-                    val isBookmarked = meta?.isBookmarked ?: false
-                    val isVaultSynced = meta?.isVaultSynced ?: false
-                    val vaultDocId = meta?.vaultDocId
+                    var priority = meta?.priority
+                    var isBookmarked = meta?.isBookmarked ?: false
+                    var isVaultSynced = meta?.isVaultSynced ?: false
+                    var vaultDocId = meta?.vaultDocId
+
+                    // Connect with server-side document if not yet synced locally
+                    val matchedVault = cachedVaultDocs.firstOrNull { it.title.trim().equals(name.trim(), ignoreCase = true) }
+                    if (matchedVault != null) {
+                        isVaultSynced = true
+                        if (vaultDocId == null || vaultDocId <= 0) {
+                            vaultDocId = matchedVault.id
+                        }
+                        if (priority == null && !matchedVault.priority.isNullOrBlank()) {
+                            try {
+                                priority = PriorityLevel.valueOf(matchedVault.priority.uppercase())
+                            } catch (_: Exception) {}
+                        }
+                        if (matchedVault.is_bookmarked) {
+                            isBookmarked = true
+                        }
+                    }
 
                     fileList.add(
                         LocalFileItem(
@@ -185,8 +213,44 @@ object LocalFileManager {
 
             for (dir in fallbackDirs) {
                 if (dir != null && dir.exists() && dir.canRead()) {
-                    scanDirectory(dir, fileList, seenPathsOrUris, metadataMap)
+                    scanDirectory(dir, fileList, seenPathsOrUris, seenTitles, metadataMap, cachedVaultDocs)
                 }
+            }
+        }
+
+        // Include any server IntelliSpace documents that were not found in local disk scan
+        for (vDoc in cachedVaultDocs) {
+            val vTitle = vDoc.title.trim()
+            if (vTitle.isNotBlank() && !seenTitles.contains(vTitle.lowercase())) {
+                seenTitles.add(vTitle.lowercase())
+                val vFormat = vDoc.format?.takeIf { it.isNotBlank() } ?: resolveFormat(vTitle, null)
+                val vPriority = vDoc.priority?.let {
+                    try { PriorityLevel.valueOf(it.uppercase()) } catch (_: Exception) { null }
+                } ?: metadataMap[vTitle]?.priority ?: metadataMap[vTitle.lowercase()]?.priority
+
+                val vPath = if (!vDoc.location.isNullOrBlank() && vDoc.location != "Internal Storage") vDoc.location else (if (!vDoc.file_path.isNullOrBlank()) vDoc.file_path else "Internal Storage")
+                val vUri = if (!vDoc.file_url.isNullOrBlank()) Uri.parse(vDoc.file_url) else Uri.EMPTY
+
+                fileList.add(
+                    LocalFileItem(
+                        id = vDoc.id.toLong(),
+                        title = vTitle,
+                        path = vPath,
+                        uri = vUri,
+                        sizeBytes = 0L,
+                        sizeFormatted = vDoc.file_size?.takeIf { it.isNotBlank() } ?: "1.0 MB",
+                        dateModifiedMs = System.currentTimeMillis(),
+                        dateText = vDoc.last_accessed?.takeIf { it.isNotBlank() } ?: vDoc.created_at?.takeIf { it.isNotBlank() } ?: "Recent",
+                        format = vFormat,
+                        mimeType = resolveMimeType(vTitle),
+                        priority = vPriority,
+                        isBookmarked = vDoc.is_bookmarked,
+                        isVaultSynced = true,
+                        vaultDocId = vDoc.id,
+                        iconResId = resolveIconResId(vFormat),
+                        dateAddedMs = 0L
+                    )
+                )
             }
         }
 
@@ -200,7 +264,9 @@ object LocalFileManager {
         directory: File,
         results: MutableList<LocalFileItem>,
         seen: MutableSet<String>,
-        metadataMap: Map<String, com.simats.intellifile.data.local.LocalFileMetadata>
+        seenTitles: MutableSet<String>,
+        metadataMap: Map<String, com.simats.intellifile.data.local.LocalFileMetadata>,
+        cachedVaultDocs: List<DocumentDto>
     ) {
         val files = directory.listFiles() ?: return
         for (f in files) {
@@ -208,8 +274,32 @@ object LocalFileManager {
                 val ext = f.extension.lowercase()
                 if (SUPPORTED_DOCUMENT_EXTENSIONS.contains(ext)) {
                     seen.add(f.absolutePath)
+                    seenTitles.add(f.name.trim().lowercase())
                     val format = resolveFormat(f.name, null)
-                    val meta = metadataMap[f.absolutePath] ?: metadataMap[f.name]
+                    val meta = metadataMap[f.absolutePath] 
+                        ?: metadataMap[f.name]
+                        ?: metadataMap[f.name.lowercase()]
+
+                    var priority = meta?.priority
+                    var isBookmarked = meta?.isBookmarked ?: false
+                    var isVaultSynced = meta?.isVaultSynced ?: false
+                    var vaultDocId = meta?.vaultDocId
+
+                    val matchedVault = cachedVaultDocs.firstOrNull { it.title.trim().equals(f.name.trim(), ignoreCase = true) }
+                    if (matchedVault != null) {
+                        isVaultSynced = true
+                        if (vaultDocId == null || vaultDocId <= 0) {
+                            vaultDocId = matchedVault.id
+                        }
+                        if (priority == null && !matchedVault.priority.isNullOrBlank()) {
+                            try {
+                                priority = PriorityLevel.valueOf(matchedVault.priority.uppercase())
+                            } catch (_: Exception) {}
+                        }
+                        if (matchedVault.is_bookmarked) {
+                            isBookmarked = true
+                        }
+                    }
 
                     results.add(
                         LocalFileItem(
@@ -223,10 +313,10 @@ object LocalFileManager {
                             dateText = formatDate(f.lastModified()),
                             format = format,
                             mimeType = resolveMimeType(f.name),
-                            priority = meta?.priority,
-                            isBookmarked = meta?.isBookmarked ?: false,
-                            isVaultSynced = meta?.isVaultSynced ?: false,
-                            vaultDocId = meta?.vaultDocId,
+                            priority = priority,
+                            isBookmarked = isBookmarked,
+                            isVaultSynced = isVaultSynced,
+                            vaultDocId = vaultDocId,
                             iconResId = resolveIconResId(format)
                         )
                     )

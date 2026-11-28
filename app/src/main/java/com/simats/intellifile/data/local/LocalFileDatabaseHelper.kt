@@ -7,6 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import com.simats.intellifile.data.manager.LocalFileManager
 import com.simats.intellifile.ui.home.PriorityLevel
 import com.simats.intellifile.data.model.ExtractedFolderRecord
+import com.simats.intellifile.data.model.DocumentDto
 import java.io.File
 
 /**
@@ -186,6 +187,7 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
 
             while (c.moveToNext()) {
                 val key = c.getString(colKey)
+                val fileName = c.getString(colName) ?: ""
                 val priorityStr = if (!c.isNull(colPriority)) c.getString(colPriority) else null
                 val priority = priorityStr?.let {
                     try {
@@ -195,9 +197,9 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
                     }
                 }
 
-                resultMap[key] = LocalFileMetadata(
+                val item = LocalFileMetadata(
                     uriOrPath = key,
-                    fileName = c.getString(colName),
+                    fileName = fileName,
                     priority = priority,
                     category = c.getString(colCategory),
                     isBookmarked = c.getInt(colBookmarked) == 1,
@@ -210,6 +212,15 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
                     contentCountLabel = if (colCountLabel != -1 && !c.isNull(colCountLabel)) c.getString(colCountLabel) else null,
                     contentCountValue = if (colCountValue != -1 && !c.isNull(colCountValue)) c.getString(colCountValue) else null
                 )
+
+                resultMap[key] = item
+                if (fileName.isNotBlank()) {
+                    val existing = resultMap[fileName]
+                    if (existing == null || (item.priority != null && existing.priority == null)) {
+                        resultMap[fileName] = item
+                        resultMap[fileName.lowercase()] = item
+                    }
+                }
             }
         }
 
@@ -217,15 +228,15 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
     }
 
     /**
-     * Gets metadata for a specific file by uri or path.
+     * Gets metadata for a specific file by uri or path or fileName.
      */
     fun getMetadata(key: String): LocalFileMetadata? {
         val db = readableDatabase
         val cursor = db.query(
             TABLE_METADATA,
             null,
-            "$COL_URI_OR_PATH = ?",
-            arrayOf(key),
+            "$COL_URI_OR_PATH = ? OR $COL_FILE_NAME = ? OR LOWER($COL_FILE_NAME) = LOWER(?)",
+            arrayOf(key, key, key),
             null,
             null,
             null
@@ -277,55 +288,68 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
     }
 
     /**
-     * Explicitly sets bookmark status for a file.
+     * Explicitly sets bookmark status for a file without overwriting other columns.
      */
     fun setBookmarked(uriOrPath: String, fileName: String, isBookmarked: Boolean) {
-        val existing = getMetadata(uriOrPath)
         val db = writableDatabase
-        val values = ContentValues().apply {
-            put(COL_URI_OR_PATH, uriOrPath)
-            put(COL_FILE_NAME, fileName)
+        val now = System.currentTimeMillis()
+        val updateValues = ContentValues().apply {
             put(COL_IS_BOOKMARKED, if (isBookmarked) 1 else 0)
-            if (existing != null) {
-                if (existing.priority != null) {
-                    put(COL_PRIORITY, existing.priority.name)
-                }
-                put(COL_CATEGORY, existing.category)
-                put(COL_IS_VAULT_SYNCED, if (existing.isVaultSynced) 1 else 0)
-                existing.vaultDocId?.let { put(COL_VAULT_DOC_ID, it) }
+            if (fileName.isNotBlank()) {
+                put(COL_FILE_NAME, fileName)
             }
-            put(COL_LAST_ACCESSED, System.currentTimeMillis())
+            put(COL_LAST_ACCESSED, now)
         }
-        db.insertWithOnConflict(
-            TABLE_METADATA,
-            null,
-            values,
-            SQLiteDatabase.CONFLICT_REPLACE
-        )
+        val rows = db.update(TABLE_METADATA, updateValues, "$COL_URI_OR_PATH = ?", arrayOf(uriOrPath))
+        if (rows <= 0) {
+            val insertValues = ContentValues().apply {
+                put(COL_URI_OR_PATH, uriOrPath)
+                put(COL_FILE_NAME, fileName)
+                put(COL_IS_BOOKMARKED, if (isBookmarked) 1 else 0)
+                put(COL_LAST_ACCESSED, now)
+            }
+            db.insertWithOnConflict(TABLE_METADATA, null, insertValues, SQLiteDatabase.CONFLICT_IGNORE)
+        }
+        if (fileName.isNotBlank() && fileName != uriOrPath) {
+            db.update(TABLE_METADATA, updateValues, "$COL_FILE_NAME = ?", arrayOf(fileName))
+        }
         LocalFileManager.invalidateCache()
     }
 
     /**
-     * Updates or inserts a priority level explicitly set by the user.
+     * Updates or inserts a priority level explicitly set by the user without losing existing metadata.
      */
     fun setPriority(uriOrPath: String, fileName: String, priority: PriorityLevel?) {
         val db = writableDatabase
-        val values = ContentValues().apply {
-            put(COL_URI_OR_PATH, uriOrPath)
-            put(COL_FILE_NAME, fileName)
+        val now = System.currentTimeMillis()
+        val updateValues = ContentValues().apply {
             if (priority != null) {
                 put(COL_PRIORITY, priority.name)
             } else {
                 putNull(COL_PRIORITY)
             }
-            put(COL_LAST_ACCESSED, System.currentTimeMillis())
+            if (fileName.isNotBlank()) {
+                put(COL_FILE_NAME, fileName)
+            }
+            put(COL_LAST_ACCESSED, now)
         }
-        db.insertWithOnConflict(
-            TABLE_METADATA,
-            null,
-            values,
-            SQLiteDatabase.CONFLICT_REPLACE
-        )
+        val rows = db.update(TABLE_METADATA, updateValues, "$COL_URI_OR_PATH = ?", arrayOf(uriOrPath))
+        if (rows <= 0) {
+            val insertValues = ContentValues().apply {
+                put(COL_URI_OR_PATH, uriOrPath)
+                put(COL_FILE_NAME, fileName)
+                if (priority != null) {
+                    put(COL_PRIORITY, priority.name)
+                } else {
+                    putNull(COL_PRIORITY)
+                }
+                put(COL_LAST_ACCESSED, now)
+            }
+            db.insertWithOnConflict(TABLE_METADATA, null, insertValues, SQLiteDatabase.CONFLICT_IGNORE)
+        }
+        if (fileName.isNotBlank() && fileName != uriOrPath) {
+            db.update(TABLE_METADATA, updateValues, "$COL_FILE_NAME = ?", arrayOf(fileName))
+        }
         LocalFileManager.invalidateCache()
     }
 
@@ -333,63 +357,122 @@ class LocalFileDatabaseHelper(context: Context) : SQLiteOpenHelper(
      * Toggles bookmark state for a file, returning the new bookmark status.
      */
     fun toggleBookmark(uriOrPath: String, fileName: String): Boolean {
-        val existing = getMetadata(uriOrPath)
-        val newBookmarked = !(existing?.isBookmarked ?: false)
-
-        val db = writableDatabase
-        val values = ContentValues().apply {
-            put(COL_URI_OR_PATH, uriOrPath)
-            put(COL_FILE_NAME, fileName)
-            put(COL_IS_BOOKMARKED, if (newBookmarked) 1 else 0)
-            if (existing != null) {
-                if (existing.priority != null) {
-                    put(COL_PRIORITY, existing.priority.name)
-                }
-                put(COL_CATEGORY, existing.category)
-                put(COL_IS_VAULT_SYNCED, if (existing.isVaultSynced) 1 else 0)
-                existing.vaultDocId?.let { put(COL_VAULT_DOC_ID, it) }
-            }
-            put(COL_LAST_ACCESSED, System.currentTimeMillis())
-        }
-        db.insertWithOnConflict(
-            TABLE_METADATA,
-            null,
-            values,
-            SQLiteDatabase.CONFLICT_REPLACE
-        )
-        LocalFileManager.invalidateCache()
+        val isCurrentlyBookmarked = isBookmarked(uriOrPath)
+        val newBookmarked = !isCurrentlyBookmarked
+        setBookmarked(uriOrPath, fileName, newBookmarked)
         return newBookmarked
     }
 
     /**
-     * Marks a file as synced to the IntelliSpace with an optional server document ID.
+     * Marks a file as synced to the IntelliSpace with an optional server document ID without destroying other columns.
      */
     fun setVaultStatus(uriOrPath: String, fileName: String, isSynced: Boolean, vaultDocId: Int? = null) {
-        val existing = getMetadata(uriOrPath)
         val db = writableDatabase
-        val values = ContentValues().apply {
-            put(COL_URI_OR_PATH, uriOrPath)
-            put(COL_FILE_NAME, fileName)
+        val now = System.currentTimeMillis()
+        val updateValues = ContentValues().apply {
             put(COL_IS_VAULT_SYNCED, if (isSynced) 1 else 0)
             if (vaultDocId != null) {
                 put(COL_VAULT_DOC_ID, vaultDocId)
             }
-            if (existing != null) {
-                if (existing.priority != null) {
-                    put(COL_PRIORITY, existing.priority.name)
-                }
-                put(COL_CATEGORY, existing.category)
-                put(COL_IS_BOOKMARKED, if (existing.isBookmarked) 1 else 0)
+            if (fileName.isNotBlank()) {
+                put(COL_FILE_NAME, fileName)
             }
-            put(COL_LAST_ACCESSED, System.currentTimeMillis())
+            put(COL_LAST_ACCESSED, now)
         }
-        db.insertWithOnConflict(
-            TABLE_METADATA,
-            null,
-            values,
-            SQLiteDatabase.CONFLICT_REPLACE
-        )
+        val rows = db.update(TABLE_METADATA, updateValues, "$COL_URI_OR_PATH = ?", arrayOf(uriOrPath))
+        if (rows <= 0) {
+            val insertValues = ContentValues().apply {
+                put(COL_URI_OR_PATH, uriOrPath)
+                put(COL_FILE_NAME, fileName)
+                put(COL_IS_VAULT_SYNCED, if (isSynced) 1 else 0)
+                if (vaultDocId != null) {
+                    put(COL_VAULT_DOC_ID, vaultDocId)
+                }
+                put(COL_LAST_ACCESSED, now)
+            }
+            db.insertWithOnConflict(TABLE_METADATA, null, insertValues, SQLiteDatabase.CONFLICT_IGNORE)
+        }
+        if (fileName.isNotBlank() && fileName != uriOrPath) {
+            db.update(TABLE_METADATA, updateValues, "$COL_FILE_NAME = ?", arrayOf(fileName))
+        }
         LocalFileManager.invalidateCache()
+    }
+
+    /**
+     * Restores priorities, IntelliSpace vault sync state, and metadata
+     * from verified server documents. Prevents priority loss across restarts.
+     */
+    fun restoreServerDocuments(documents: List<DocumentDto>) {
+        if (documents.isEmpty()) return
+        try {
+            val db = writableDatabase
+            db.beginTransaction()
+            try {
+                val now = System.currentTimeMillis()
+                for (doc in documents) {
+                    val rawTitle = doc.title.trim()
+                    if (rawTitle.isBlank()) continue
+
+                    val serverPriority = doc.priority?.let {
+                        try {
+                            PriorityLevel.valueOf(it.uppercase())
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
+
+                    val keysToCheck = mutableListOf(rawTitle)
+                    if (!doc.location.isNullOrBlank() && doc.location != "Internal Storage") {
+                        keysToCheck.add(doc.location)
+                    }
+
+                    for (k in keysToCheck) {
+                        val cv = ContentValues().apply {
+                            put(COL_FILE_NAME, rawTitle)
+                            put(COL_IS_VAULT_SYNCED, 1)
+                            put(COL_VAULT_DOC_ID, doc.id)
+                            if (serverPriority != null) {
+                                put(COL_PRIORITY, serverPriority.name)
+                            }
+                            if (doc.is_bookmarked) {
+                                put(COL_IS_BOOKMARKED, 1)
+                            }
+                            if (!doc.category.isNullOrBlank()) {
+                                put(COL_CATEGORY, doc.category)
+                            }
+                            if (doc.total_pages > 0) {
+                                val label = when (doc.format?.uppercase()) {
+                                    "PPT", "PPTX" -> "Total Slides"
+                                    "XLS", "XLSX" -> "Total Sheets"
+                                    "CSV" -> "Total Rows"
+                                    else -> "Total Pages"
+                                }
+                                put(COL_CONTENT_COUNT_LABEL, label)
+                                put(COL_CONTENT_COUNT_VALUE, doc.total_pages.toString())
+                            }
+                            put(COL_LAST_ACCESSED, now)
+                        }
+
+                        val updated = db.update(
+                            TABLE_METADATA,
+                            cv,
+                            "$COL_URI_OR_PATH = ? OR (LOWER($COL_FILE_NAME) = LOWER(?) AND $COL_PRIORITY IS NULL)",
+                            arrayOf(k, rawTitle)
+                        )
+                        if (updated <= 0) {
+                            cv.put(COL_URI_OR_PATH, k)
+                            db.insertWithOnConflict(TABLE_METADATA, null, cv, SQLiteDatabase.CONFLICT_IGNORE)
+                        }
+                    }
+                }
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+            LocalFileManager.invalidateCache()
+        } catch (e: Exception) {
+            android.util.Log.e("LocalFileDB", "Error restoring server documents", e)
+        }
     }
 
     /**

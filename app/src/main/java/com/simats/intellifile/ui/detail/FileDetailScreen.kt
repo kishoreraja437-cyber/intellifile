@@ -230,6 +230,18 @@ fun FileDetailScreen(
                                 dbHelper.setVaultStatus(effectiveUri, fileData.fileName, true, matchedDoc.id)
                             }
                             dbHelper.setVaultStatus(fileData.fileName, fileData.fileName, true, matchedDoc.id)
+
+                            if (selectedPriority == null && !matchedDoc.priority.isNullOrBlank()) {
+                                try {
+                                    val restored = PriorityLevel.valueOf(matchedDoc.priority.uppercase())
+                                    selectedPriority = restored
+                                    dbHelper.setPriority(key, fileData.fileName, restored)
+                                    if (effectivePath.isNotBlank()) dbHelper.setPriority(effectivePath, fileData.fileName, restored)
+                                    if (effectiveUri.isNotBlank()) dbHelper.setPriority(effectiveUri, fileData.fileName, restored)
+                                    dbHelper.setPriority(fileData.fileName, fileData.fileName, restored)
+                                    onPriorityChanged(restored)
+                                } catch (_: Exception) {}
+                            }
                         } else {
                             // Document does not exist on server (deleted or never uploaded)
                             isVaultSynced = false

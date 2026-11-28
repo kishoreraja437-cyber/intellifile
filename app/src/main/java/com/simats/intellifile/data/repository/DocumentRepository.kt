@@ -253,6 +253,7 @@ class DocumentRepository(private val context: Context) {
                     updateCachedVaultDocs(context, distinctDocs)
                     // Synchronize local database vault status with the verified server document list
                     val dbHelper = LocalFileDatabaseHelper.getInstance(context)
+                    dbHelper.restoreServerDocuments(distinctDocs)
                     val serverDocIds = distinctDocs.map { it.id }.toSet()
                     val serverDocTitles = distinctDocs.map { it.title.trim().lowercase() }.toSet()
                     dbHelper.syncVaultStatus(serverDocIds, serverDocTitles)

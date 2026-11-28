@@ -149,6 +149,14 @@ fun SavedScreen(
 
     LaunchedEffect(refreshTrigger, priorityUpdateVersion) {
         isLoading = true
+        withContext(Dispatchers.IO) {
+            try {
+                val serverResult = docRepo.getDocuments()
+                serverResult.onSuccess { docs ->
+                    LocalFileDatabaseHelper.getInstance(context).restoreServerDocuments(docs)
+                }
+            } catch (_: Exception) {}
+        }
         val loaded = withContext(Dispatchers.IO) {
             LocalFileManager.getDeviceFiles(context)
         }
