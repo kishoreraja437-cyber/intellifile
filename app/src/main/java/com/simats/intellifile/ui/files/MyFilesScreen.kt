@@ -53,6 +53,7 @@ import com.simats.intellifile.ui.detail.FileDetailData
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -120,7 +121,8 @@ fun MyFilesScreen(
     onMicClick: () -> Unit = {},
     onOpenFile: (FileDetailData) -> Unit = {},
     onOpenExtractedFolder: (File) -> Unit = {},
-    onExtractZip: (FileDetailData) -> Unit = {}
+    onExtractZip: (FileDetailData) -> Unit = {},
+    onPhoneStorageClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -275,9 +277,9 @@ fun MyFilesScreen(
         isLoadingDeviceFiles = true
         loadVault()
         val loaded = withContext(Dispatchers.IO) {
-            LocalFileManager.getDeviceFiles(context)
+            LocalFileManager.getDeviceFiles(context, forceRefresh = true)
         }
-        delay(600)
+        delay(300)
         realFiles = loaded
         isLoadingDeviceFiles = false
     }
@@ -2475,5 +2477,8 @@ fun QuickAccessCard(
         )
     }
 }
+
+
+
 
 

@@ -182,6 +182,7 @@ import com.simats.intellifile.ui.theme.AppThemeMode
 
 import com.simats.intellifile.ui.theme.ThemeSettingsScreen
 
+import com.simats.intellifile.ui.storage.PhoneStorageScreen
 import com.simats.intellifile.ui.viewer.DocumentViewerScreen
 import com.simats.intellifile.ui.viewer.ppt.PPTViewerScreen
 
@@ -285,6 +286,8 @@ fun MainScreen(
 
     var isFeedbackSuccessOpen by remember { mutableStateOf(false) }
 
+    var isPhoneStorageOpen by remember { mutableStateOf(false) }
+
 
 
     val tabBackStack = remember { mutableStateListOf(BottomNavItem.HOME) }
@@ -315,11 +318,13 @@ fun MainScreen(
         isContactSuccessOpen = false
         isFeedbackOpen = false
         isFeedbackSuccessOpen = false
+        isPhoneStorageOpen = false
     }
 
     fun handleGoBack() {
         isVoiceAssistantOpen = false
         when {
+            isPhoneStorageOpen -> isPhoneStorageOpen = false
             zipToExtract != null -> zipToExtract = null
             activeExtractedFolder != null -> activeExtractedFolder = null
             isShareOpen -> isShareOpen = false
@@ -392,6 +397,8 @@ fun MainScreen(
     ) { innerPadding ->
 
         val currentNavigationKey = when {
+
+            isPhoneStorageOpen -> "phone_storage"
 
             isShareOpen -> "share"
 
@@ -473,6 +480,10 @@ fun MainScreen(
             ) { navKey ->
 
                 when (navKey) {
+
+                    "phone_storage" -> PhoneStorageScreen(
+                        onBackClick = { isPhoneStorageOpen = false }
+                    )
 
                     "recent_files" -> RecentFilesScreen(
 
@@ -1082,6 +1093,9 @@ fun MainScreen(
                                                         },
                                                         onExtractZip = { zipFile ->
                                                             zipToExtract = zipFile
+                                                        },
+                                                        onPhoneStorageClick = {
+                                                            isPhoneStorageOpen = true
                                                         }
                                                     )
 

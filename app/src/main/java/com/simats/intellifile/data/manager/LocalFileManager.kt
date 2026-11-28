@@ -41,7 +41,7 @@ object LocalFileManager {
      */
     private val SUPPORTED_DOCUMENT_EXTENSIONS = setOf(
         "pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "txt", "csv", "json",
-        "tsv", "xml", "html", "htm", "md", "rtf", "log", "zip"
+        "tsv", "xml", "html", "htm", "md", "rtf", "log", "zip", "rar", "7z", "tar", "gz"
     )
 
     /**
