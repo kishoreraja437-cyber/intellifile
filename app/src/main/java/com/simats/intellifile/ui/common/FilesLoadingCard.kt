@@ -8,6 +8,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +25,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -116,6 +118,7 @@ fun FilesLoadingCard(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
                             .background(Color(0xFFF8FAFC))
+                            .border(BorderStroke(0.8.dp, Color(0xFFE2E8F0).copy(alpha = 0.6f)), RoundedCornerShape(12.dp))
                             .padding(horizontal = 10.dp, vertical = 10.dp)
                     ) {
                         Row(
@@ -168,7 +171,9 @@ fun FilesLoadingCard(
                 CircularProgressIndicator(
                     modifier = Modifier.size(26.dp),
                     strokeWidth = 2.8.dp,
-                    color = Color(0xFF1FB7AB)
+                    color = Color(0xFF00A896),
+                    trackColor = Color(0xFFC9E8EB),
+                    strokeCap = StrokeCap.Round
                 )
 
                 Text(

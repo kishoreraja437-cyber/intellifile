@@ -722,15 +722,29 @@ object LocalFileManager {
 
     /**
      * Opens an InputStream for a document by URI or file path.
+     * Supports local files, Android ContentProvider URIs, and remote/server document URLs.
      */
     fun openInputStream(context: Context, uriString: String, path: String): InputStream? {
         if (path.isNotBlank()) {
-            try {
-                val file = File(path)
-                if (file.exists() && file.canRead()) {
-                    return file.inputStream()
-                }
-            } catch (_: Exception) {}
+            if (path.startsWith("http://") || path.startsWith("https://")) {
+                try {
+                    return java.net.URL(path).openStream()
+                } catch (_: Exception) {}
+            } else if (path.startsWith("uploads/") || path.contains("uploads/")) {
+                try {
+                    val resolved = NetworkConfig.resolveMediaUrl(path)
+                    if (resolved != null && (resolved.startsWith("http://") || resolved.startsWith("https://"))) {
+                        return java.net.URL(resolved).openStream()
+                    }
+                } catch (_: Exception) {}
+            } else {
+                try {
+                    val file = File(path)
+                    if (file.exists() && file.canRead()) {
+                        return file.inputStream()
+                    }
+                } catch (_: Exception) {}
+            }
         }
 
         if (uriString.isNotBlank()) {
@@ -741,13 +755,95 @@ object LocalFileManager {
                     if (file.exists() && file.canRead()) {
                         return file.inputStream()
                     }
+                } else if (uri.scheme == "http" || uri.scheme == "https") {
+                    return java.net.URL(uriString).openStream()
+                } else if (uri.scheme == "content") {
+                    val stream = context.contentResolver.openInputStream(uri)
+                    if (stream != null) return stream
                 }
-                val stream = context.contentResolver.openInputStream(uri)
-                if (stream != null) return stream
             } catch (_: Exception) {}
+
+            // Try resolving if uriString is a relative server path
+            if (uriString.startsWith("uploads/") || uriString.contains("uploads/")) {
+                try {
+                    val resolved = NetworkConfig.resolveMediaUrl(uriString)
+                    if (resolved != null && (resolved.startsWith("http://") || resolved.startsWith("https://"))) {
+                        return java.net.URL(resolved).openStream()
+                    }
+                } catch (_: Exception) {}
+            }
         }
 
         return null
+    }
+
+    /**
+     * Prepares a seekable, sanitized PDF File stored in local storage or cache.
+     * Detects and strips any leading BOM or whitespace before '%PDF-' so native PdfRenderer
+     * does not crash on non-zero offsets, and downloads remote/content streams to a local seekable file.
+     */
+    fun prepareSeekablePdfFile(context: Context, uriString: String, path: String): File? {
+        // Step 1: Check local path directly
+        if (path.isNotBlank() && !path.startsWith("http://") && !path.startsWith("https://") && !path.startsWith("uploads/")) {
+            val localFile = File(path)
+            if (localFile.exists() && localFile.canRead() && localFile.length() > 4) {
+                try {
+                    val header = ByteArray(1024)
+                    val readCount = localFile.inputStream().use { it.read(header) }
+                    if (readCount >= 4) {
+                        if (header[0] == '%'.code.toByte() && header[1] == 'P'.code.toByte() &&
+                            header[2] == 'D'.code.toByte() && header[3] == 'F'.code.toByte()) {
+                            return localFile
+                        }
+                        // Check if %PDF- exists in first 1024 bytes (e.g. BOM / leading whitespace)
+                        val headerStr = String(header, 0, readCount, Charsets.ISO_8859_1)
+                        val pdfIdx = headerStr.indexOf("%PDF-")
+                        if (pdfIdx > 0) {
+                            val sanitizedFile = File(context.cacheDir, "sanitized_pdf_${System.currentTimeMillis()}.pdf")
+                            localFile.inputStream().use { input ->
+                                input.skip(pdfIdx.toLong())
+                                sanitizedFile.outputStream().use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                            if (sanitizedFile.exists() && sanitizedFile.length() > 0) {
+                                return sanitizedFile
+                            }
+                        }
+                    }
+                    return localFile
+                } catch (_: Exception) {}
+            }
+        }
+
+        // Step 2: Read stream (handles content URIs, http URLs, relative paths) and write to seekable file
+        return try {
+            val stream = openInputStream(context, uriString, path) ?: return null
+            val tempFile = File(context.cacheDir, "seekable_pdf_${System.currentTimeMillis()}.pdf")
+            stream.use { rawInput ->
+                val buffered = java.io.BufferedInputStream(rawInput)
+                buffered.mark(2048)
+                val probe = ByteArray(1024)
+                val readProbe = buffered.read(probe)
+                buffered.reset()
+
+                if (readProbe > 0) {
+                    val probeStr = String(probe, 0, readProbe, Charsets.ISO_8859_1)
+                    val pdfIdx = probeStr.indexOf("%PDF-")
+                    if (pdfIdx > 0) {
+                        buffered.skip(pdfIdx.toLong())
+                    }
+                }
+
+                tempFile.outputStream().use { output ->
+                    buffered.copyTo(output)
+                }
+            }
+            if (tempFile.exists() && tempFile.length() > 0) tempFile else null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
     }
 
     /**

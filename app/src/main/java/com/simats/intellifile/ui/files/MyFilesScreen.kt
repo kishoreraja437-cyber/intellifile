@@ -101,7 +101,6 @@ import com.simats.intellifile.data.model.AiSummarizeResponse
 import com.simats.intellifile.data.repository.AiRepository
 
 import com.simats.intellifile.ui.home.PriorityLevel
-import com.simats.intellifile.ui.home.PrioritySummaryCard
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.simats.intellifile.ui.common.DraggableScrollbar
 import kotlinx.coroutines.launch
@@ -1205,33 +1204,6 @@ fun MyFilesScreen(
                             )
                         }
                     } else {
-                        // Summary Cards Row with Real User-Marked Counts
-                        item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                PrioritySummaryCard(
-                                    priority = PriorityLevel.IMPORTANT,
-                                    count = importantCount,
-                                    onClick = { onQuickAccessClick(PriorityLevel.IMPORTANT) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                                PrioritySummaryCard(
-                                    priority = PriorityLevel.NORMAL,
-                                    count = normalCount,
-                                    onClick = { onQuickAccessClick(PriorityLevel.NORMAL) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                                PrioritySummaryCard(
-                                    priority = PriorityLevel.LOW,
-                                    count = lowCount,
-                                    onClick = { onQuickAccessClick(PriorityLevel.LOW) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-
                         // Total Files Card with Real Document Count
                         item {
                             Row(

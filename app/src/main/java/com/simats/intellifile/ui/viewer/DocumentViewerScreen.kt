@@ -116,6 +116,18 @@ import com.simats.intellifile.ui.viewer.ppt.PPTViewerScreen
 import com.simats.intellifile.data.repository.DocumentRepository
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException
+import com.tom_roush.pdfbox.rendering.ImageType
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -253,6 +265,16 @@ fun DocumentViewerScreen(
     var parcelFileDescriptor by remember { mutableStateOf<ParcelFileDescriptor?>(null) }
     var pageBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
 
+    val coroutineScope = rememberCoroutineScope()
+
+    // Password Protected PDF state
+    var showPasswordDialog by remember { mutableStateOf(false) }
+    var passwordInput by remember { mutableStateOf("") }
+    var passwordError by remember { mutableStateOf<String?>(null) }
+    var isPasswordVisible by remember { mutableStateOf(false) }
+    var isUnlocking by remember { mutableStateOf(false) }
+    var currentPasswordProtectedFile by remember { mutableStateOf<File?>(null) }
+
     // Parsed Content state for Office and Text documents
     var parsedContent by remember { mutableStateOf<ParsedDocumentContent?>(null) }
     var isLoading by remember { mutableStateOf(!isPreview) }
@@ -340,57 +362,100 @@ fun DocumentViewerScreen(
         if (isPdf) {
             withContext(Dispatchers.IO) {
                 try {
-                    var pfd = LocalFileManager.getFileDescriptor(context, fileUriString, filePath)
-                    var renderer: PdfRendererWrapper? = null
-                    if (pfd != null) {
-                        try {
-                            renderer = PdfRendererWrapper(pfd)
-                        } catch (seekEx: Exception) {
-                            // Direct descriptor was not seekable (e.g. pipe from WhatsApp/Gmail/Drive).
-                            // Fallback: create seekable cache copy.
-                            try { pfd.close() } catch (ignored: Exception) {}
-                            pfd = null
+                    try {
+                        if (!PDFBoxResourceLoader.isReady()) {
+                            PDFBoxResourceLoader.init(context)
+                        }
+                    } catch (_: Exception) {}
 
-                            val tempFile = java.io.File(context.cacheDir, "temp_view_${System.currentTimeMillis()}.pdf")
-                            LocalFileManager.openInputStream(context, fileUriString, filePath)?.use { input ->
-                                tempFile.outputStream().use { output ->
-                                    input.copyTo(output)
-                                }
-                            }
-                            if (tempFile.exists() && tempFile.length() > 0) {
-                                val fallbackPfd = ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)
-                                renderer = PdfRendererWrapper(fallbackPfd)
-                                pfd = fallbackPfd
-                            } else {
-                                throw seekEx
-                            }
-                        }
-                    } else {
-                        // Stream copy fallback if pfd was null initially
-                        val tempFile = java.io.File(context.cacheDir, "temp_view_${System.currentTimeMillis()}.pdf")
-                        LocalFileManager.openInputStream(context, fileUriString, filePath)?.use { input ->
-                            tempFile.outputStream().use { output ->
-                                input.copyTo(output)
-                            }
-                        }
-                        if (tempFile.exists() && tempFile.length() > 0) {
-                            val fallbackPfd = ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY)
-                            renderer = PdfRendererWrapper(fallbackPfd)
-                            pfd = fallbackPfd
+                    val seekableFile = LocalFileManager.prepareSeekablePdfFile(context, fileUriString, filePath)
+                    var renderer: PdfRendererWrapper? = null
+                    var pfd: ParcelFileDescriptor? = null
+                    var requiresPassword = false
+
+                    // Strategy 1: Fast Native Android PdfRenderer
+                    if (seekableFile != null && seekableFile.exists() && seekableFile.length() > 0) {
+                        try {
+                            val openPfd = ParcelFileDescriptor.open(seekableFile, ParcelFileDescriptor.MODE_READ_ONLY)
+                            renderer = NativePdfRendererWrapper(openPfd)
+                            pfd = openPfd
+                        } catch (secEx: SecurityException) {
+                            requiresPassword = true
+                        } catch (e: Exception) {
+                            try { pfd?.close() } catch (_: Exception) {}
+                            pfd = null
+                            renderer = null
                         }
                     }
 
-                    if (renderer != null && pfd != null) {
+                    // Strategy 2: Robust Fallback with Apache PDFBox
+                    if (renderer == null && seekableFile != null && seekableFile.exists() && !requiresPassword) {
+                        try {
+                            val pdDoc = PDDocument.load(seekableFile)
+                            if (pdDoc.isEncrypted) {
+                                requiresPassword = true
+                                pdDoc.close()
+                            } else {
+                                renderer = PdfBoxRendererWrapper(pdDoc)
+                            }
+                        } catch (secEx: SecurityException) {
+                            requiresPassword = true
+                        } catch (invEx: InvalidPasswordException) {
+                            requiresPassword = true
+                        } catch (e: Exception) {
+                            val msg = e.localizedMessage ?: ""
+                            if (msg.contains("password", ignoreCase = true) || msg.contains("encrypted", ignoreCase = true)) {
+                                requiresPassword = true
+                            }
+                        }
+                    }
+
+                    // Strategy 3: Direct Stream with PDFBox if seekableFile was not created
+                    if (renderer == null && !requiresPassword) {
+                        try {
+                            LocalFileManager.openInputStream(context, fileUriString, filePath)?.use { input ->
+                                val pdDoc = PDDocument.load(input)
+                                if (pdDoc.isEncrypted) {
+                                    requiresPassword = true
+                                    pdDoc.close()
+                                } else {
+                                    renderer = PdfBoxRendererWrapper(pdDoc)
+                                }
+                            }
+                        } catch (invEx: InvalidPasswordException) {
+                            requiresPassword = true
+                        } catch (e: Exception) {
+                            val msg = e.localizedMessage ?: ""
+                            if (msg.contains("password", ignoreCase = true) || msg.contains("encrypted", ignoreCase = true)) {
+                                requiresPassword = true
+                            }
+                        }
+                    }
+
+                    if (requiresPassword) {
+                        currentPasswordProtectedFile = seekableFile
+                        showPasswordDialog = true
+                        isLoading = false
+                        return@withContext
+                    }
+
+                    val activeRenderer = renderer
+                    if (activeRenderer != null) {
                         parcelFileDescriptor = pfd
-                        pdfRenderer = renderer
-                        totalUnitsCount = renderer.pageCount.coerceAtLeast(1)
+                        pdfRenderer = activeRenderer
+                        totalUnitsCount = activeRenderer.pageCount.coerceAtLeast(1)
                         currentPageIndex = 1
                     } else {
                         errorMessage = "Cannot access PDF file. Please ensure storage permission is enabled."
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
-                    errorMessage = "Unable to render PDF: ${e.localizedMessage ?: "File may be encrypted or corrupted."}"
+                    val msg = e.localizedMessage ?: ""
+                    if (msg.contains("password", ignoreCase = true) || msg.contains("encrypted", ignoreCase = true)) {
+                        showPasswordDialog = true
+                    } else {
+                        errorMessage = "Unable to render PDF: ${e.localizedMessage ?: "File may be corrupted."}"
+                    }
                 } finally {
                     isLoading = false
                 }
@@ -415,7 +480,7 @@ fun DocumentViewerScreen(
                         if (convertedPdf != null && convertedPdf.exists() && convertedPdf.length() > 0) {
                             try {
                                 pfd = ParcelFileDescriptor.open(convertedPdf, ParcelFileDescriptor.MODE_READ_ONLY)
-                                renderer = PdfRendererWrapper(pfd)
+                                renderer = NativePdfRendererWrapper(pfd)
                             } catch (e: Exception) {
                                 e.printStackTrace()
                                 try { pfd?.close() } catch (_: Exception) {}
@@ -425,10 +490,11 @@ fun DocumentViewerScreen(
                         }
                     }
 
-                    if (renderer != null && pfd != null) {
+                    val activeWordRenderer = renderer
+                    if (activeWordRenderer != null && pfd != null) {
                         parcelFileDescriptor = pfd
-                        pdfRenderer = renderer
-                        totalUnitsCount = renderer.pageCount.coerceAtLeast(1)
+                        pdfRenderer = activeWordRenderer
+                        totalUnitsCount = activeWordRenderer.pageCount.coerceAtLeast(1)
                         currentPageIndex = 1
 
                         // Also parse document text in background for search metadata if available
@@ -614,6 +680,159 @@ fun DocumentViewerScreen(
                     Text("Cancel")
                 }
             }
+        )
+    }
+
+    // Password Protected PDF Dialog
+    if (showPasswordDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showPasswordDialog = false
+                if (pdfRenderer == null) {
+                    errorMessage = "This document is password protected. Enter password to view."
+                }
+            },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = Color(0xFF00A896),
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Password Protected PDF",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = Color(0xFF1E293B)
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "This PDF file is encrypted. Please enter the password to view its contents.",
+                        fontSize = 14.sp,
+                        color = Color(0xFF64748B)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = passwordInput,
+                        onValueChange = {
+                            passwordInput = it
+                            passwordError = null
+                        },
+                        singleLine = true,
+                        label = { Text("Password") },
+                        placeholder = { Text("Enter document password") },
+                        visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
+                                Icon(
+                                    imageVector = if (isPasswordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                    contentDescription = if (isPasswordVisible) "Hide password" else "Show password",
+                                    tint = Color(0xFF64748B)
+                                )
+                            }
+                        },
+                        isError = passwordError != null,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF00A896),
+                            focusedLabelColor = Color(0xFF00A896),
+                            cursorColor = Color(0xFF00A896)
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (passwordError != null) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = passwordError!!,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (passwordInput.isBlank()) {
+                            passwordError = "Please enter the password"
+                            return@Button
+                        }
+                        val file = currentPasswordProtectedFile ?: return@Button
+                        isUnlocking = true
+                        passwordError = null
+                        coroutineScope.launch(Dispatchers.IO) {
+                            try {
+                                if (!PDFBoxResourceLoader.isReady()) {
+                                    PDFBoxResourceLoader.init(context)
+                                }
+                                val pdDoc = PDDocument.load(file, passwordInput)
+                                val boxRenderer = PdfBoxRendererWrapper(pdDoc)
+                                withContext(Dispatchers.Main) {
+                                    try { pdfRenderer?.close() } catch (_: Exception) {}
+                                    pdfRenderer = boxRenderer
+                                    totalUnitsCount = boxRenderer.pageCount.coerceAtLeast(1)
+                                    currentPageIndex = 1
+                                    errorMessage = null
+                                    showPasswordDialog = false
+                                    isUnlocking = false
+                                    passwordInput = ""
+                                }
+                            } catch (inv: InvalidPasswordException) {
+                                withContext(Dispatchers.Main) {
+                                    passwordError = "Incorrect password. Please try again."
+                                    isUnlocking = false
+                                }
+                            } catch (e: Exception) {
+                                val msg = e.localizedMessage ?: ""
+                                withContext(Dispatchers.Main) {
+                                    if (msg.contains("password", ignoreCase = true) || msg.contains("encrypted", ignoreCase = true)) {
+                                        passwordError = "Incorrect password. Please try again."
+                                    } else {
+                                        passwordError = "Failed to unlock: $msg"
+                                    }
+                                    isUnlocking = false
+                                }
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00A896)),
+                    shape = RoundedCornerShape(10.dp),
+                    enabled = !isUnlocking
+                ) {
+                    if (isUnlocking) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Unlocking...")
+                    } else {
+                        Text("Unlock", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showPasswordDialog = false
+                        if (pdfRenderer == null) {
+                            errorMessage = "Password required to view this PDF."
+                        }
+                    },
+                    enabled = !isUnlocking
+                ) {
+                    Text("Cancel", color = Color(0xFF64748B))
+                }
+            },
+            shape = RoundedCornerShape(18.dp),
+            containerColor = Color.White
         )
     }
 
@@ -5324,27 +5543,65 @@ private fun PdfContinuousPageItem(
 }
 
 /**
- * Internal wrapper class around [PdfRenderer] to isolate android.graphics.pdf.PdfRenderer references.
- * This prevents ClassNotFoundException / NoClassDefFoundError during Compose Preview layoutlib reflection.
+ * Internal interface to abstract PDF rendering across Native Android PdfRenderer and Apache PDFBox.
+ * This ensures robust multi-version compatibility (PDF 1.0 - 2.0), encrypted document support,
+ * and graceful fallback on non-standard formatting.
  */
-private class PdfRendererWrapper(pfd: ParcelFileDescriptor) : AutoCloseable {
+interface IPdfDocumentRenderer : AutoCloseable {
+    val pageCount: Int
+    fun renderPage(pageIndex: Int, scale: Float): Bitmap
+    fun getPageDimensions(pageIndex: Int): Pair<Int, Int>?
+}
+
+typealias PdfRendererWrapper = IPdfDocumentRenderer
+
+class NativePdfRendererWrapper(private val pfd: ParcelFileDescriptor) : IPdfDocumentRenderer {
     private val renderer = PdfRenderer(pfd)
 
-    val pageCount: Int
+    override val pageCount: Int
         get() = renderer.pageCount
 
-    fun renderPage(pageIndex: Int, scale: Float): Bitmap {
-        synchronized(renderer) {
+    override fun getPageDimensions(pageIndex: Int): Pair<Int, Int>? {
+        return try {
+            synchronized(renderer) {
+                val safeIndex = pageIndex.coerceIn(0, (renderer.pageCount - 1).coerceAtLeast(0))
+                val page = renderer.openPage(safeIndex)
+                val dims = Pair(page.width, page.height)
+                page.close()
+                dims
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    override fun renderPage(pageIndex: Int, scale: Float): Bitmap {
+        return synchronized(renderer) {
             val safeIndex = pageIndex.coerceIn(0, (renderer.pageCount - 1).coerceAtLeast(0))
             val page = renderer.openPage(safeIndex)
-            val targetWidth = (page.width * scale).toInt().coerceIn(200, 3200)
-            val targetHeight = (page.height * scale).toInt().coerceIn(200, 4800)
-            val bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bitmap)
-            canvas.drawColor(android.graphics.Color.WHITE)
-            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-            page.close()
-            return bitmap
+            try {
+                val aspectRatio = if (page.height > 0) page.width.toFloat() / page.height.toFloat() else 0.707f
+                val targetWidth = (page.width * scale).toInt().coerceIn(200, 3600)
+                val targetHeight = (targetWidth / aspectRatio).toInt().coerceIn(200, 5400)
+
+                try {
+                    val bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(bitmap)
+                    canvas.drawColor(android.graphics.Color.WHITE)
+                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    bitmap
+                } catch (oom: Throwable) {
+                    val fallbackW = (targetWidth * 0.5f).toInt().coerceAtLeast(100)
+                    val fallbackH = (targetHeight * 0.5f).toInt().coerceAtLeast(100)
+                    val bitmap = Bitmap.createBitmap(fallbackW, fallbackH, Bitmap.Config.RGB_565)
+                    val canvas = Canvas(bitmap)
+                    canvas.drawColor(android.graphics.Color.WHITE)
+                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    bitmap
+                }
+            } finally {
+                page.close()
+            }
         }
     }
 
@@ -5353,6 +5610,51 @@ private class PdfRendererWrapper(pfd: ParcelFileDescriptor) : AutoCloseable {
             synchronized(renderer) {
                 renderer.close()
             }
+        } catch (_: Exception) {}
+        try {
+            pfd.close()
+        } catch (_: Exception) {}
+    }
+}
+
+class PdfBoxRendererWrapper(private val document: PDDocument) : IPdfDocumentRenderer {
+    private val pdfRenderer = com.tom_roush.pdfbox.rendering.PDFRenderer(document)
+
+    override val pageCount: Int
+        get() = document.numberOfPages
+
+    override fun getPageDimensions(pageIndex: Int): Pair<Int, Int>? {
+        return try {
+            val safeIndex = pageIndex.coerceIn(0, (document.numberOfPages - 1).coerceAtLeast(0))
+            val page = document.getPage(safeIndex)
+            val box = page.cropBox ?: page.mediaBox
+            Pair(box.width.toInt(), box.height.toInt())
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    override fun renderPage(pageIndex: Int, scale: Float): Bitmap {
+        return synchronized(document) {
+            val safeIndex = pageIndex.coerceIn(0, (document.numberOfPages - 1).coerceAtLeast(0))
+            val safeScale = scale.coerceIn(0.5f, 3.0f)
+            try {
+                pdfRenderer.renderImage(safeIndex, safeScale, ImageType.RGB)
+            } catch (oom: Throwable) {
+                try {
+                    pdfRenderer.renderImage(safeIndex, 1.0f, ImageType.RGB)
+                } catch (_: Throwable) {
+                    val fallback = Bitmap.createBitmap(400, 600, Bitmap.Config.RGB_565)
+                    Canvas(fallback).drawColor(android.graphics.Color.WHITE)
+                    fallback
+                }
+            }
+        }
+    }
+
+    override fun close() {
+        try {
+            document.close()
         } catch (_: Exception) {}
     }
 }
