@@ -68,6 +68,9 @@ dependencies {
     // Genuine PowerPoint Visual Slide Rendering Engine
     implementation("com.aspose:aspose-slides:24.4:android.via.java")
 
+    // Comprehensive PDF engine for password-protected, complex & fallback PDF rendering
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+
     // Android Credential Manager / Google Password Manager
     implementation("androidx.credentials:credentials:1.3.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
